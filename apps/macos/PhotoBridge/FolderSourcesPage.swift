@@ -212,7 +212,10 @@ private struct AddFolderSheet: View {
       Text("folder_scan_note").foregroundStyle(.secondary)
       Toggle("folder_include_existing", isOn: $existing)
       Toggle("folder_automatic", isOn: $automatic)
-      DisclosureGroup("folder_rules") { FolderRuleFields(include: $include, exclude: $exclude) }
+      DisclosureGroup("folder_rules") {
+        ScrollView { FolderRuleFields(include: $include, exclude: $exclude).frame(maxWidth: .infinity, alignment: .leading) }
+          .frame(maxHeight: 360)
+      }
       Text("folder_readonly_note").font(.caption).foregroundStyle(.secondary)
       if let error { Text(error).foregroundStyle(.orange) }
       HStack {
@@ -416,14 +419,30 @@ private struct FolderRuleFields: View {
     VStack(alignment: .leading, spacing: 10) {
       Text("folder_rules_note").font(.callout)
       Text("folder_rules_include").font(.headline)
+      Text("folder_rules_include_note").font(.callout).foregroundStyle(.secondary)
+      example("folder_rules_include_example", explanation: "folder_rules_include_example_note")
       TextEditor(text: $include).font(.system(.body, design: .monospaced)).frame(height: 90)
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
         .accessibilityLabel("folder_rules_include")
       Text("folder_rules_exclude").font(.headline)
+      Text("folder_rules_exclude_note").font(.callout).foregroundStyle(.secondary)
+      example("folder_rules_exclude_example", explanation: "folder_rules_exclude_example_note")
       TextEditor(text: $exclude).font(.system(.body, design: .monospaced)).frame(height: 90)
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
         .accessibilityLabel("folder_rules_exclude")
-      Text(verbatim: NSLocalizedString("folder_rules_examples", comment: "")).font(.caption).foregroundStyle(.secondary)
+      DisclosureGroup("folder_rules_pattern_help") {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("folder_rules_path_note")
+          Text(verbatim: NSLocalizedString("folder_rules_examples", comment: ""))
+        }.font(.caption).foregroundStyle(.secondary).textSelection(.enabled).padding(.top, 4)
+      }.font(.callout)
+    }
+  }
+  private func example(_ pattern: String, explanation: LocalizedStringKey) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Text(verbatim: NSLocalizedString(pattern, comment: "")).font(.system(.caption, design: .monospaced))
+        .textSelection(.enabled).fixedSize(horizontal: true, vertical: false)
+      Text(explanation).font(.caption).foregroundStyle(.secondary)
     }
   }
 }
@@ -444,7 +463,8 @@ private struct FolderRulesSheet: View {
     VStack(alignment: .leading, spacing: 12) {
       Text("folder_rules").font(.title2)
       Text(folders.displayName(source)).foregroundStyle(.secondary)
-      FolderRuleFields(include: $include, exclude: $exclude)
+      ScrollView { FolderRuleFields(include: $include, exclude: $exclude).frame(maxWidth: .infinity, alignment: .leading) }
+        .frame(maxHeight: 540)
       Text("folder_rules_effect").font(.caption).foregroundStyle(.secondary)
       if let error { Text(error).foregroundStyle(.orange).font(.caption).textSelection(.enabled) }
       HStack {

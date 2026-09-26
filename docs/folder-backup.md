@@ -191,3 +191,9 @@ An exported Live Photo is grouped only if both photo and video are eligible;
 otherwise its allowed component is processed individually. Filtering cannot
 silently include an excluded companion. Configuration and user dismissals
 survive restart and stay isolated to their source.
+
+The rules editor labels the inputs Only Back Up These (allowlist) and Skip These
+(blocklist), with separate descriptions of match behavior and empty input.
+Examples are selectable, literal patterns beside their plain-language meaning;
+wildcard/path details are collapsed under How to Write Rules. Both lists retain
+the same case-sensitive, exclusion-first matching behavior.

@@ -547,14 +547,30 @@
 
 // Folder rules and failure recovery
 "folder_rules" = "备份规则";
-"folder_rules_include" = "包含（白名单）";
-"folder_rules_exclude" = "排除（黑名单）";
-"folder_rules_note" = "每行一条 glob 规则，匹配此文件夹下的相对路径。包含留空表示所有支持的媒体；排除优先。区分大小写。";
-"folder_rules_examples" = "**/*.jpg：各层级 JPG · 旅行/**：旅行文件夹下全部文件\n* 匹配单层，** 跨层，? 匹配单字符；支持 [abc] 和 {jpg,png}。排除目录请用 目录/**，只写末尾 / 无效。";
-"folder_rules_effect" = "保存后重新扫描并筛选文件列表。规则不会增加格式支持，也不会取消已排队的传输；原文件和已接收的备份不变。";
+"folder_rules_include" = "只备份这些（白名单）";
+"folder_rules_exclude" = "跳过这些（黑名单）";
+"folder_rules_note" = "选择哪些照片和视频参与备份。不需要筛选时，两个输入框都留空。";
+"folder_rules_examples" = "*：同一层中的任意字符\n**：任意层级的子文件夹\n?：一个字符\n[abc]：括号中的任意一个字符\n{jpg,JPG}：任选一种写法\n\n选择或排除整个文件夹，请写“文件夹名/**”，只写末尾 / 不够。";
+"folder_rules_effect" = "保存后重新扫描。规则影响新加入的备份任务；原文件、已排队的传输和已接收的备份会保留。";
 "folder_rules_save" = "保存并重新扫描";
 "folder_rules_invalid" = "规则未保存：";
 "folder_ignore_version" = "忽略此版本";
 "folder_ignore_note" = "移除此失败记录，后续批量备份也跳过这个版本。文件内容变化后可再次备份，原文件保留。";
 "folder_no_issues" = "没有待处理的失败文件";
 "state_ignored" = "已忽略此版本";
+
+"folder_rules_include_note" = "填写后，只备份符合任意一行的文件。留空则包含所有支持的照片和视频。";
+
+"folder_rules_exclude_note" = "符合任意一行的文件都会跳过，即使白名单选中了它。留空表示没有额外排除。";
+
+"folder_rules_include_example" = "**/*.{jpg,JPG}";
+
+"folder_rules_include_example_note" = "例：当前文件夹和所有子文件夹中的 JPG 照片。";
+
+"folder_rules_exclude_example" = "临时/**";
+
+"folder_rules_exclude_example_note" = "例：跳过“临时”子文件夹中的所有文件。";
+
+"folder_rules_pattern_help" = "规则怎么写？";
+
+"folder_rules_path_note" = "每行写一条，从当前文件夹开始写路径，不需要完整磁盘路径。例如“旅行/photo.jpg”指“旅行”子文件夹中的这张照片。字母区分大小写。";

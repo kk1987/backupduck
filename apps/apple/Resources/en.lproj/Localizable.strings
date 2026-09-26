@@ -547,14 +547,30 @@
 
 // Folder rules and failure recovery
 "folder_rules" = "Backup rules";
-"folder_rules_include" = "Include (allowlist)";
-"folder_rules_exclude" = "Exclude (blocklist)";
-"folder_rules_note" = "One glob pattern per line, matched against paths relative to this folder. Empty include means all supported media; exclude takes priority. Matching is case-sensitive.";
-"folder_rules_examples" = "**/*.jpg: JPEGs at any depth · Trips/**: everything under Trips\n*: one path segment · **: across folders · ?: one character · [abc] and {jpg,png} are supported. A trailing / alone does not exclude a folder; use Folder/**.";
-"folder_rules_effect" = "Save rescans the folder and filters its file list. Rules do not add unsupported formats or cancel queued transfers. Originals and received backups are unchanged.";
+"folder_rules_include" = "Only back up these (allowlist)";
+"folder_rules_exclude" = "Skip these (blocklist)";
+"folder_rules_note" = "Choose which photos and videos to back up. Leave both boxes empty if you do not need filtering.";
+"folder_rules_examples" = "*: any characters within one folder level\n**: any number of folder levels\n?: one character\n[abc]: one of the listed characters\n{jpg,JPG}: either listed ending\n\nUse Folder/** for everything under a folder; a trailing / alone is not enough.";
+"folder_rules_effect" = "Save rescans the folder. Rules affect new backup tasks; originals, queued transfers and received backups are kept.";
 "folder_rules_save" = "Save and rescan";
 "folder_rules_invalid" = "Could not save these rules:";
 "folder_ignore_version" = "Ignore this version";
 "folder_ignore_note" = "Remove this failure from the list and skip this file version, including bulk retries. A changed file becomes eligible again. The original is kept.";
 "folder_no_issues" = "No files awaiting action";
 "state_ignored" = "Ignored file version";
+
+"folder_rules_include_note" = "Fill this in to back up only files that match at least one line. Leave empty to include all supported photos and videos.";
+
+"folder_rules_exclude_note" = "Files matching any line are skipped, even when the allowlist includes them. Leave empty if nothing needs to be excluded.";
+
+"folder_rules_include_example" = "**/*.{jpg,JPG}";
+
+"folder_rules_include_example_note" = "Example: JPG photos in this folder and all subfolders.";
+
+"folder_rules_exclude_example" = "Temporary/**";
+
+"folder_rules_exclude_example_note" = "Example: skip everything inside the Temporary subfolder.";
+
+"folder_rules_pattern_help" = "How to write rules";
+
+"folder_rules_path_note" = "Write one rule per line, starting from the selected folder, without the full disk path. For example, Trips/photo.jpg refers to that file inside Trips. Matching is case-sensitive.";
