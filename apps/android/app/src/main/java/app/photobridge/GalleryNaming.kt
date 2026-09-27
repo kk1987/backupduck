@@ -32,8 +32,17 @@ internal object GalleryNaming {
         val asset = item.getJSONObject("asset")
         val captured = MediaDates.captured(asset.optJSONObject("metadata"))
         val date = captured?.let { dateFormat.format(Instant.ofEpochMilli(it)) } ?: "undated"
-        return "PB_${date}_${id.take(suffixLength)}${extension(item, outputMime)}"
+        // The Motion Photo format recommends an MP suffix. Readers may ignore
+        // motion metadata when a delivery name does not follow that pattern.
+        val motion = if (asset.getString("kind") == "motion") "_MP" else ""
+        return "PB_${date}_${id.take(suffixLength)}${motion}${extension(item, outputMime)}"
     }
 
-    fun candidates(item: JSONObject, outputMime: String? = null): List<String> = listOf(4, 8, 12, 16, 32, 64).map { name(item, it, outputMime) }
+    fun candidates(item: JSONObject, outputMime: String? = null): List<String> {
+        val current = listOf(4, 8, 12, 16, 32, 64).map { name(item, it, outputMime) }
+        // Retain the previous names for interrupted publications. New copies
+        // choose a current name first; confirmed copies use their stored URI.
+        if (item.getJSONObject("asset").getString("kind") != "motion") return current
+        return current + current.map { it.replace("_MP.", ".") }
+    }
 }

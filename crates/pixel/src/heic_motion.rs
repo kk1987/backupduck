@@ -2,6 +2,7 @@
 //! Only the HEIF item tables and XMP are rewritten; image and video payloads
 //! are copied byte-for-byte. Unsupported HEIF layouts use the codec fallback.
 use photobridge_core::{BurstMetadata, Error, Result};
+use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -84,6 +85,58 @@ fn extend_count(
     let size = u32::try_from(value.len()).map_err(|_| Error::Capacity)?;
     value[..4].copy_from_slice(&size.to_be_bytes());
     Ok(value)
+}
+
+/// Keep one authoritative XMP item for the primary image. Android readers use
+/// the first cdsc XMP reference, so appending another item hides MotionPhoto
+/// behind the camera's existing metadata (notably on recent iPhone HEICs).
+fn merge_primary_xmp(original: &[u8], motion: &str) -> Result<Vec<u8>> {
+    let mut reader = NsReader::from_reader(original);
+    let mut insertion = None;
+    let mut depth = 0usize;
+    loop {
+        let start = reader.buffer_position() as usize;
+        let event = reader.read_event().map_err(|_| unsupported())?;
+        match &event {
+            Event::Start(e) | Event::Empty(e) => {
+                for attr in e.attributes() {
+                    let attr = attr.map_err(|_| unsupported())?;
+                    let (ns, _) = reader.resolver().resolve_attribute(attr.key);
+                    if matches!(ns, ResolveResult::Bound(n) if n.as_ref() == b"http://ns.google.com/photos/1.0/camera/" || n.as_ref() == b"http://ns.google.com/photos/1.0/container/")
+                    {
+                        return Err(unsupported());
+                    }
+                }
+                if matches!(event, Event::Start(_)) {
+                    depth += 1;
+                    if depth > 128 {
+                        return Err(unsupported());
+                    }
+                }
+            }
+            Event::End(e) => {
+                let (ns, name) = reader.resolver().resolve_element(e.name());
+                if matches!(ns, ResolveResult::Bound(n) if n.as_ref() == b"http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+                    && name.as_ref() == b"RDF"
+                    && insertion.replace(start).is_some()
+                {
+                    return Err(unsupported());
+                }
+                depth = depth.checked_sub(1).ok_or_else(unsupported)?;
+            }
+            Event::DocType(_) => return Err(unsupported()),
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return Err(unsupported());
+    }
+    let at = insertion.ok_or_else(unsupported)?;
+    let mut merged = original[..at].to_vec();
+    merged.extend(motion.as_bytes());
+    merged.extend(&original[at..]);
+    Ok(merged)
 }
 
 /// Append the unmodified MOV to a HEIC and register a Motion Photo XMP item.
@@ -181,6 +234,8 @@ pub fn write_heic_motion_with_burst_and_video_mime(
     let count = number(iloc, 14, 2)? as usize;
     let mut at = 16;
     let mut offsets = Vec::new();
+    let mut locations = std::collections::BTreeMap::new();
+    let mut xmp_ids = std::collections::BTreeSet::new();
     let mut max_id = primary_id;
     let entries = boxes(iinf, 14, iinf.len())?;
     if entries.len() != number(iinf, 12, 2)? as usize {
@@ -190,7 +245,15 @@ pub fn write_heic_motion_with_burst_and_video_mime(
         if kind != *b"infe" || iinf[entry_at + 8] != 2 {
             return Err(unsupported());
         }
-        max_id = max_id.max(number(iinf, entry_at + 12, 2)? as u16);
+        let id = number(iinf, entry_at + 12, 2)? as u16;
+        max_id = max_id.max(id);
+        let entry_end = entry_at + number(iinf, entry_at, 4)? as usize;
+        if iinf[entry_at + 16..entry_at + 20] == *b"mime" {
+            let fields = &iinf[entry_at + 20..entry_end];
+            if fields.split(|b| *b == 0).nth(1) == Some(b"application/rdf+xml".as_slice()) {
+                xmp_ids.insert(id);
+            }
+        }
     }
     for _ in 0..count {
         let id = number(iloc, at, 2)? as u16;
@@ -212,6 +275,12 @@ pub fn write_heic_motion_with_burst_and_video_mime(
         at += 2;
         for _ in 0..extent_count {
             let offset = number(iloc, at, offset_size)?;
+            if method == 0 && extent_count == 1 {
+                locations.insert(
+                    id,
+                    (at, offset, number(iloc, at + offset_size, length_size)?),
+                );
+            }
             if method == 0 {
                 offsets.push((at, offset));
             }
@@ -224,7 +293,29 @@ pub fn write_heic_motion_with_burst_and_video_mime(
     if at != iloc.len() {
         return Err(unsupported());
     }
-    let xmp_id = max_id.checked_add(1).ok_or_else(unsupported)?;
+    let mut existing_xmp = None;
+    for (at, size, kind) in boxes(iref, 12, iref.len())? {
+        if kind != *b"cdsc" {
+            continue;
+        }
+        let id = number(iref, at + 8, 2)? as u16;
+        let count = number(iref, at + 10, 2)? as usize;
+        if size != 12 + count * 2 {
+            return Err(unsupported());
+        }
+        if xmp_ids.contains(&id)
+            && (0..count)
+                .any(|i| number(iref, at + 12 + i * 2, 2).ok() == Some(u64::from(primary_id)))
+        {
+            if existing_xmp.replace(id).is_some() {
+                return Err(unsupported());
+            }
+        }
+    }
+    let xmp_id = match existing_xmp {
+        Some(id) => id,
+        None => max_id.checked_add(1).ok_or_else(unsupported)?,
+    };
     let footer_size = samsung_footer(0, 0).len() as u64;
     // mpvd header and SEF footer are included in the MotionPhoto item length,
     // while the primary item declares the eight-byte mpvd header as padding.
@@ -241,18 +332,41 @@ pub fn write_heic_motion_with_burst_and_video_mime(
     let xmp = format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" xmlns:Container="http://ns.google.com/photos/1.0/container/" xmlns:Item="http://ns.google.com/photos/1.0/container/item/" GCamera:MotionPhoto="1" GCamera:MotionPhotoVersion="1" GCamera:MotionPhotoPresentationTimestampUs="-1"{burst_fields}><Container:Directory><rdf:Seq><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="image/heic" Item:Semantic="Primary" Item:Length="0" Item:Padding="8"/></rdf:li><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="{video_mime}" Item:Semantic="MotionPhoto" Item:Length="{motion_length}" Item:Padding="0"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description></rdf:RDF></x:xmpmeta>"#
     );
-    let xmp = xmp.as_bytes();
+    let xmp = if let Some(id) = existing_xmp {
+        let (_, offset, length) = *locations.get(&id).ok_or_else(unsupported)?;
+        let start = usize::try_from(offset).map_err(|_| unsupported())?;
+        let end = usize::try_from(offset.checked_add(length).ok_or_else(unsupported)?)
+            .map_err(|_| unsupported())?;
+        let description_start = xmp.find("<rdf:Description").ok_or_else(unsupported)?;
+        let description_end =
+            xmp.find("</rdf:Description>").ok_or_else(unsupported)? + "</rdf:Description>".len();
+        let description = xmp[description_start..description_end].replacen(
+            "<rdf:Description",
+            "<rdf:Description xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"",
+            1,
+        );
+        merge_primary_xmp(still.get(start..end).ok_or_else(unsupported)?, &description)?
+    } else {
+        xmp.into_bytes()
+    };
+    let xmp = xmp.as_slice();
     let mut infe = vec![2, 0, 0, 1];
     infe.extend(xmp_id.to_be_bytes());
     infe.extend([0, 0]);
     infe.extend(b"mime\0application/rdf+xml\0");
-    let iinf_new = extend_count(iinf.to_vec(), 12, 2, &box_data(b"infe", &infe)?)?;
+    let iinf_new = if existing_xmp.is_some() {
+        iinf.to_vec()
+    } else {
+        extend_count(iinf.to_vec(), 12, 2, &box_data(b"infe", &infe)?)?
+    };
     let mut cdsc = Vec::new();
     cdsc.extend(xmp_id.to_be_bytes());
     cdsc.extend(1u16.to_be_bytes());
     cdsc.extend(primary_id.to_be_bytes());
     let mut iref_new = iref.to_vec();
-    iref_new.extend(box_data(b"cdsc", &cdsc)?);
+    if existing_xmp.is_none() {
+        iref_new.extend(box_data(b"cdsc", &cdsc)?);
+    }
     let iref_size = u32::try_from(iref_new.len()).map_err(|_| Error::Capacity)?;
     iref_new[..4].copy_from_slice(&iref_size.to_be_bytes());
     let mut new_extent = Vec::new();
@@ -263,7 +377,11 @@ pub fn write_heic_motion_with_burst_and_video_mime(
     new_extent.extend([0, 0, 0, 1]);
     new_extent.extend(vec![0; offset_size]);
     new_extent.extend(vec![0; length_size]);
-    let mut iloc_new = extend_count(iloc.to_vec(), 14, 2, &new_extent)?;
+    let mut iloc_new = if existing_xmp.is_some() {
+        iloc.to_vec()
+    } else {
+        extend_count(iloc.to_vec(), 14, 2, &new_extent)?
+    };
     let meta_delta =
         iinf_new.len() + iref_new.len() + iloc_new.len() - iinf.len() - iref.len() - iloc.len();
     let mdat_header = if number(&still, top[2].0, 4)? == 1 {
@@ -284,7 +402,11 @@ pub fn write_heic_motion_with_burst_and_video_mime(
             old + meta_delta as u64 + xmp.len() as u64,
         )?;
     }
-    let new_entry_offset = iloc_new.len() - length_size - offset_size;
+    let new_entry_offset = if let Some(id) = existing_xmp {
+        locations[&id].0
+    } else {
+        iloc_new.len() - length_size - offset_size
+    };
     put_number(
         &mut iloc_new,
         new_entry_offset,
