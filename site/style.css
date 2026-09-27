@@ -627,6 +627,10 @@ h3 {
 .automatic {
   background: #f1f6fa;
 }
+.folders {
+  grid-column: 1 / -1;
+  background: #f1f6fa;
+}
 .motion {
   background: #fcf6f0;
 }

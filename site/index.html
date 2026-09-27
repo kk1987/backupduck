@@ -6,7 +6,7 @@
     <title>PhotoBridge — Your photos. Beyond one device.</title>
     <meta
       name="description"
-      content="Back up photos over Wi-Fi from iPhone or Mac to Android and Pixel. Originals, Live Photos, bursts and automatic backup. Free for noncommercial use. Source available."
+      content="Back up photos and videos over Wi-Fi from iPhone or Mac to Android and Pixel. Photo libraries, Mac folders, external drives and SD cards. Free for noncommercial use."
     />
     <meta name="theme-color" content="#ffffff" />
     <meta
@@ -15,7 +15,7 @@
     />
     <meta
       property="og:description"
-      content="Wi-Fi photo backup from iPhone and Mac to your Pixel. Keep the moments. Choose the destination."
+      content="Wi-Fi photo backup from iPhone and Mac to your Pixel. From your photo library, or folders, external drives and SD cards on Mac."
     />
     <meta
       property="og:image"
@@ -65,8 +65,8 @@
           Your photos.<br /><em>Beyond one device.</em>
         </h1>
         <p data-i18n="hero_description" class="lead">
-          From iPhone or Mac to your Pixel, wirelessly.<br />Keep the originals,
-          the motion, and a copy of everything you love.
+          From iPhone or Mac to your Pixel, wirelessly.<br />Back up your photo
+          library, or photos and videos in folders on Mac.
         </p>
         <div class="hero-actions">
           <a class="button" href="#download"
@@ -473,6 +473,24 @@
               <div class="motion-scrub"><i></i></div>
             </div>
           </article>
+          <article class="feature folders">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                aria-hidden="true">
+                <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+              </svg>
+            </div>
+            <h3 data-i18n="folders_title">Your camera card. Your folders. One backup.</h3>
+            <p data-i18n="folders_body">
+              On Mac, add a folder from your computer, an external drive or an SD
+              card. Include subfolders and automatically back up new and changed
+              photos and videos. Your source files stay untouched.
+            </p>
+            <p data-i18n="folders_guide">
+              <a class="text-link" href="https://github.com/qhhonx/photobridge/blob/main/docs/folder-backup.md">Folder backup guide ↗</a>
+            </p>
+          </article>
           <article class="feature quiet">
             <div class="feature-icon">
               <svg
@@ -698,8 +716,8 @@
             </div>
             <h3 data-i18n="step_choose">Choose your memories</h3>
             <p data-i18n="step_choose_body">
-              Send a few photos, back up new additions, or include your existing
-              library.
+              Start with a few photos, then enable automatic backup. On Mac,
+              choose your photo library or add a folder.
             </p>
           </article>
         </div>
@@ -836,7 +854,7 @@
               </svg>
               <h3>Mac</h3>
             </div>
-            <p data-i18n="mac_role">Send from your library</p>
+            <p data-i18n="mac_role">Back up your photo library or folders</p>
             <p class="requirements">macOS 14+ · Apple Silicon</p>
             <a
               class="button"
@@ -918,6 +936,26 @@
           </p>
         </div>
         <div>
+          <details>
+            <summary data-i18n="faq_folders_q">Can I back up an external drive or SD card?</summary>
+            <p data-i18n="faq_folders_a">
+              Yes. On Mac, add a folder and its subfolders are included. Supported
+              formats are JPEG, HEIC/HEIF, PNG, GIF, WebP, TIFF, MOV, MP4 and M4V;
+              RAW files and documents are not supported. A disconnected drive
+              waits until it is available again. Google Photos does not recreate
+              the folder hierarchy as albums.
+            </p>
+          </details>
+          <details>
+            <summary data-i18n="faq_folder_repeat_q">Will backing up a folder again upload duplicates?</summary>
+            <p data-i18n="faq_folder_repeat_a">
+              For the same folder source and receiver, unchanged files already
+              queued or received are skipped. New or changed files are eligible
+              for backup. Files added through another source or sent to a new
+              receiver may be backed up separately. PhotoBridge does not modify
+              or delete your originals.
+            </p>
+          </details>
           <details>
             <summary data-i18n="faq_icloud_q">Do I need iCloud?</summary>
             <p data-i18n="faq_icloud_a">
