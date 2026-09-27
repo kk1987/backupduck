@@ -306,10 +306,9 @@ pub fn write_heic_motion_with_burst_and_video_mime(
         if xmp_ids.contains(&id)
             && (0..count)
                 .any(|i| number(iref, at + 12 + i * 2, 2).ok() == Some(u64::from(primary_id)))
+            && existing_xmp.replace(id).is_some()
         {
-            if existing_xmp.replace(id).is_some() {
-                return Err(unsupported());
-            }
+            return Err(unsupported());
         }
     }
     let xmp_id = match existing_xmp {
