@@ -67,6 +67,15 @@ struct TransferRow: View {
     guard let progress, progress.sent > 0 else { return "state_scheduled" }
     return progress.expected > 0 && progress.sent >= progress.expected ? "state_confirming" : "state_running"
   }
+  private var statusText: String {
+    let error = ["failed", "waiting"].contains(job.state) ? job.errorCode : nil
+    var text = NSLocalizedString(error.map { "error_" + $0 } ?? statusKey, comment: "")
+    if job.state == "waiting", let next = job.nextAttemptAt, next > 0 {
+      text += " · " + String(format: NSLocalizedString("task_retry_time", comment: ""),
+        Date(timeIntervalSince1970: Double(next)).formatted(date: .omitted, time: .standard))
+    }
+    return text
+  }
   var activityLabel: String? = nil
   var retry: () -> Void
   var body: some View {
@@ -101,33 +110,20 @@ struct TransferRow: View {
           } ?? NSLocalizedString("task_order_unknown", comment: "")))
             .font(.caption).foregroundStyle(.secondary)
         }
-        // Retain the progress slot when the receipt arrives so later rows do not jump.
-        ProgressView(value: Double(displayedBytes), total: Double(max(1, job.totalBytes)))
-          .frame(height: 8).opacity(job.state == "received" ? 0 : 1)
-          .accessibilityHidden(job.state == "received")
-        HStack {
-          Text(
-            LocalizedStringKey(statusKey))
-          Spacer()
-          Text(
-            ByteCountFormatter.string(fromByteCount: Int64(displayedBytes), countStyle: .file)
-              + " / "
-              + ByteCountFormatter.string(fromByteCount: Int64(job.totalBytes), countStyle: .file)
-          ).monospacedDigit()
-        }.font(.caption).foregroundStyle(.secondary)
         HStack(spacing: 8) {
-          if let error = job.errorCode {
-            Text(LocalizedStringKey("error_" + error)).lineLimit(1)
-              .help(NSLocalizedString("error_" + error, comment: ""))
-          }
-          if job.state == "waiting", let next = job.nextAttemptAt, next > 0 {
-            Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
-              Date(timeIntervalSince1970: Double(next)).formatted(date: .omitted, time: .standard)))
-              .lineLimit(1)
+          Text(statusText).lineLimit(1).help(statusText)
+          if job.state == "running" || (job.state != "received" && displayedBytes > 0) {
+            ProgressView(value: Double(displayedBytes), total: Double(max(1, job.totalBytes)))
+              .frame(width: 100, height: 8)
           }
           Spacer(minLength: 0)
-          if job.errorCode != nil { Button("retry_task", action: retry) }
-        }.font(.caption).foregroundStyle(.secondary).frame(height: 18)
+          Text(ByteCountFormatter.string(fromByteCount: Int64(displayedBytes), countStyle: .file)
+            + " / " + ByteCountFormatter.string(fromByteCount: Int64(job.totalBytes), countStyle: .file))
+            .monospacedDigit().lineLimit(1).layoutPriority(1)
+          if job.errorCode != nil {
+            Button("retry_task", action: retry).buttonStyle(.plain).foregroundStyle(.tint)
+          }
+        }.font(.caption).foregroundStyle(.secondary)
 
       }
     }.padding(.vertical, 10)

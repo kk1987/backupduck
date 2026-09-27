@@ -5,7 +5,7 @@
 - Rescanning an unavailable folder reports the connection or permission problem immediately, clears stale waiting feedback, and preserves the file inventory. Folder paths remain visible when the drive is disconnected.
 - Source-level errors no longer claim that files failed to back up. File warnings appear only for recorded file issues.
 
-- Transfer rows and the fixed backup footer retain their height across preparation, transfer, retry and receipt updates. The footer keeps its progress slot and shows connection/storage warnings only when they block the whole backup.
+- Transfer rows and the fixed backup footer retain their height across preparation, transfer, retry and receipt updates. Progress bars and retry information share existing status lines without empty placeholder rows. The footer shows connection/storage warnings only when they block the whole backup.
 
 Mac requires Apple Silicon and macOS 14+. Android requires arm64 and Android 10+.
 iOS 17+ is available from source. Receiver delivery and cloud backup remain separate states.

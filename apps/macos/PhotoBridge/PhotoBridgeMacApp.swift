@@ -263,12 +263,14 @@ struct MacBackupFooter: View {
         Image(systemName: "checkmark.shield").font(.title2).foregroundStyle(.blue).frame(width: 44, height: 44)
       }
       VStack(alignment: .leading, spacing: 5) {
-        Text(model.importing ? "importing_originals" : model.pairing == nil ? "receiver_unpaired"
-          : model.paused ? "backup_paused" : model.waitingForNetwork ? "waiting_for_wifi"
-          : model.compactWaitingReason != nil ? "backup_waiting" : "backup_enabled")
-          .lineLimit(1).frame(height: 20, alignment: .leading)
-        ProgressView(value: progress ?? 0).frame(height: 8)
-          .opacity(progress == nil ? 0 : 1).accessibilityHidden(progress == nil)
+        HStack(spacing: 10) {
+          Text(model.importing ? "importing_originals" : model.pairing == nil ? "receiver_unpaired"
+            : model.paused ? "backup_paused" : model.waitingForNetwork ? "waiting_for_wifi"
+            : model.compactWaitingReason != nil ? "backup_waiting" : "backup_enabled")
+            .lineLimit(1).layoutPriority(1)
+          if let progress { ProgressView(value: progress).frame(width: 140, height: 8) }
+          Spacer(minLength: 0)
+        }
         Group {
           if let reason = model.compactWaitingReason {
             Label(LocalizedStringKey("error_" + reason), systemImage: "clock")
@@ -276,11 +278,11 @@ struct MacBackupFooter: View {
           } else {
             Text(summary).foregroundStyle(.secondary).help(summary)
           }
-        }.font(.caption).lineLimit(1).frame(height: 18, alignment: .leading)
+        }.font(.caption).lineLimit(1)
       }.frame(maxWidth: .infinity, alignment: .leading)
       if model.pairing == nil { Button("pair_receiver_desktop", action: pair) }
       else { Button("nav_transfers", action: showTransfers).buttonStyle(.link) }
-    }.frame(height: 56).accessibilityIdentifier("backup.footer")
+    }.accessibilityIdentifier("backup.footer")
   }
 }
 

@@ -323,18 +323,21 @@ struct SourceBrowserRow: View {
             kind == "burst" ? "square.stack" : kind == "motion" ? "livephoto" : kind == "video" ? "video" : "photo")
           if let captured { Text(captured.formatted(date: .abbreviated, time: .shortened)) }
         }.font(.caption).foregroundStyle(.secondary)
-        Label(active ? "importing_originals" : LocalizedStringKey("state_" + state),
-          systemImage: taskSymbol(state)).font(.caption).foregroundStyle(.secondary)
-        ZStack(alignment: .leading) {
-          ProgressView(value: progress ?? 0).frame(height: 8)
-            .opacity(active && progress != nil ? 1 : 0).accessibilityHidden(!active || progress == nil)
-          if active && progress == nil { ProgressView().controlSize(.small) }
-          else if !active, let retry = item.retry_at, retry > Int64(Date().timeIntervalSince1970) {
+        HStack(spacing: 8) {
+          Label(active ? "importing_originals" : LocalizedStringKey("state_" + state),
+            systemImage: taskSymbol(state)).lineLimit(1)
+          if active {
+            if let progress { ProgressView(value: progress).frame(width: 100, height: 8) }
+            else { ProgressView().controlSize(.mini).frame(width: 12, height: 12) }
+          }
+          Spacer(minLength: 0)
+          if !active, let retry = item.retry_at, retry > Int64(Date().timeIntervalSince1970) {
             Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
               Date(timeIntervalSince1970: Double(retry)).formatted(date: .omitted, time: .standard)))
-              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              .lineLimit(1)
           }
-        }.frame(height: 18)
+        }.font(.caption).foregroundStyle(.secondary)
+
       }
       Spacer(minLength: 0)
     }.padding(.vertical, 10)

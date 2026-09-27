@@ -96,7 +96,7 @@ import SwiftUI
               nextAttemptAt: state == "waiting" ? Int64(Date().addingTimeInterval(30).timeIntervalSince1970) : nil)
             let row = AnyView(TransferRow(job: job, progress: state == "running" ? TransferProgress(sent: 250000, expected: 500000, baseline: 500000, phase: "upload") : nil, retry: {}))
             rowHeights.append(await naturalHeight(row, width: 680))
-            try await capture("transfer-row-" + state, view: row, output: output, size: NSSize(width: 700, height: 180))
+            try await capture("transfer-row-" + state, view: row, output: output, size: NSSize(width: 700, height: rowHeights.last!))
           }
           precondition(rowHeights.max()! - rowHeights.min()! < 1,
             "Transfer row height must remain stable across progress, retry and receipt transitions: \(rowHeights)")
@@ -124,7 +124,7 @@ import SwiftUI
             if state == "blocked" { precondition(model.compactWaitingReason == "local_cache_budget") }
             if state == "network" { precondition(model.compactWaitingReason == "network") }
             footerHeights.append(await naturalHeight(footer(), width: 680))
-            try await capture("backup-footer-" + state, view: footer(), output: output, size: NSSize(width: 700, height: 90))
+            try await capture("backup-footer-" + state, view: footer(), output: output, size: NSSize(width: 700, height: footerHeights.last!))
           }
           model.importing = true; model.receiverUnavailable = true
           precondition(model.compactWaitingReason == "receiver_unavailable", "Connection warnings must remain visible during preparation")
