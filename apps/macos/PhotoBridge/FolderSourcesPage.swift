@@ -270,23 +270,8 @@ private struct FolderSourceDetail: View {
       }
       FolderSourceActions(folders: folders, backup: backup, source: source)
       HStack {
-        Menu {
-          if layout == "folders" {
-            Picker("folder_sort", selection: $treeDescending) {
-              Text("folder_sort_name_asc").tag(false)
-              Text("folder_sort_name_desc").tag(true)
-            }
-          } else {
-            Picker("folder_sort", selection: $sort) {
-              ForEach(FolderFileSort.allCases) { item in Text(LocalizedStringKey(item.title)).tag(item) }
-            }
-          }
-        } label: {
-          Label(LocalizedStringKey(layout == "folders"
-            ? (treeDescending ? "folder_sort_name_desc" : "folder_sort_name_asc") : sort.title),
-            systemImage: "arrow.up.arrow.down")
-        }.menuStyle(.borderlessButton).fixedSize(horizontal: true, vertical: true)
-          .help("folder_sort").accessibilityIdentifier("folder.sort")
+        FolderSortControl(layout: layout, sort: $sort, treeDescending: $treeDescending)
+          .fixedSize(horizontal: true, vertical: true)
         Spacer()
         Picker("folder_list_layout", selection: $layout) {
           Text("folder_list_flat").tag("flat")
@@ -353,7 +338,7 @@ private struct FolderSourceDetail: View {
       guard !Task.isCancelled else { return }
       if let states = try? await folders.states(source.id, relatives: Array(visible.prefix(400))) {
         guard !Task.isCancelled else { return }
-        for i in entries.indices where visible.contains(entries[i].relative) { entries[i].state = states[entries[i].relative] }
+        for i in entries.indices where visible.contains(entries[i].relative) && entries[i].state != states[entries[i].relative] { entries[i].state = states[entries[i].relative] }
         tree.apply(states, visible: visible)
       }
     }
@@ -523,6 +508,63 @@ enum FolderFileSort: String, CaseIterable, Identifiable {
   var title: String { "folder_sort_" + rawValue }
 }
 
+// Keep the native popup and its items alive while queue/source state refreshes.
+// SwiftUI's Menu + Picker creates a submenu that can close during those updates.
+struct FolderSortControl: NSViewRepresentable {
+  let layout: String
+  @Binding var sort: FolderFileSort
+  @Binding var treeDescending: Bool
+  private var options: [String] {
+    layout == "folders" ? ["name_asc", "name_desc"] : FolderFileSort.allCases.map(\.rawValue)
+  }
+  private var selected: String { layout == "folders" ? (treeDescending ? "name_desc" : "name_asc") : sort.rawValue }
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+  func makeNSView(context: Context) -> NSPopUpButton {
+    let button = NSPopUpButton(frame: .zero, pullsDown: true)
+    button.isBordered = false
+    button.setAccessibilityIdentifier("folder.sort")
+    button.toolTip = NSLocalizedString("folder_sort", comment: "")
+    updateNSView(button, context: context)
+    return button
+  }
+  func updateNSView(_ button: NSPopUpButton, context: Context) {
+    context.coordinator.parent = self
+    if context.coordinator.options != options {
+      let menu = NSMenu()
+      menu.addItem(NSMenuItem(title: "", action: nil, keyEquivalent: ""))
+      for value in options {
+        let item = NSMenuItem(title: NSLocalizedString("folder_sort_" + value, comment: ""),
+          action: #selector(Coordinator.choose(_:)), keyEquivalent: "")
+        item.target = context.coordinator; item.representedObject = value
+        menu.addItem(item)
+      }
+      button.menu = menu
+      context.coordinator.options = options
+    }
+    let title = NSLocalizedString("folder_sort_" + selected, comment: "")
+    if button.title != title {
+      button.title = title
+      button.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
+      button.imagePosition = .imageLeading
+      button.invalidateIntrinsicContentSize()
+    }
+    for item in button.itemArray.dropFirst() {
+      let state: NSControl.StateValue = item.representedObject as? String == selected ? .on : .off
+      if item.state != state { item.state = state }
+    }
+  }
+  final class Coordinator: NSObject {
+    var parent: FolderSortControl
+    var options: [String] = []
+    init(_ parent: FolderSortControl) { self.parent = parent }
+    @objc func choose(_ item: NSMenuItem) {
+      guard let value = item.representedObject as? String else { return }
+      if parent.layout == "folders" { parent.treeDescending = value == "name_desc" }
+      else if let sort = FolderFileSort(rawValue: value) { parent.sort = sort }
+    }
+  }
+}
+
 struct FolderChild: Decodable, Identifiable {
   let relative: String
   let is_directory: Bool
@@ -603,11 +645,12 @@ struct FolderChildren: Decodable {
   func apply(_ states: [String: String], visible: Set<String>) {
     for directory in Array(children.keys) {
       guard var rows = children[directory] else { continue }
-      for index in rows.indices where visible.contains(rows[index].relative) {
+      var changed = false
+      for index in rows.indices where visible.contains(rows[index].relative) && rows[index].entry?.state != states[rows[index].relative] {
         let state = states[rows[index].relative]
-        rows[index].entry?.state = state
+        rows[index].entry?.state = state; changed = true
       }
-      children[directory] = rows
+      if changed { children[directory] = rows }
     }
   }
 }
@@ -625,8 +668,11 @@ private struct FolderFileRow: View {
         if !nested { Text(entry.relative).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
       }
       Spacer(minLength: 12)
-      Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-        .font(.caption).foregroundStyle(.secondary)
+      VStack(alignment: .trailing, spacing: 5) {
+        Text(Date(timeIntervalSince1970: Double(entry.modified_ms) / 1000), format: .dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute())
+          .help("folder_modified_time").accessibilityIdentifier("folder.file_modified")
+        Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
+      }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
       Image(systemName: taskSymbol(entry.state))
         .foregroundStyle(entry.state == "received" ? .green : .secondary)
         .help(LocalizedStringKey(entry.state.map { "state_" + $0 } ?? "folder_not_queued"))

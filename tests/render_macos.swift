@@ -107,7 +107,7 @@ import SwiftUI
           source.issueDetails = ["root-photo.png": FolderIssue(reason: "unreadable_media", detail: nil)]
           let legacyData = try JSONEncoder().encode(source)
           var legacy = try JSONSerialization.jsonObject(with: legacyData) as! [String: Any]
-          legacy.removeValue(forKey: "issueDetails"); legacy.removeValue(forKey: "retryPaths"); legacy.removeValue(forKey: "includePatterns"); legacy.removeValue(forKey: "excludePatterns")
+          legacy.removeValue(forKey: "issueDetails"); legacy.removeValue(forKey: "retryPaths"); legacy.removeValue(forKey: "includePatterns"); legacy.removeValue(forKey: "excludePatterns"); legacy.removeValue(forKey: "lastKnownPath")
           let restored = try JSONDecoder().decode(FolderSource.self, from: JSONSerialization.data(withJSONObject: legacy))
           precondition(restored.issues.count == 2 && restored.issueDetails == nil && restored.retryPaths == nil)
           folders.sources = [source]
@@ -235,7 +235,38 @@ import SwiftUI
           UserDefaults.standard.set("backup", forKey: "macSettingsSection")
           try await capture("folder-settings", view: AnyView(MacPreferences(model: model, folders: folders)),
             output: output, size: NSSize(width: 800, height: 900))
-          print("Folder mode, global pause, retry persistence, legacy decoding, directory queries and system thumbnails passed; rendered both layouts and source settings.")
+          // Exercise offline checks against both a disappeared directory and an
+          // unresolved bookmark, the latter being macOS's unmounted-volume path.
+          let removable = store.appendingPathComponent("Removable")
+          try FileManager.default.createDirectory(at: removable, withIntermediateDirectories: true)
+          let removableBookmark = try removable.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
+          let offline = FolderSource(id: "layout-offline", name: "Removable", bookmark: removableBookmark,
+            automatic: true, enabled: true, receiver: paired.receiverID, lastCheck: Date(), lastKnownPath: removable.path)
+          let unavailable = FolderSources(backup: model)
+          unavailable.sources = [offline]
+          unavailable.summaries[offline.id] = folders.summaries[source.id]
+          let inventory = unavailable.summaries[offline.id]
+          unavailable.check(offline.id, userInitiated: true)
+          precondition(unavailable.actionMessages[offline.id] == "folder_check_requested")
+          let onlinePath = unavailable.displayPath(unavailable.sources[0])
+          try FileManager.default.removeItem(at: removable)
+          unavailable.check(offline.id, userInitiated: true)
+          precondition(unavailable.phases[offline.id] == "folder_offline" && unavailable.actionMessages[offline.id] == nil,
+            "An offline rescan must clear waiting feedback and report source availability")
+          precondition(unavailable.sources[0].issues.isEmpty && unavailable.summaries[offline.id] == inventory,
+            "Losing a volume must not invent file failures or discard the inventory")
+          unavailable.sources[0].bookmark = Data()
+          unavailable.check(offline.id, userInitiated: true)
+          precondition(unavailable.phases[offline.id] == "folder_offline" && unavailable.actionMessages[offline.id] == nil)
+          precondition(unavailable.displayPath(unavailable.sources[0]) == onlinePath)
+          try await capture("folder-offline", view: AnyView(FolderSourcesPage(folders: unavailable, backup: model)),
+            output: output, size: NSSize(width: 800, height: 400))
+          try FileManager.default.createDirectory(at: removable, withIntermediateDirectories: true)
+          unavailable.sources[0].bookmark = try removable.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
+          unavailable.check(offline.id, userInitiated: true)
+          precondition(unavailable.actionMessages[offline.id] == "folder_check_requested",
+            "A restored source must accept a new rescan")
+          print("Folder mode, retry/rules persistence, offline rescan/reconnect, directory queries and thumbnails passed; rendered both layouts and offline status.")
           app.terminate(nil)
           return
         }

@@ -435,10 +435,10 @@
 "folder_receiver_changed" = "Receiver changed; confirm backup to the current device";
 "folder_queue_wait" = "Transferring; more files will be prepared shortly";
 "folder_up_to_date" = "Checked";
-"folder_attention" = "Some files were not backed up";
+"folder_attention" = "Files need attention";
 "folder_preparing" = "Preparing originals…";
 "folder_cache_wait" = "Waiting for staging space";
-"folder_offline" = "Waiting for the drive or read access";
+"folder_offline" = "Folder unavailable. Check the connection or permissions.";
 "folder_not_queued" = "Not queued yet";
 "folder_load_more" = "Load more";
 "folder_empty" = "No supported photos or videos found yet.";
@@ -574,3 +574,5 @@
 "folder_rules_pattern_help" = "How to write rules";
 
 "folder_rules_path_note" = "Write one rule per line, starting from the selected folder, without the full disk path. For example, Trips/photo.jpg refers to that file inside Trips. Matching is case-sensitive.";
+
+"folder_modified_time" = "Modified time";

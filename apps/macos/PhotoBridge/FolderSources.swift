@@ -28,10 +28,11 @@ struct FolderSource: Codable, Identifiable {
   var retryPaths: [String]?
   var includePatterns: [String]?
   var excludePatterns: [String]?
+  var lastKnownPath: String?
   var automaticActive: Bool { automatic && enabled }
   var manualActive: Bool { enabled && !automatic }
 }
-struct FolderSummary: Decodable {
+struct FolderSummary: Decodable, Equatable {
   let files: UInt64
   let bytes: UInt64
   let unsupported: UInt64
@@ -115,14 +116,16 @@ struct FolderSummary: Decodable {
     try await validateRules(include: include, exclude: exclude)
     let bookmark = try url.resolvingSymlinksInPath().bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
     let source = FolderSource(id: UUID().uuidString, name: url.lastPathComponent, bookmark: bookmark,
-      automatic: automatic, enabled: existing || automatic, receiver: backup.pairing?.receiverID, lastCheck: nil, baselinePending: !existing, includePatterns: include, excludePatterns: exclude)
+      automatic: automatic, enabled: existing || automatic, receiver: backup.pairing?.receiverID, lastCheck: nil, baselinePending: !existing, includePatterns: include, excludePatterns: exclude, lastKnownPath: url.path)
     _ = try await call(["action": "rules", "source": source.id, "include": include, "exclude": exclude])
     sources.append(source); check(source.id); save()
   }
   func check(_ id: String, userInitiated: Bool = false) {
-    guard sources.contains(where: { $0.id == id }) else { return }
+    guard let source = sources.first(where: { $0.id == id }) else { return }
     dirty.insert(id); fullChecks.insert(id); debounce[id] = .distantPast
-    if userInitiated { actionMessages[id] = "folder_check_requested"; error = nil }
+    if userInitiated { error = nil }
+    guard (try? url(source)) != nil else { markOffline(id); return }
+    if userInitiated { actionMessages[id] = "folder_check_requested" }
   }
   func sourceURL(_ source: FolderSource) -> URL? {
     var stale = false
@@ -135,8 +138,8 @@ struct FolderSummary: Decodable {
     return url.lastPathComponent
   }
   func displayPath(_ source: FolderSource) -> String {
-    guard let url = sourceURL(source) else { return source.name }
-    return (url.path as NSString).abbreviatingWithTildeInPath
+    let path = sourceURL(source)?.path ?? source.lastKnownPath ?? source.name
+    return (path as NSString).abbreviatingWithTildeInPath
   }
   func wake() {
     watches.removeAll()
@@ -255,12 +258,20 @@ struct FolderSummary: Decodable {
       _ = try await call(["action": "forget", "source": id]); save(); revision += 1
     } catch { self.error = error.localizedDescription }
   }
+  private func available(_ url: URL) -> Bool {
+    var directory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
+      && directory.boolValue && FileManager.default.isReadableFile(atPath: url.path)
+  }
   private func url(_ source: FolderSource) throws -> URL {
-    if let value = access[source.id], FileManager.default.fileExists(atPath: value.path) { return value }
+    if let value = access[source.id], available(value) { return value }
     var stale = false
-    let value = try URL(resolvingBookmarkData: source.bookmark, options: [.withSecurityScope, .withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale)
+    let value: URL
+    do {
+      value = try URL(resolvingBookmarkData: source.bookmark, options: [.withSecurityScope, .withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale)
+    } catch { throw Bridge.Failure(code: "source_unavailable") }
     _ = value.startAccessingSecurityScopedResource()
-    guard FileManager.default.fileExists(atPath: value.path) else {
+    guard available(value) else {
       value.stopAccessingSecurityScopedResource(); throw Bridge.Failure(code: "source_unavailable")
     }
     access[source.id]?.stopAccessingSecurityScopedResource(); access[source.id] = value
@@ -278,18 +289,33 @@ struct FolderSummary: Decodable {
         self.debounce[source.id] = Date().addingTimeInterval(3)
       }
     }
-    if stale, let i = sources.firstIndex(where: { $0.id == source.id }) {
-      sources[i].bookmark = try value.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil); save()
+    if let i = sources.firstIndex(where: { $0.id == source.id }), stale || sources[i].lastKnownPath != value.path {
+      if stale { sources[i].bookmark = try value.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil) }
+      sources[i].lastKnownPath = value.path; save()
     }
     return value
+  }
+  private func setPhase(_ id: String, _ phase: String) {
+    if phases[id] != phase { phases[id] = phase }
+  }
+  private func markOffline(_ id: String) {
+    setPhase(id, "folder_offline")
+    // A failed root lookup is not an individual file failure. Keep inventory and receipts.
+    dirty.insert(id); fullChecks.insert(id)
+    access.removeValue(forKey: id)?.stopAccessingSecurityScopedResource()
+    watches[id] = nil
+    if actionMessages[id] != nil { actionMessages[id] = nil }
   }
   private func tick() async {
     guard backup.ready else { return }
     if let id = scan {
       do {
+        guard let source = sources.first(where: { $0.id == id }), (try? url(source)) != nil else {
+          throw Bridge.Failure(code: "source_unavailable")
+        }
         for _ in 0..<4 {
           let summary = try JSONDecoder().decode(FolderSummary.self, from: await call(["action": "step"]))
-          summaries[id] = summary
+          if summaries[id] != summary { summaries[id] = summary }
           if !summary.scanning {
             scan = nil; revision += 1; indexRevision += 1
             if actionMessages[id] == "folder_check_requested" || actionMessages[id] == "folder_check_running" {
@@ -307,8 +333,14 @@ struct FolderSummary: Decodable {
           }
         }
       } catch {
-        phases[id] = "folder_scan_failed"; scan = nil; dirty.insert(id); debounce[id] = Date().addingTimeInterval(60)
-        if actionMessages[id] == "folder_check_running" { actionMessages[id] = "folder_scan_failed" }
+        _ = try? await call(["action": "cancel"])
+        scan = nil; dirty.insert(id); fullChecks.insert(id)
+        if let source = sources.first(where: { $0.id == id }), (try? url(source)) == nil {
+          markOffline(id)
+        } else {
+          setPhase(id, "folder_scan_failed"); debounce[id] = Date().addingTimeInterval(60)
+          if ["folder_check_requested", "folder_check_running"].contains(actionMessages[id] ?? "") { actionMessages[id] = "folder_scan_failed" }
+        }
       }
     }
     guard !sources.isEmpty else { return }
@@ -324,7 +356,7 @@ struct FolderSummary: Decodable {
           let scopes = fullChecks.contains(source.id) || (changedFolders[source.id]?.count ?? 0) > 256 ? [] : Array(changedFolders[source.id] ?? [])
           _ = try await call(["action": "begin", "source": source.id, "root": root.path, "directories": scopes])
           fullChecks.remove(source.id); changedFolders[source.id] = nil
-          scan = source.id; dirty.remove(source.id); phases[source.id] = "folder_scanning"
+          scan = source.id; dirty.remove(source.id); setPhase(source.id, "folder_scanning")
           if actionMessages[source.id] == "folder_check_requested" { actionMessages[source.id] = "folder_check_running" }
         }
       }
@@ -332,9 +364,9 @@ struct FolderSummary: Decodable {
       let retries = source.retryPaths ?? []
       let retryPath = retries.isEmpty ? nil : retries[(retryTurn[source.id] ?? 0) % retries.count]
       if retryPath != nil { retryTurn[source.id] = (retryTurn[source.id] ?? 0) + 1 }
-      guard source.enabled || retryPath != nil else { phases[source.id] = "folder_manual_idle"; return }
-      guard let receiver = backup.pairing?.receiverID else { phases[source.id] = "folder_pair_first"; return }
-      guard source.receiver == receiver || source.receiver == nil else { phases[source.id] = "folder_receiver_changed"; return }
+      guard source.enabled || retryPath != nil else { setPhase(source.id, "folder_manual_idle"); return }
+      guard let receiver = backup.pairing?.receiverID else { setPhase(source.id, "folder_pair_first"); return }
+      guard source.receiver == receiver || source.receiver == nil else { setPhase(source.id, "folder_receiver_changed"); return }
       if source.receiver == nil, let i = sources.firstIndex(where: { $0.id == source.id }) { sources[i].receiver = receiver; save() }
       if source.baselinePending {
         guard source.lastCheck != nil else { return }
@@ -342,9 +374,9 @@ struct FolderSummary: Decodable {
         if let i = sources.firstIndex(where: { $0.id == source.id }) { sources[i].baselinePending = false; save() }
         return
       }
-      guard !backup.paused else { phases[source.id] = "backup_paused"; return }
-      guard backup.summary.queued + backup.summary.running + backup.summary.waiting < 16 else { phases[source.id] = "folder_queue_wait"; return }
-      guard await backup.canPrepareForReceiver() else { phases[source.id] = "waiting_for_wifi"; return }
+      guard !backup.paused else { setPhase(source.id, "backup_paused"); return }
+      guard backup.summary.queued + backup.summary.running + backup.summary.waiting < 16 else { setPhase(source.id, "folder_queue_wait"); return }
+      guard await backup.canPrepareForReceiver() else { setPhase(source.id, "waiting_for_wifi"); return }
       var candidateCommand: [String: Any] = ["action": "candidates", "source": source.id, "receiver": receiver]
       if let retryPath { candidateCommand["relative"] = retryPath }
       var entries = try JSONDecoder().decode([FolderEntry].self, from: await call(candidateCommand))
@@ -363,19 +395,19 @@ struct FolderSummary: Decodable {
         if source.enabled {
           candidateCommand.removeValue(forKey: "relative")
           entries = try JSONDecoder().decode([FolderEntry].self, from: await call(candidateCommand))
-        } else { phases[source.id] = "folder_settling"; return }
+        } else { setPhase(source.id, "folder_settling"); return }
       }
-      if entries.isEmpty, Date().timeIntervalSince(source.lastCheck ?? .distantPast) < 12 { phases[source.id] = "folder_settling"; return }
+      if entries.isEmpty, Date().timeIntervalSince(source.lastCheck ?? .distantPast) < 12 { setPhase(source.id, "folder_settling"); return }
       guard let entry = entries.first(where: { retries.contains($0.relative) || source.issues[$0.relative] != $0.revision }) else {
         let pendingData = try await call(["action": "pending", "source": source.id, "receiver": receiver])
         let pending = (try JSONSerialization.jsonObject(with: pendingData) as? [String: Int])?["count"] ?? 0
-        if pending > 0 { phases[source.id] = "folder_cache_wait"; return }
-        phases[source.id] = source.issues.isEmpty ? "folder_up_to_date" : "folder_attention"
+        if pending > 0 { setPhase(source.id, "folder_cache_wait"); return }
+        setPhase(source.id, source.issues.isEmpty ? "folder_up_to_date" : "folder_attention")
         if entries.isEmpty, !source.automatic, Date().timeIntervalSince(source.lastCheck ?? .distantPast) > 12, let i = sources.firstIndex(where: { $0.id == source.id }) { sources[i].enabled = false; save() }
         return
       }
       currentEntry = entry
-      phases[source.id] = "folder_preparing"
+      setPhase(source.id, "folder_preparing")
       let prepared = try await FolderMedia.prepare(root: root, entry: entry) { relative in
         guard let data = try? await self.call(["action": "eligible", "source": source.id, "relative": relative]) else { return false }
         return (try? JSONDecoder().decode(Bool.self, from: data)) ?? false
@@ -403,24 +435,31 @@ struct FolderSummary: Decodable {
       save()
       await backup.refresh(); await BackgroundTransfer.shared.kick()
     } catch FolderMediaError.changed {
+      guard (try? url(source)) != nil else { markOffline(source.id); return }
       dirty.insert(source.id); debounce[source.id] = Date().addingTimeInterval(12)
-      phases[source.id] = "folder_settling"
+      setPhase(source.id, "folder_settling")
     } catch let failure as Bridge.Failure {
+      guard failure.code != "source_unavailable", (try? url(source)) != nil else { markOffline(source.id); return }
       if failure.code == "capacity" {
         for entry in [currentEntry, companionEntry].compactMap({ $0 }) {
           _ = try? await call(["action": "defer", "source": source.id, "relative": entry.relative, "revision": entry.revision])
         }
       }
-      if failure.code == "conflict" { dirty.insert(source.id); debounce[source.id] = Date().addingTimeInterval(12) }
+      if failure.code == "conflict" {
+        dirty.insert(source.id); debounce[source.id] = Date().addingTimeInterval(12)
+        setPhase(source.id, "folder_settling"); return
+      }
       if failure.code == "unsupported" || failure.code == "invalid" { await ignore(source, entry: currentEntry, reason: "invalid_media", detail: failure.localizedDescription) }
-      phases[source.id] = failure.code == "capacity" ? "folder_cache_wait" : failure.code == "source_unavailable" ? "folder_offline" : "folder_attention"
+      setPhase(source.id, failure.code == "capacity" ? "folder_cache_wait" :
+        sources.first(where: { $0.id == source.id })?.issues.isEmpty == false ? "folder_attention" : "folder_action_failed")
     } catch {
-      phases[source.id] = "folder_attention"
+      guard (try? url(source)) != nil else { markOffline(source.id); return }
       let failure = error as NSError
       let permission = (failure.domain == NSCocoaErrorDomain && failure.code == NSFileReadNoPermissionError)
         || (failure.domain == NSPOSIXErrorDomain && failure.code == 13)
       await ignore(source, entry: currentEntry, reason: permission ? "permission" : "unreadable_media",
         detail: error is FolderMediaError ? nil : error.localizedDescription)
+      setPhase(source.id, sources.first(where: { $0.id == source.id })?.issues.isEmpty == false ? "folder_attention" : "folder_action_failed")
     }
   }
   private func ignore(_ source: FolderSource, entry: FolderEntry?, reason: String, detail: String?) async {

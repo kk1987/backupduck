@@ -1,7 +1,9 @@
-# Beta 18
+# Beta 19
 
-- Backup Rules explains allowlist and blocklist behavior beside each input, including empty lists and exclusion priority.
-- Plain-language headings and concrete, selectable examples make filtering easier to understand. Detailed wildcard/path instructions are available in expandable help, with scrolling to keep save actions reachable.
+- Folder sorting opens directly in a native macOS menu that stays open while backup status refreshes.
+- Flat and folder views show each file’s modification date and time beside its size.
+- Rescanning an unavailable folder reports the connection or permission problem immediately, clears stale waiting feedback, and preserves the file inventory. Folder paths remain visible when the drive is disconnected.
+- Source-level errors no longer claim that files failed to back up. File warnings appear only for recorded file issues.
 
 Mac requires Apple Silicon and macOS 14+. Android requires arm64 and Android 10+.
 iOS 17+ is available from source. Receiver delivery and cloud backup remain separate states.

@@ -435,10 +435,10 @@
 "folder_receiver_changed" = "接收设备已更换，请确认备份到当前设备";
 "folder_queue_wait" = "正在传输，稍后准备更多文件";
 "folder_up_to_date" = "已检查";
-"folder_attention" = "部分文件未备份";
+"folder_attention" = "有文件未备份";
 "folder_preparing" = "正在准备原件…";
 "folder_cache_wait" = "等待中转缓存空间";
-"folder_offline" = "等待硬盘连接或读取权限";
+"folder_offline" = "文件夹不可访问，请检查连接或权限";
 "folder_not_queued" = "尚未加入传输任务";
 "folder_load_more" = "加载更多";
 "folder_empty" = "尚未发现支持的照片或视频。";
@@ -574,3 +574,5 @@
 "folder_rules_pattern_help" = "规则怎么写？";
 
 "folder_rules_path_note" = "每行写一条，从当前文件夹开始写路径，不需要完整磁盘路径。例如“旅行/photo.jpg”指“旅行”子文件夹中的这张照片。字母区分大小写。";
+
+"folder_modified_time" = "修改时间";
