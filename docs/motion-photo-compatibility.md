@@ -5,6 +5,22 @@ auxiliary images. Appending a new Motion Photo XMP item and a second `cdsc`
 reference to the primary image is insufficient: Android's ItemTable reads the
 first primary XMP reference, which still points to the camera's metadata.
 
+## Why earlier validation passed
+
+The privately retained earlier successful HEIC sample had auxiliary XMP but no
+existing XMP describing the primary image. Adding a new primary XMP item worked
+for that input. The later failing samples already had primary XMP; the old
+packager appended another item instead of updating the authoritative one.
+Presence of a MotionPhoto string somewhere in the file therefore gave a false
+sense of correctness. The embedded original video was still present.
+
+This is a difference between input metadata layouts, not an explanation based
+on capture date. Successful earlier app validation must not be discarded merely
+because a later photo fails. These observations do not establish that changing
+the Google account, Pixel device, or sending platform caused the failure.
+
+## Packaging fix
+
 HEIC packaging now merges the Motion Photo description into the existing primary
 XMP packet, reuses that item's identity and references, and updates its extent.
 Other XMP items, original media payloads and auxiliary-image references remain
@@ -16,6 +32,8 @@ New delivery names end in `_MP` before the image extension, following the
 Previous names remain candidates when resuming interrupted publication.
 Confirmed copies retain their stored URI; this change does not rewrite existing
 gallery files or cloud items.
+
+## Regression and playback evidence
 
 Regression tests follow the primary item's metadata reference and extent,
 rather than searching the file for a MotionPhoto string. They cover existing
@@ -40,3 +58,21 @@ was not recognized as a Motion Photo by the tested cloud upload. Local playback
 and format conformance therefore do not establish cloud compatibility. This
 validation supports the HEIC metadata fix; it does not justify switching the
 receiver's default output to JPEG or transcoding every Live Photo.
+
+## Future investigation checklist
+
+1. Verify the original still and paired video against sender/receiver checksums.
+2. Inspect `pitm`, XMP MIME items, `cdsc` references and `iloc` extents. Read the
+   first primary-image XMP as an independent reader would; a whole-file text
+   search is insufficient. Cover inputs both with and without existing primary
+   XMP, and preserve auxiliary metadata.
+3. Confirm the formal Android path calls the tested packager. Check still-image
+   orientation, motion playback and original media payload integrity separately.
+4. Test device-folder playback and cloud playback independently. Treat a
+   preparing-animation message as pending until playback is observed; do not
+   infer success from an upload receipt or a download-video menu alone.
+5. Record the tested app version, input layout, packaging path and observed
+   results privately. Keep personal media, account IDs and device identifiers
+   out of public tests and documentation.
+6. Repair already received gallery/cloud copies explicitly. An application
+   update or transfer retry does not rewrite an existing confirmed delivery.
