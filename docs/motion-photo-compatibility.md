@@ -27,3 +27,16 @@ Byte integrity, readable Motion Photo metadata and Google Photos playback are
 separate checks. A receiver receipt alone does not prove playback or cloud
 backup. Existing gallery/cloud items need separate, explicit repair; retrying a
 received transfer does not replace a confirmed delivery copy.
+
+Cloud validation of a privately held real HEIC/MOV pair confirmed playback in
+Google Photos after this metadata fix. The tested output used the same Rust
+packager called by the Android receiver, retaining the original HEIC image
+payload and MOV bytes. Cloud video processing took several minutes; its animation
+entry was initially unavailable. The downloaded video retained the original MOV
+payload followed by the container's SEF footer.
+
+A JPEG containing the same untouched MOV played locally on the tested Pixel but
+was not recognized as a Motion Photo by the tested cloud upload. Local playback
+and format conformance therefore do not establish cloud compatibility. This
+validation supports the HEIC metadata fix; it does not justify switching the
+receiver's default output to JPEG or transcoding every Live Photo.
