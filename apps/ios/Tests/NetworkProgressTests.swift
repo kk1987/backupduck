@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import Network
 @testable import PhotoBridge
 
 @MainActor final class NetworkProgressTests: XCTestCase {
@@ -43,6 +44,40 @@ import SwiftUI
     XCTAssertFalse(value)
   }
 
+  func testMixedWifiAndCellularCanProbeButCellularAloneCannot() async {
+    var probes = 0
+    var reachable = true
+    let gate = ReceiverAvailability(monitorNetwork: false, probe: { _ in
+      probes += 1; return reachable
+    })
+    gate.networkChanged(satisfied: true, interfaces: [.wifi, .cellular])
+    let mixed = await gate.check(pairing)
+    XCTAssertTrue(mixed)
+    XCTAssertEqual(probes, 1)
+
+    gate.networkChanged(satisfied: true, interfaces: [.cellular])
+    let cellular = await gate.check(pairing)
+    XCTAssertFalse(cellular)
+    XCTAssertEqual(probes, 1)
+
+    gate.networkChanged(satisfied: false, interfaces: [.wifi, .cellular])
+    let unavailable = await gate.check(pairing)
+    XCTAssertFalse(unavailable)
+    XCTAssertEqual(probes, 1)
+
+    reachable = false
+    gate.networkChanged(satisfied: true, interfaces: [.wifi, .cellular])
+    let foreignNetwork = await gate.check(pairing)
+    XCTAssertFalse(foreignNetwork)
+    XCTAssertEqual(probes, 2)
+
+    reachable = true
+    gate.networkChanged(satisfied: true, interfaces: [.wiredEthernet, .cellular])
+    let ethernet = await gate.check(pairing)
+    XCTAssertTrue(ethernet)
+    XCTAssertEqual(probes, 3)
+  }
+
   func testConcurrentProgressDoesNotOverwriteAnotherJobOrResetOnPolling() {
     var tracker = TaskProgressTracker()
     let a = NativeAttempt(jobID: 1, generation: 1)
@@ -59,6 +94,29 @@ import SwiftUI
     XCTAssertEqual(tracker.jobs[1]?.waitingForNetwork, false)
     XCTAssertEqual(tracker.jobs[1]?.displayedBytes(confirmed: 0, total: 800), 400)
     XCTAssertEqual(tracker.jobs[1]?.displayedBytes(confirmed: 600, total: 800), 600)
+  }
+
+  func testProgressBarOnlyAppearsDuringMediaTransfer() {
+    var progress = TransferProgress(sent: 0, expected: 1000, baseline: 0, phase: "bundle")
+    XCTAssertNil(progress.activeFraction(confirmed: 0, total: 800))
+    progress.sent = 500
+    XCTAssertEqual(progress.activeFraction(confirmed: 0, total: 800), 0.5)
+    progress.sent = 1000
+    XCTAssertNil(progress.activeFraction(confirmed: 0, total: 800))
+    progress.phase = "commit"
+    progress.sent = 1
+    progress.expected = 2
+    XCTAssertNil(progress.activeFraction(confirmed: 800, total: 800))
+    progress.phase = "upload"
+    progress.sent = 100
+    progress.expected = 400
+    progress.baseline = 400
+    XCTAssertEqual(progress.activeFraction(confirmed: 400, total: 800), 0.625)
+    progress.waitingForNetwork = true
+    XCTAssertNil(progress.activeFraction(confirmed: 400, total: 800))
+    progress.waitingForNetwork = false
+    XCTAssertNil(progress.activeFraction(confirmed: 800, total: 800))
+    XCTAssertNil(progress.activeFraction(confirmed: 0, total: 0))
   }
 }
 

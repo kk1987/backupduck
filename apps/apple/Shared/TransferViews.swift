@@ -112,8 +112,9 @@ struct TransferRow: View {
         }
         HStack(spacing: 8) {
           Text(statusText).lineLimit(1).help(statusText)
-          if job.state == "running" || (job.state != "received" && displayedBytes > 0) {
-            ProgressView(value: Double(displayedBytes), total: Double(max(1, job.totalBytes)))
+          if job.state == "running", let fraction = progress?.activeFraction(
+            confirmed: job.confirmedBytes, total: job.totalBytes) {
+            ProgressView(value: fraction)
               .frame(width: 100, height: 8)
           }
           Spacer(minLength: 0)

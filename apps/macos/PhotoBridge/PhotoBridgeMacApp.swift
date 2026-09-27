@@ -245,8 +245,7 @@ struct MacBackupFooter: View {
   private var progress: Double? {
     if model.importing { return model.exportProgress }
     guard !model.paused, let job = activeJob, job.state == "running", job.totalBytes > 0 else { return nil }
-    let bytes = model.transferProgress[job.id]?.displayedBytes(confirmed: job.confirmedBytes, total: job.totalBytes) ?? job.confirmedBytes
-    return Double(bytes) / Double(job.totalBytes)
+    return model.transferProgress[job.id]?.activeFraction(confirmed: job.confirmedBytes, total: job.totalBytes)
   }
   private var summary: String {
     model.message ?? String(format: NSLocalizedString("transfer_summary", comment: ""),

@@ -8,6 +8,15 @@ struct TransferProgress: Equatable {
   var phase: String
   var waitingForNetwork: Bool = false
 
+  /// Only show a bar while media bytes are actively being sent.
+  func activeFraction(confirmed: UInt64, total: UInt64) -> Double? {
+    guard ["bundle", "upload"].contains(phase), !waitingForNetwork,
+      sent > 0, expected > 0, sent < expected, total > 0 else { return nil }
+    let bytes = displayedBytes(confirmed: confirmed, total: total)
+    guard bytes > 0, bytes < total else { return nil }
+    return Double(bytes) / Double(total)
+  }
+
   func displayedBytes(confirmed: UInt64, total: UInt64) -> UInt64 {
     let sent = UInt64(max(0, sent))
     let estimate: UInt64

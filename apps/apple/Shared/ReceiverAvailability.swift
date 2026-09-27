@@ -25,14 +25,22 @@ import Network
     self.changed = changed; self.probe = probe
     monitor = monitorNetwork ? NWPathMonitor() : nil
     monitor?.pathUpdateHandler = { [weak self] path in
-      let permitted = path.status == .satisfied
-        && !path.usesInterfaceType(.cellular)
-        && (path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
-      Task { @MainActor in self?.networkChanged(allowed: permitted) }
+      let interfaces: [NWInterface.InterfaceType] = [.wifi, .wiredEthernet, .cellular]
+        .filter { path.usesInterfaceType($0) }
+      Task { @MainActor in
+        self?.networkChanged(satisfied: path.status == .satisfied, interfaces: interfaces)
+      }
     }
     monitor?.start(queue: DispatchQueue(label: "app.photobridge.network"))
   }
   deinit { monitor?.cancel() }
+
+  func networkChanged(satisfied: Bool, interfaces: [NWInterface.InterfaceType]) {
+    // NWPath can report Wi-Fi and cellular together. A local interface permits
+    // the pinned receiver probe; the upload session still forbids cellular.
+    networkChanged(allowed: satisfied
+      && (interfaces.contains(.wifi) || interfaces.contains(.wiredEthernet)))
+  }
 
   func networkChanged(allowed: Bool) {
     self.allowed = allowed
