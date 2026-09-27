@@ -305,7 +305,7 @@ struct SourceBrowserItem: Decodable, Identifiable, Equatable {
   }
 }
 
-private struct SourceBrowserRow: View {
+struct SourceBrowserRow: View {
   let item: SourceBrowserItem
   let active: Bool
   let progress: Double?
@@ -325,13 +325,16 @@ private struct SourceBrowserRow: View {
         }.font(.caption).foregroundStyle(.secondary)
         Label(active ? "importing_originals" : LocalizedStringKey("state_" + state),
           systemImage: taskSymbol(state)).font(.caption).foregroundStyle(.secondary)
-        if active {
-          if let progress { ProgressView(value: progress) } else { ProgressView().controlSize(.small) }
-        } else if let retry = item.retry_at, retry > Int64(Date().timeIntervalSince1970) {
-          Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
-            Date(timeIntervalSince1970: Double(retry)).formatted(date: .omitted, time: .standard)))
-            .font(.caption).foregroundStyle(.secondary)
-        }
+        ZStack(alignment: .leading) {
+          ProgressView(value: progress ?? 0).frame(height: 8)
+            .opacity(active && progress != nil ? 1 : 0).accessibilityHidden(!active || progress == nil)
+          if active && progress == nil { ProgressView().controlSize(.small) }
+          else if !active, let retry = item.retry_at, retry > Int64(Date().timeIntervalSince1970) {
+            Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
+              Date(timeIntervalSince1970: Double(retry)).formatted(date: .omitted, time: .standard)))
+              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+        }.frame(height: 18)
       }
       Spacer(minLength: 0)
     }.padding(.vertical, 10)

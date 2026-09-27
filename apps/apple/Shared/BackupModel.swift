@@ -713,6 +713,15 @@ enum Bridge {
     if summary.running == 0 && summary.queued == 0 { return summary.waiting_reason }
     return nil
   }
+  /// The compact footer describes the whole backup. Preparation can wait for
+  /// cache space while transfers continue; full details retain that reason.
+  var compactWaitingReason: String? {
+    if paused { return nil }
+    if receiverUnavailable { return "receiver_unavailable" }
+    if waitingForNetwork { return "network" }
+    if importing || summary.running > 0 { return nil }
+    return waitingReason
+  }
   private func export(_ resource: PHAssetResource, to url: URL) async throws {
     await refreshStorage()
     guard let snapshot = storage else { throw Bridge.Failure(code: "storage") }

@@ -576,3 +576,4 @@
 "folder_rules_path_note" = "每行写一条，从当前文件夹开始写路径，不需要完整磁盘路径。例如“旅行/photo.jpg”指“旅行”子文件夹中的这张照片。字母区分大小写。";
 
 "folder_modified_time" = "修改时间";
+"backup_waiting" = "备份等待中";

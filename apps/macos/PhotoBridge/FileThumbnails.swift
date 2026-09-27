@@ -100,6 +100,7 @@ struct MacFileThumbnail: View {
 
 struct MacTransferThumbnail: View {
   let job: BackupJob
+  var size: CGFloat = 56
   @ObservedObject private var folders = FolderSources.shared
   @AppStorage("macListThumbnails") private var enabled = true
   @State private var entry: FolderEntry?
@@ -107,10 +108,10 @@ struct MacTransferThumbnail: View {
     Group {
       if let entry, let source = folders.sources.first(where: { $0.id == job.asset.metadata?["source_ref"] }) {
         MacFileThumbnail(source: source, relative: entry.relative, revision: entry.revision,
-          video: job.asset.kind == "video")
+          video: job.asset.kind == "video", size: size)
       } else {
         Image(systemName: job.asset.kind == "video" ? "video" : "photo")
-          .foregroundStyle(.secondary).frame(width: 56, height: 56)
+          .foregroundStyle(.secondary).frame(width: size, height: size)
           .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
       }
     }.task(id: "\(enabled)|\(job.id)|\(folders.indexRevision)|\(folders.sources.map { $0.id }.joined(separator: "|"))") {

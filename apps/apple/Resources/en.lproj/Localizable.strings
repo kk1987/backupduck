@@ -576,3 +576,4 @@
 "folder_rules_path_note" = "Write one rule per line, starting from the selected folder, without the full disk path. For example, Trips/photo.jpg refers to that file inside Trips. Matching is case-sensitive.";
 
 "folder_modified_time" = "Modified time";
+"backup_waiting" = "Backup waiting";

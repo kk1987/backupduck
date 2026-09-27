@@ -85,6 +85,55 @@ import SwiftUI
           peers: [DeviceSnapshot.Peer(key: paired.receiverID,
             profile: DeviceProfile(id: String(repeating: "a", count: 64), name: "Amber Otter"),
             last_seen: Int64(Date().timeIntervalSince1970))])
+        if CommandLine.arguments.contains("--transfer-layout-only") {
+          model.pairing = paired; model.paused = false
+          let asset = BackupJob.Asset(metadata: ["source_type": "folder", "source_name": "SD Card", "created_at_ms": "1727400000000"],
+            kind: "photo", source_id: "layout-transfer", revision: "1", resources: [.init(filename: "photo.jpg", size: 1000000)])
+          var rowHeights: [CGFloat] = []
+          for state in ["queued", "running", "waiting", "failed", "received"] {
+            let job = BackupJob(id: 1, asset: asset, state: state, confirmedBytes: state == "received" ? 1000000 : 500000,
+              errorCode: ["waiting", "failed"].contains(state) ? "network" : nil,
+              nextAttemptAt: state == "waiting" ? Int64(Date().addingTimeInterval(30).timeIntervalSince1970) : nil)
+            let row = AnyView(TransferRow(job: job, progress: state == "running" ? TransferProgress(sent: 250000, expected: 500000, baseline: 500000, phase: "upload") : nil, retry: {}))
+            rowHeights.append(await naturalHeight(row, width: 680))
+            try await capture("transfer-row-" + state, view: row, output: output, size: NSSize(width: 700, height: 180))
+          }
+          precondition(rowHeights.max()! - rowHeights.min()! < 1,
+            "Transfer row height must remain stable across progress, retry and receipt transitions: \(rowHeights)")
+          var preparationHeights: [CGFloat] = []
+          for (active, progress, retry) in [(false, nil as Double?, nil as Int64?), (true, nil, nil),
+            (true, 0.45, nil), (false, nil, Int64(Date().addingTimeInterval(30).timeIntervalSince1970))] {
+            let item = SourceBrowserItem(cursor: 1, source: "layout-missing-source", revision: "1", retry_at: retry, state: "preparing")
+            let row = AnyView(SourceBrowserRow(item: item, active: active, progress: progress))
+            preparationHeights.append(await naturalHeight(row, width: 680))
+          }
+          precondition(preparationHeights.max()! - preparationHeights.min()! < 1,
+            "Preparation row height must remain stable with progress, spinner and retry time: \(preparationHeights)")
+          let footer = { AnyView(MacBackupFooter(model: model, activeJob: nil, pair: {}, showTransfers: {})) }
+          var footerHeights: [CGFloat] = []
+          model.summary.total = 10; model.summary.running = 1
+          model.preparationReason = "local_cache_budget"
+          precondition(model.waitingReason == "local_cache_budget" && model.compactWaitingReason == nil,
+            "Preparation waits must remain in details without warning while transfers are active")
+          for state in ["running", "preparing", "blocked", "network", "received"] {
+            model.importing = state == "preparing"; model.exportProgress = state == "preparing" ? 0.45 : nil
+            model.summary.running = ["running", "preparing"].contains(state) ? 1 : 0
+            model.summary.received = state == "received" ? 10 : 5
+            model.waitingForNetwork = state == "network"
+            model.preparationReason = ["running", "blocked"].contains(state) ? "local_cache_budget" : nil
+            if state == "blocked" { precondition(model.compactWaitingReason == "local_cache_budget") }
+            if state == "network" { precondition(model.compactWaitingReason == "network") }
+            footerHeights.append(await naturalHeight(footer(), width: 680))
+            try await capture("backup-footer-" + state, view: footer(), output: output, size: NSSize(width: 700, height: 90))
+          }
+          model.importing = true; model.receiverUnavailable = true
+          precondition(model.compactWaitingReason == "receiver_unavailable", "Connection warnings must remain visible during preparation")
+          precondition(footerHeights.max()! - footerHeights.min()! < 1,
+            "Backup footer height must remain stable across progress and warnings: \(footerHeights)")
+          print("Transfer and preparation rows and backup footer retain height across state transitions; active preparation waits stay in details and blocked/connection warnings remain visible.")
+          app.terminate(nil)
+          return
+        }
         if CommandLine.arguments.contains("--folder-only") {
           model.pairing = paired
           let folder = store.appendingPathComponent("Documents")
@@ -364,6 +413,17 @@ import SwiftUI
       }
     }
     app.run()
+  }
+
+  @MainActor static func naturalHeight(_ view: AnyView, width: CGFloat) async -> CGFloat {
+    let host = NSHostingView(rootView: AnyView(view.frame(width: width).fixedSize(horizontal: false, vertical: true)))
+    let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: width, height: 240),
+      styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = host; window.orderBack(nil)
+    defer { window.orderOut(nil); window.contentView = nil }
+    try? await Task.sleep(nanoseconds: 100_000_000)
+    host.layoutSubtreeIfNeeded()
+    return host.fittingSize.height
   }
 
   @MainActor static func capture(_ name: String, view: AnyView, output: URL,

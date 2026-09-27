@@ -232,41 +232,55 @@ struct MacWorkspace: View {
     }
   }
   private var footer: some View {
+    MacBackupFooter(model: model, activeJob: activeTransfers.jobs.first,
+      pair: { pairSheet = true }, showTransfers: { showTransfers("all") })
+  }
+}
+
+struct MacBackupFooter: View {
+  @ObservedObject var model: BackupModel
+  var activeJob: BackupJob?
+  var pair: () -> Void
+  var showTransfers: () -> Void
+  private var progress: Double? {
+    if model.importing { return model.exportProgress }
+    guard !model.paused, let job = activeJob, job.state == "running", job.totalBytes > 0 else { return nil }
+    let bytes = model.transferProgress[job.id]?.displayedBytes(confirmed: job.confirmedBytes, total: job.totalBytes) ?? job.confirmedBytes
+    return Double(bytes) / Double(job.totalBytes)
+  }
+  private var summary: String {
+    model.message ?? String(format: NSLocalizedString("transfer_summary", comment: ""),
+      model.summary.received, model.summary.total)
+  }
+  var body: some View {
     HStack(spacing: 14) {
-      if let source = model.importingSourceID
-        ?? (model.summary.running > 0 && model.pairing != nil
-          ? activeTransfers.jobs.first?.asset.source_id : nil)
-      {
+      if let source = model.importingSourceID {
         AssetThumbnail(sourceID: source, size: 44)
+      } else if model.summary.running > 0, let job = activeJob {
+        if job.asset.metadata?["source_type"] == "folder" { MacTransferThumbnail(job: job, size: 44) }
+        else { AssetThumbnail(sourceID: job.asset.source_id, size: 44) }
       } else {
-        Image(systemName: "checkmark.shield").font(.title2).foregroundStyle(.blue).frame(width: 44)
+        Image(systemName: "checkmark.shield").font(.title2).foregroundStyle(.blue).frame(width: 44, height: 44)
       }
       VStack(alignment: .leading, spacing: 5) {
-        if model.importing {
-          Text("importing_originals")
-          if let progress = model.exportProgress { ProgressView(value: progress).frame(width: 200) }
-        } else {
-          Text(
-            model.pairing == nil
-              ? "receiver_unpaired"
-              : model.paused
-                ? "backup_paused" : model.waitingForNetwork ? "waiting_for_wifi" : "backup_enabled")
-        }
-        WaitingStatus(model: model)
-        Text(
-          model.message
-            ?? String(
-              format: NSLocalizedString("transfer_summary", comment: ""), model.summary.received,
-              model.summary.total)
-        ).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(model.message ?? "")
-      }
-      Spacer()
-      if model.pairing == nil {
-        Button("pair_receiver_desktop") { pairSheet = true }
-      } else {
-        Button("nav_transfers") { showTransfers("all") }.buttonStyle(.link)
-      }
-    }
+        Text(model.importing ? "importing_originals" : model.pairing == nil ? "receiver_unpaired"
+          : model.paused ? "backup_paused" : model.waitingForNetwork ? "waiting_for_wifi"
+          : model.compactWaitingReason != nil ? "backup_waiting" : "backup_enabled")
+          .lineLimit(1).frame(height: 20, alignment: .leading)
+        ProgressView(value: progress ?? 0).frame(height: 8)
+          .opacity(progress == nil ? 0 : 1).accessibilityHidden(progress == nil)
+        Group {
+          if let reason = model.compactWaitingReason {
+            Label(LocalizedStringKey("error_" + reason), systemImage: "clock")
+              .foregroundStyle(.orange).help(NSLocalizedString("error_" + reason, comment: ""))
+          } else {
+            Text(summary).foregroundStyle(.secondary).help(summary)
+          }
+        }.font(.caption).lineLimit(1).frame(height: 18, alignment: .leading)
+      }.frame(maxWidth: .infinity, alignment: .leading)
+      if model.pairing == nil { Button("pair_receiver_desktop", action: pair) }
+      else { Button("nav_transfers", action: showTransfers).buttonStyle(.link) }
+    }.frame(height: 56).accessibilityIdentifier("backup.footer")
   }
 }
 

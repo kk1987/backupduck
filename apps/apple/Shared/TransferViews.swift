@@ -101,9 +101,10 @@ struct TransferRow: View {
           } ?? NSLocalizedString("task_order_unknown", comment: "")))
             .font(.caption).foregroundStyle(.secondary)
         }
-        if job.state != "received" {
-          ProgressView(value: Double(displayedBytes), total: Double(max(1, job.totalBytes)))
-        }
+        // Retain the progress slot when the receipt arrives so later rows do not jump.
+        ProgressView(value: Double(displayedBytes), total: Double(max(1, job.totalBytes)))
+          .frame(height: 8).opacity(job.state == "received" ? 0 : 1)
+          .accessibilityHidden(job.state == "received")
         HStack {
           Text(
             LocalizedStringKey(statusKey))
@@ -114,18 +115,20 @@ struct TransferRow: View {
               + ByteCountFormatter.string(fromByteCount: Int64(job.totalBytes), countStyle: .file)
           ).monospacedDigit()
         }.font(.caption).foregroundStyle(.secondary)
-        if job.state == "waiting", let next = job.nextAttemptAt, next > 0 {
-          Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
-            Date(timeIntervalSince1970: Double(next)).formatted(date: .omitted, time: .standard)))
-            .font(.caption).foregroundStyle(.secondary)
-        }
-        if let error = job.errorCode {
-          HStack {
-            Text(LocalizedStringKey("error_" + error)).font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            Button("retry_task", action: retry).font(.caption)
+        HStack(spacing: 8) {
+          if let error = job.errorCode {
+            Text(LocalizedStringKey("error_" + error)).lineLimit(1)
+              .help(NSLocalizedString("error_" + error, comment: ""))
           }
-        }
+          if job.state == "waiting", let next = job.nextAttemptAt, next > 0 {
+            Text(String(format: NSLocalizedString("task_retry_time", comment: ""),
+              Date(timeIntervalSince1970: Double(next)).formatted(date: .omitted, time: .standard)))
+              .lineLimit(1)
+          }
+          Spacer(minLength: 0)
+          if job.errorCode != nil { Button("retry_task", action: retry) }
+        }.font(.caption).foregroundStyle(.secondary).frame(height: 18)
+
       }
     }.padding(.vertical, 10)
   }
