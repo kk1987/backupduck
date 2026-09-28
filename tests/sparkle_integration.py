@@ -1,5 +1,5 @@
 """Actual Sparkle installation against disposable apps; never opens a photo library."""
-import functools, http.server, os, pathlib, plistlib, shutil, subprocess, tempfile, threading, uuid
+import functools, http.server, os, pathlib, plistlib, shutil, subprocess, tempfile, threading, time, uuid
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 SPARKLE=ROOT/'build/dependencies/sparkle'
 def run(*args, **kwargs):
@@ -34,8 +34,18 @@ with tempfile.TemporaryDirectory(prefix='photobridge-update-test-') as temp:
         run(contents/'MacOS/Driver',apps[0],'--expect-rejection')
         feed.write_bytes(original)
         run(contents/'MacOS/Driver',apps[0])
-        installed=plistlib.loads((apps[0]/'Contents/Info.plist').read_bytes())
-        assert installed['CFBundleVersion']=='2'
+        # Sparkle can finish replacing the app after the test driver exits.
+        # Wait for the actual installed bundle, not the driver's process result.
+        deadline=time.monotonic()+30
+        while True:
+            try:
+                installed=plistlib.loads((apps[0]/'Contents/Info.plist').read_bytes())
+                if installed['CFBundleVersion']=='2': break
+            except (FileNotFoundError, ValueError):
+                pass
+            if time.monotonic() >= deadline:
+                raise AssertionError('Sparkle did not replace the temporary app within 30 seconds')
+            time.sleep(0.2)
         run('codesign','--verify','--deep','--strict',apps[0])
         print('PASS: corrupted feed rejected; version 1 replaced with signed version 2 in temporary directory')
     finally: server.shutdown();server.server_close()
