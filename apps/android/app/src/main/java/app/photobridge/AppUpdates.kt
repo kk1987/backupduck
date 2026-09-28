@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.materialswitch.MaterialSwitch
 import kotlinx.coroutines.*
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.net.URL
 import java.security.MessageDigest
@@ -19,8 +20,10 @@ import java.security.MessageDigest
 internal data class AppRelease(val version: String, val build: Long, val url: String, val sha256: String, val size: Long)
 internal object AppUpdates {
     private const val API = "https://api.github.com/repos/qhhonx/photobridge/releases?per_page=30"
+    private const val SITE_API = "https://photobridge-app.vercel.app/api/releases"
     private const val PREFIX = "https://github.com/qhhonx/photobridge/releases/download/"
     private const val MAX_APK = 250L * 1024 * 1024
+    private val TAG = Regex("v[0-9]+\\.[0-9]+\\.[0-9]+(?:-beta\\.[0-9]+)?")
     fun preferences(context: Context) = context.getSharedPreferences("app_updates", Context.MODE_PRIVATE)
     private fun connection(url: String) = (URL(url).openConnection() as javax.net.ssl.HttpsURLConnection).apply {
         connectTimeout = 15_000; readTimeout = 30_000
@@ -41,29 +44,50 @@ internal object AppUpdates {
             }
         } finally { c.disconnect() }
     }
-    fun latest(context: Context): AppRelease? {
-        val installed = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+    private fun release(tag: String, installed: Long): AppRelease? {
+        check(TAG.matches(tag))
+        val data = JSONObject(read("$PREFIX$tag/android-update.json", 16_384))
+        val next = AppRelease(data.getString("version"), data.getLong("build"), data.getString("url"), data.getString("sha256"), data.getLong("size"))
+        check(next.version == tag.removePrefix("v"))
+        check(next.url == "$PREFIX$tag/PhotoBridge-${next.version}-arm64.apk")
+        check(Regex("[a-f0-9]{64}").matches(next.sha256) && next.size in 1..MAX_APK)
+        return next.takeIf { it.build > installed }
+    }
+    private fun fromWebsite(installed: Long): AppRelease? {
+        val site = JSONObject(read(SITE_API, 16_384))
+        val version = site.getString("version")
+        val tag = "v$version"
+        check(TAG.matches(tag))
+        check(site.getString("android") == "$PREFIX$tag/PhotoBridge-$version-arm64.apk")
+        return release(tag, installed)
+    }
+    private fun fromGithub(installed: Long): AppRelease? {
         val list = JSONArray(read(API, 1024 * 1024))
         var latest: AppRelease? = null
         for (i in 0 until list.length()) {
             val release = list.getJSONObject(i)
             if (release.optBoolean("draft") || release.isNull("published_at")) continue
             val tag = release.optString("tag_name")
-            if (!Regex("v[0-9]+\\.[0-9]+\\.[0-9]+(?:-beta\\.[0-9]+)?").matches(tag)) continue
+            if (!TAG.matches(tag)) continue
             val assets = release.getJSONArray("assets")
             val metadata = (0 until assets.length()).map { assets.getJSONObject(it) }
                 .firstOrNull { it.optString("name") == "android-update.json" } ?: continue
             val url = metadata.getString("browser_download_url")
             check(url == "$PREFIX$tag/android-update.json")
-            val data = org.json.JSONObject(read(url, 16_384))
-            val next = AppRelease(data.getString("version"), data.getLong("build"), data.getString("url"), data.getString("sha256"), data.getLong("size"))
-            check(next.version == tag.removePrefix("v"))
-            check(next.url == "$PREFIX$tag/PhotoBridge-${next.version}-arm64.apk")
-            check(Regex("[a-f0-9]{64}").matches(next.sha256) && next.size in 1..MAX_APK)
-            if (next.build > installed && (latest == null || next.build > latest.build)) latest = next
+            val next = release(tag, installed)
+            if (next != null && (latest == null || next.build > latest.build)) latest = next
         }
         return latest
     }
+    internal fun latest(installed: Long): AppRelease? {
+        val website = runCatching { fromWebsite(installed) }
+        website.getOrNull()?.let { return it }
+        val github = runCatching { fromGithub(installed) }
+        if (github.isSuccess) return github.getOrNull()
+        return website.getOrThrow()
+    }
+    fun latest(context: Context): AppRelease? =
+        latest(context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode)
     fun verify(context: Context, file: File, release: AppRelease) {
         check(file.length() == release.size)
         val digest = MessageDigest.getInstance("SHA-256")

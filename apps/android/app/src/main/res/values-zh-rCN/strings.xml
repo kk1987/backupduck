@@ -226,7 +226,7 @@
     <string name="help_report_title">导出诊断报告</string>
     <string name="help_report_body">打开“设置 → 诊断 → 导出日志”。反馈时附上问题发生时间，以及当时发送端和接收端是否在前台。报告包含阶段、任务标识和字节数等有限事件记录，不包含照片内容或配对凭据；分享前可先查看。实验页面检查另有“导出检查结果”入口。</string>
     <string name="help_update_title">保留数据地更新</string>
-    <string name="help_update_body">使用相同可信来源的新安装包覆盖更新。Android 提示签名不兼容时，请先获取匹配的安装包，不要直接卸载或清除存储。如果准备删除应用，请先导出重要原件；卸载可能清除应用私有数据。当前版本仍为开发预览版，尚未提供 Android 自动更新渠道。</string>
+    <string name="help_update_body">在设置中打开“应用更新”，可检查并安装新的正式签名版本。若 Android 提示签名不兼容，说明当前安装包来自不同来源；不要直接卸载或清除存储，以免丢失应用内原件。</string>
     <string name="recovery_wifi">请连接带有本地 IPv4 地址的 Wi-Fi，接收端会自动重试。</string>
     <string name="recovery_network_action">打开 Wi-Fi 设置</string>
     <string name="recovery_address">接收端网络地址已变化，正在当前网络重新连接；已有数据仍保留。</string>

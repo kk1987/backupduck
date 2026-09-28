@@ -226,7 +226,7 @@
     <string name="help_report_title">Export a useful diagnostic report</string>
     <string name="help_report_body">Open Settings → Diagnostics → Export logs. Include the time of the issue and whether the sender or receiver was in the foreground. Reports contain bounded event records such as stages, task identifiers and byte counts; they do not include photo content or pairing credentials. Review a report before sharing it. The experimental screen check has its own Export check result action.</string>
     <string name="help_update_title">Update without losing data</string>
-    <string name="help_update_body">Install a newer package from the same trusted source over the existing app. If Android reports an incompatible signature, stop and obtain the matching package instead of uninstalling or clearing storage. Export important originals first if you plan to remove the app; uninstalling can remove its private data. Current builds are development previews, and there is no automatic Android update channel yet.</string>
+    <string name="help_update_body">Use App updates in Settings to check for and install a new officially signed version. If Android reports an incompatible signature, this installation came from a different source. Do not uninstall or clear storage; that can remove private originals.</string>
     <string name="recovery_wifi">Connect to Wi-Fi with a local IPv4 address. Receiving will retry automatically.</string>
     <string name="recovery_network_action">Open Wi-Fi settings</string>
     <string name="recovery_address">The receiver network address changed. Reconnecting on the current network; existing data is retained.</string>

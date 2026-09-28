@@ -17,6 +17,18 @@ class ReceiverInstrumentation : Instrumentation() {
     private var arguments = Bundle()
     override fun onCreate(arguments: Bundle?) { this.arguments = arguments ?: Bundle(); super.onCreate(arguments); start() }
     override fun onStart() {
+        if (arguments.getString("mode") == "app_updates_live") {
+            val result = runCatching {
+                val installed = arguments.getLong("installed", 25)
+                val release = checkNotNull(AppUpdates.latest(installed))
+                check(release.build > installed && release.url.endsWith("/PhotoBridge-${release.version}-arm64.apk"))
+                "PASS: ${release.version} build ${release.build} is discoverable"
+            }
+            finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
+                putString("result", result.getOrElse { "FAIL: ${it.stackTraceToString()}" })
+            })
+            return
+        }
         if (arguments.getString("mode") == "gallery_naming") {
             val result = runCatching { checkGalleryNaming() }
             finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
