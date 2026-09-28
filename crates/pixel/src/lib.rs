@@ -3,6 +3,7 @@
 mod burst;
 mod gain_map;
 mod heic_motion;
+mod motion_xmp;
 mod photo_date;
 pub use photo_date::write_photo_date;
 pub mod photos_cleanup;
@@ -128,6 +129,9 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
             }
             old = Some(at..payload.end);
         }
+        if marker == 0xe1 && segment.starts_with(b"http://ns.adobe.com/xmp/extension/\0") {
+            return Err(Error::Unsupported("extended XMP packet".into()));
+        }
         if marker == 0xe2 && segment.starts_with(b"MPF\0") {
             if mpf.is_some() {
                 return Err(Error::Unsupported("multi-picture JPEG".into()));
@@ -136,13 +140,14 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
         }
         at = payload.end;
     }
-    let gain = match &old {
-        None => None,
-        Some(range) => {
-            let gain = gain_map::directory(&still[range.start + 4 + XMP.len()..range.end])
-                .map_err(|_| Error::Unsupported("preexisting XMP packet".into()))?;
+    let mut auxiliary_start = None;
+    let gain = match (&old, &mpf) {
+        (Some(range), Some(mpf)) => {
+            let parsed_gain = gain_map::directory(&still[range.start + 4 + XMP.len()..range.end]);
             let layout = || Error::Unsupported("Ultra HDR JPEG layout".into());
-            let mpf = mpf.as_ref().filter(|m| m.count == 2).ok_or_else(layout)?;
+            if mpf.count != 2 {
+                return Err(layout());
+            }
             let map = mpf.entry(&still, 1);
             // Locate the primary image by the gain map offset, not the primary size
             // entry: androidx ExifInterface inserts EXIF after Bitmap.compress without
@@ -150,15 +155,20 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
             // the MP header, which moved too) stays exact. Container items are laid
             // out in order: the gain map must follow the primary and end the file.
             let primary = mpf.header + map.offset as usize;
-            if u64::from(map.size) != gain.length
-                || primary + map.size as usize != still.len()
+            if primary + map.size as usize != still.len()
                 || !still[primary..].starts_with(&[0xff, 0xd8])
                 || !still[..primary].ends_with(&[0xff, 0xd9])
             {
                 return Err(layout());
             }
-            Some((gain, primary))
+            auxiliary_start = Some(primary);
+            match parsed_gain {
+                Ok(gain) if u64::from(map.size) == gain.length => Some((gain, primary)),
+                Ok(_) => return Err(layout()),
+                Err(_) => None,
+            }
         }
+        _ => None,
     };
     let mut video = File::open(mp4)?;
     let video_len = video.metadata()?.len();
@@ -179,8 +189,9 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
     let time = timestamp_us
         .map(|v| format!(" GCamera:MotionPhotoPresentationTimestampUs=\"{v}\""))
         .unwrap_or_default();
-    let primary_end = gain.as_ref().map(|(_, end)| *end);
+    let primary_end = auxiliary_start;
     let (hdr_ns, hdr_version, gain_item) = gain
+        .as_ref()
         .map(|(g, _)| {
             (
                 r#" xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/""#,
@@ -193,11 +204,18 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
         })
         .unwrap_or_default();
     let xmp = format!(
-        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" xmlns:Container="http://ns.google.com/photos/1.0/container/" xmlns:Item="http://ns.google.com/photos/1.0/container/item/"{hdr_ns} GCamera:MotionPhoto="1" GCamera:MotionPhotoVersion="1"{time}{burst_fields}{hdr_version}><Container:Directory><rdf:Seq><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="{image_padding}"/></rdf:li>{gain_item}<rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="{video_mime}" Item:Semantic="MotionPhoto" Item:Length="{}" Item:Padding="0"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description></rdf:RDF></x:xmpmeta>"#,
+        r#"<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" xmlns:Container="http://ns.google.com/photos/1.0/container/" xmlns:Item="http://ns.google.com/photos/1.0/container/item/"{hdr_ns} GCamera:MotionPhoto="1" GCamera:MotionPhotoVersion="1"{time}{burst_fields}{hdr_version}><Container:Directory><rdf:Seq><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="{image_padding}"/></rdf:li>{gain_item}<rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="{video_mime}" Item:Semantic="MotionPhoto" Item:Length="{}" Item:Padding="0"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description>"#,
         video_len + video_tail_len
     );
+    let xmp = match (&old, &gain) {
+        (Some(range), None) => motion_xmp::merge(
+            &still[range.start + 4 + XMP.len()..range.end],
+            xmp.as_bytes(),
+        )?,
+        _ => format!(r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">{xmp}</rdf:RDF></x:xmpmeta>"#).into_bytes(),
+    };
     let mut packet = XMP.to_vec();
-    packet.extend(xmp.as_bytes());
+    packet.extend(xmp);
     let size: u16 = (packet.len() + 2).try_into().map_err(|_| Error::Capacity)?;
     // Secondary MPF images are addressed relative to the MP header. The new
     // packet precedes it; a removed packet only moves offsets if it followed it.

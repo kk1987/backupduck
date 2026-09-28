@@ -64,22 +64,43 @@ receiver's default output to JPEG or transcoding every Live Photo.
 Another failure occurs before gallery publication. Two real shared JPG/MOV
 Live Photos were received byte-for-byte, but the Pixel reported
 `receipt=received, processing=failed`; neither appeared in Android MediaStore.
-The original JPGs each contain an Adobe XMP APP1 packet. Passing those exact
-files to the JPEG Motion Photo packager returns
-`Unsupported("preexisting XMP packet")`: the direct path accepts only a clean
-JPEG or its supported Ultra HDR layout. The native JSON bridge deliberately
-reduces this to the stable code `unsupported`, while the Android fallback used
-to recognize only the Rust display prefix `unsupported capability:`. It
-therefore skipped the image-decoding fallback and marked publication failed.
+Both original JPGs have one ordinary Adobe XMP APP1 packet and an MPF APP2
+directory pointing to a second JPEG image. They do not have the Ultra HDR
+GContainer directory expected by the old direct packager. On the exact received
+files that packager returned `Unsupported("preexisting XMP packet")`. The native
+JSON bridge deliberately reduces this to the stable code `unsupported`, while
+the Android fallback recognized only the Rust display prefix `unsupported
+capability:`. It therefore skipped fallback and marked publication failed.
 
-The Android caller now recognizes the bridge's stable code and decodes these
-JPGs to a clean still before packaging with the original paired video. This
-fix applies to the input layout, not to a specific iPhone model. The observed
-successful HEIC Live Photos use a different packaging path. Receiver history
-records a bounded processing error code on new failures, and failed originals
-remain available for an explicit processing retry. The Mac transfer receipt
-means the phone has the files; it does not mean Android gallery publication or
-Google Photos cloud backup has finished.
+The earlier no-transcode work (`899b357`, `22ca971`, `800a9ce`) is real: the
+Android app tries the Rust direct packaging path before any codec conversion,
+and keeps a compatible MOV byte-for-byte. The previous successful tests covered
+different JPEG or HEIC layouts. They did not demonstrate that an ordinary XMP
+packet plus an MPF auxiliary image was supported. This failure depends on the
+input layout, not on the iPhone model or Google account.
+
+The direct JPEG packager now inserts Motion Photo metadata into the one existing
+XMP packet, leaving unrelated metadata, JPEG scan data, the MPF auxiliary JPEG,
+and MOV bytes unchanged. It validates the two-image MPF geometry and adjusts
+its primary size and offsets after replacing the XMP packet. Tests cover an
+ordinary XMP packet with and without MPF, as well as the earlier Ultra HDR path.
+The two privately retained original JPG/MOV pairs were packaged by this exact
+Rust path without decoding or re-encoding. Ambiguous or conflicting XMP still
+returns `unsupported`; the Android caller now recognizes that stable code and
+can use its codec fallback only for those remaining cases.
+
+The two repaired files were temporarily indexed on the test Pixel. Google
+Photos displayed the Motion Photo control for one sample, and successive frames
+of the other visibly changed during local playback. Those diagnostic copies
+were removed after testing. This verifies local recognition, not the app's
+retry flow or Google Photos cloud processing.
+
+Receiver history records a bounded processing error code on new failures, and
+failed originals remain available for an explicit processing retry. The Mac
+transfer receipt means the phone has the files; it does not mean Android
+gallery publication or Google Photos cloud backup has finished. On-device
+receiver retry and cloud recognition of these repaired copies still require
+separate validation after installing the updated receiver.
 
 ## Future investigation checklist
 

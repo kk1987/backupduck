@@ -84,7 +84,24 @@ fn real_jpeg_live_photo_when_available() {
     )
     .unwrap();
     let result = std::fs::read(&output).unwrap();
+    let original_still = std::fs::read(&still).unwrap();
     let original_video = std::fs::read(&video).unwrap();
+    let (old_header, old_entries) = read_mpf(&original_still);
+    let (new_header, new_entries) = read_mpf(&result);
+    let old_auxiliary = old_header + old_entries[1].1 as usize;
+    let new_auxiliary = new_header + new_entries[1].1 as usize;
+    assert_eq!(old_entries[1].0, new_entries[1].0);
+    assert_eq!(new_entries[0].0 as usize, new_auxiliary);
+    assert_eq!(
+        &result[new_auxiliary..new_auxiliary + old_entries[1].0 as usize],
+        &original_still[old_auxiliary..old_auxiliary + old_entries[1].0 as usize]
+    );
+    let old_scan = scan_offset(&original_still);
+    let new_scan = scan_offset(&result);
+    assert_eq!(
+        &result[new_scan..new_scan + original_still.len() - old_scan],
+        &original_still[old_scan..]
+    );
     assert!(result
         .windows(original_video.len())
         .any(|window| window == original_video));
@@ -201,6 +218,27 @@ fn ultra_hdr(xmp_after_mpf: bool, declared_gain: usize, exif: bool) -> Vec<u8> {
     out
 }
 
+fn ordinary_mpf_jpeg() -> Vec<u8> {
+    let mut packet = XMP.to_vec();
+    packet.extend(br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:test="urn:test" test:value="kept"/></rdf:RDF></x:xmpmeta>"#);
+    packet.push(0);
+    let xmp = segment(0xe1, &packet);
+    let placeholder = mpf(0, 0, 0);
+    let scan = [0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9];
+    let primary_len = 2 + xmp.len() + placeholder.len() + scan.len();
+    let header = 2 + xmp.len() + 8;
+    let mut source = vec![0xff, 0xd8];
+    source.extend(xmp);
+    source.extend(mpf(
+        primary_len as u32,
+        (primary_len - header) as u32,
+        GAIN_MAP.len() as u32,
+    ));
+    source.extend(scan);
+    source.extend(GAIN_MAP);
+    source
+}
+
 /// Returns (MP header position, [(size, offset)]) of the only MPF segment before SOS.
 fn read_mpf(bytes: &[u8]) -> (usize, Vec<(u32, u32)>) {
     let mut at = 2;
@@ -212,14 +250,33 @@ fn read_mpf(bytes: &[u8]) -> (usize, Vec<(u32, u32)>) {
         if marker == 0xe2 && bytes[at + 4..].starts_with(b"MPF\0") {
             let header = at + 8;
             let be = |i: usize| u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap());
-            let entries = header + 26;
+            let ifd = header + be(header + 4) as usize;
+            let fields = u16::from_be_bytes(bytes[ifd..ifd + 2].try_into().unwrap()) as usize;
+            let field = (0..fields)
+                .map(|i| ifd + 2 + i * 12)
+                .find(|at| u16::from_be_bytes(bytes[*at..*at + 2].try_into().unwrap()) == 0xb002)
+                .unwrap();
+            let entries = header + be(field + 8) as usize;
+            let count = be(field + 4) as usize / 16;
             return (
                 header,
-                (0..2)
+                (0..count)
                     .map(|j| (be(entries + j * 16 + 4), be(entries + j * 16 + 8)))
                     .collect(),
             );
         }
+        at += 2 + len;
+    }
+}
+
+fn scan_offset(bytes: &[u8]) -> usize {
+    let mut at = 2;
+    loop {
+        assert_eq!(bytes[at], 0xff);
+        if bytes[at + 1] == 0xda {
+            return at;
+        }
+        let len = u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]) as usize;
         at += 2 + len;
     }
 }
@@ -283,18 +340,95 @@ fn ultra_hdr_gain_map_survives_motion_packaging() {
 }
 
 #[test]
-fn unknown_or_inconsistent_xmp_is_still_refused() {
+fn ordinary_xmp_is_merged_without_touching_image_or_video() {
+    let root = workdir();
+    let video = b"\0\0\0\x14ftypqt  \0\0\0\0qt  ";
+    let movie = root.join("paired.mov");
+    std::fs::write(&movie, video).unwrap();
+    let mut plain = vec![0xff, 0xd8];
+    let exif = segment(0xe1, b"Exif\0\0untouched EXIF");
+    let icc = segment(0xe2, b"ICC_PROFILE\0untouched ICC");
+    plain.extend(&exif);
+    plain.extend(&icc);
+    let mut packet = XMP.to_vec();
+    let original_xml = br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><r:RDF xmlns:r="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><r:Description xmlns:test="urn:test" test:value="kept"/></r:RDF></x:xmpmeta>"#;
+    packet.extend(original_xml);
+    packet.extend([0, 0]);
+    plain.extend(segment(0xe1, &packet));
+    let scan = [0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9];
+    plain.extend(scan);
+    let image = root.join("plain.jpg");
+    let out = root.join("motion.jpg");
+    std::fs::write(&image, &plain).unwrap();
+    write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &out,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .unwrap();
+    let result = std::fs::read(&out).unwrap();
+    assert_eq!(result.windows(XMP.len()).filter(|w| *w == XMP).count(), 1);
+    assert!(result.windows(exif.len()).any(|w| w == exif));
+    assert!(result.windows(icc.len()).any(|w| w == icc));
+    assert!(result.windows(scan.len()).any(|w| w == scan));
+    assert!(String::from_utf8_lossy(&result).contains(r#"test:value="kept"/>"#));
+    assert!(String::from_utf8_lossy(&result).contains("test:value=\"kept\""));
+    assert!(String::from_utf8_lossy(&result).contains("GCamera:MotionPhoto=\"1\""));
+    assert!(result.windows(video.len()).any(|w| w == video));
+    assert!(result.ends_with(b"SEFT"));
+    assert_eq!(std::fs::read(image).unwrap(), plain);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ordinary_xmp_with_mpf_keeps_auxiliary_jpeg_and_rebases_offsets() {
+    let root = workdir();
+    let image = root.join("still.jpg");
+    let movie = root.join("paired.mov");
+    let output = root.join("output.jpg");
+    let source = ordinary_mpf_jpeg();
+    let video = b"\0\0\0\x14ftypqt  \0\0\0\0qt  ";
+    std::fs::write(&image, &source).unwrap();
+    std::fs::write(&movie, video).unwrap();
+    write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &output,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .unwrap();
+    let result = std::fs::read(output).unwrap();
+    let (header, entries) = read_mpf(&result);
+    let auxiliary = header + entries[1].1 as usize;
+    assert_eq!(entries[0].0 as usize, auxiliary);
+    assert_eq!(entries[1].0 as usize, GAIN_MAP.len());
+    assert_eq!(&result[auxiliary..auxiliary + GAIN_MAP.len()], GAIN_MAP);
+    assert!(result.windows(video.len()).any(|w| w == video));
+    assert!(result.ends_with(b"SEFT"));
+    assert!(String::from_utf8_lossy(&result).contains("test:value=\"kept\""));
+    assert!(String::from_utf8_lossy(&result).contains("GCamera:MotionPhoto=\"1\""));
+    assert_eq!(std::fs::read(image).unwrap(), source);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn conflicting_or_inconsistent_xmp_is_still_refused() {
     let root = workdir();
     let video = b"\0\0\0\x14ftypisom\0\0\0\0isom";
     let movie = root.join("video.mp4");
     std::fs::write(&movie, video).unwrap();
-    let mut plain = vec![0xff, 0xd8];
+    let mut conflict = vec![0xff, 0xd8];
     let mut packet = XMP.to_vec();
-    packet.extend(br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about=""/></rdf:RDF></x:xmpmeta>"#);
-    plain.extend(segment(0xe1, &packet));
-    plain.extend([0xff, 0xda, 0, 2, 0xff, 0xd9]);
+    packet.extend(br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:cam="http://ns.google.com/photos/1.0/camera/" cam:MotionPhoto="1"/></rdf:RDF></x:xmpmeta>"#);
+    conflict.extend(segment(0xe1, &packet));
+    conflict.extend([0xff, 0xda, 0, 2, 0xff, 0xd9]);
     for (name, source) in [
-        ("plain.jpg", plain),
+        ("conflict.jpg", conflict),
         ("mismatch.jpg", ultra_hdr(false, GAIN_MAP.len() + 1, true)),
     ] {
         let image = root.join(name);
