@@ -53,6 +53,7 @@ struct IOSSettingsPage: View {
 
 private struct IOSBackupPreferences: View {
   @ObservedObject var model: BackupModel
+  @AppStorage("keepScreenAwakeDuringBackup") private var keepScreenAwake = false
   var body: some View {
     Form {
       Section {
@@ -73,6 +74,11 @@ private struct IOSBackupPreferences: View {
       }
       TransferConcurrencySettings(model: model)
       HistoricalImportSettings(model: model)
+      Section {
+        Toggle("keep_screen_awake_during_backup", isOn: $keepScreenAwake)
+      } footer: {
+        Text("keep_screen_awake_explanation")
+      }
       Section {
         Label("wifi_only", systemImage: "wifi")
         Text("background_explanation").foregroundStyle(.secondary)

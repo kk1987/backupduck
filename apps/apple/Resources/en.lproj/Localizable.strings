@@ -40,6 +40,8 @@
 "auto_backup_new" = "Back up new photos automatically";
 "discovery_pending" = "Waiting to prepare";
 "auto_backup_explanation" = "Starts with photos added after you enable this option. Existing photos are not imported automatically. Limited Photos access includes only the items you allow. Pause stops both discovery and transfer.";
+"keep_screen_awake_during_backup" = "Keep screen awake during backup";
+"keep_screen_awake_explanation" = "Works only while this app is in the foreground, the receiver is reachable, and backup work remains. Auto-Lock resumes when paused, finished, or in the background. This uses more battery.";
 "background_section" = "Background transfers";
 "wifi_only" = "Transfer over Wi-Fi only";
 "background_explanation" = "Prepared files can transfer in the background. iOS decides when to wake the app to discover photos, prepare originals and retry interrupted work. Open the app to continue immediately.";

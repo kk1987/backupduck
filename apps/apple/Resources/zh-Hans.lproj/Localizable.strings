@@ -40,6 +40,8 @@
 "auto_backup_new" = "自动备份新增照片";
 "discovery_pending" = "等待准备的照片";
 "auto_backup_explanation" = "从启用后新增的照片开始，不会自动导入已有图库。若仅授予部分照片权限，只能备份你允许访问的项目。暂停会同时停止发现新照片与传输。";
+"keep_screen_awake_during_backup" = "备份时保持屏幕常亮";
+"keep_screen_awake_explanation" = "仅在应用位于前台、接收端可连接且有待处理备份时生效。暂停、完成或离开应用后恢复自动锁屏；常亮会增加耗电。";
 "background_section" = "后台传输";
 "wifi_only" = "仅通过 Wi-Fi 传输";
 "background_explanation" = "准备好的文件可在后台传输。新增照片发现、原件准备与中断重试的后台唤醒时机由 iOS 决定；打开应用可立即继续。";
