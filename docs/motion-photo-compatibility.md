@@ -92,15 +92,21 @@ can use its codec fallback only for those remaining cases.
 The two repaired files were temporarily indexed on the test Pixel. Google
 Photos displayed the Motion Photo control for one sample, and successive frames
 of the other visibly changed during local playback. Those diagnostic copies
-were removed after testing. This verifies local recognition, not the app's
-retry flow or Google Photos cloud processing.
+were removed after testing. This verifies local recognition, not Google Photos
+cloud processing.
 
 Receiver history records a bounded processing error code on new failures, and
 failed originals remain available for an explicit processing retry. The Mac
 transfer receipt means the phone has the files; it does not mean Android
-gallery publication or Google Photos cloud backup has finished. On-device
-receiver retry and cloud recognition of these repaired copies still require
-separate validation after installing the updated receiver.
+gallery publication or Google Photos cloud backup has finished. The official
+beta.24 build 28 was installed through the app's updater on the test Pixel. Its
+retry action processed the seven retained failed originals without retransmission:
+each changed from `received/failed` to `received/complete` and gained one
+MediaStore gallery copy. Two actual gallery copies were pulled and compared
+with the sender originals. Their JPEG scan data, MPF auxiliary JPEG and paired
+MOV were byte-identical, confirming that the production receiver took the
+direct path without transcoding. Google Photos cloud recognition of these
+retried copies has not yet been verified.
 
 ## Future investigation checklist
 
