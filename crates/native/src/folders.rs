@@ -28,6 +28,8 @@ pub enum Command {
     Baseline {
         source: String,
         receiver: String,
+        #[serde(default)]
+        max_created_ms: Option<u64>,
     },
     Ignore {
         source: String,
@@ -52,6 +54,8 @@ pub enum Command {
     Pending {
         source: String,
         receiver: String,
+        #[serde(default)]
+        max_created_ms: Option<u64>,
     },
     IncludeExisting {
         source: String,
@@ -59,6 +63,8 @@ pub enum Command {
     Eligible {
         source: String,
         relative: String,
+        #[serde(default)]
+        max_created_ms: Option<u64>,
     },
     Step,
     Cancel,
@@ -70,6 +76,8 @@ pub enum Command {
         receiver: String,
         #[serde(default)]
         relative: Option<String>,
+        #[serde(default)]
+        max_created_ms: Option<u64>,
     },
     Page {
         source: String,
@@ -164,9 +172,11 @@ pub fn call(command: Command) -> Result<Value> {
             )?;
             Ok(json!({}))
         }
-        Command::Pending { source, receiver } => {
-            Ok(json!({"count":index.pending(&source,&receiver)?}))
-        }
+        Command::Pending {
+            source,
+            receiver,
+            max_created_ms,
+        } => Ok(json!({"count":index.pending_before(&source,&receiver,max_created_ms)?})),
         Command::States {
             source,
             receiver,
@@ -198,8 +208,12 @@ pub fn call(command: Command) -> Result<Value> {
             }
             Ok(json!(states))
         }
-        Command::Baseline { source, receiver } => {
-            index.baseline(&source, &receiver)?;
+        Command::Baseline {
+            source,
+            receiver,
+            max_created_ms,
+        } => {
+            index.baseline_before(&source, &receiver, max_created_ms)?;
             Ok(json!({}))
         }
         Command::Ignore {
@@ -231,12 +245,17 @@ pub fn call(command: Command) -> Result<Value> {
             )?;
             Ok(json!({}))
         }
-        Command::Eligible { source, relative } => {
+        Command::Eligible {
+            source,
+            relative,
+            max_created_ms,
+        } => {
             let entry = index.entry(&source, &relative)?;
-            Ok(json!(index.eligible(
+            Ok(json!(index.eligible_before(
                 &source,
                 &relative,
-                &entry.revision
+                &entry.revision,
+                max_created_ms,
             )?))
         }
         Command::Step => Ok(serde_json::to_value(
@@ -251,12 +270,14 @@ pub fn call(command: Command) -> Result<Value> {
             source,
             receiver,
             relative,
-        } => Ok(serde_json::to_value(index.candidates_for(
+            max_created_ms,
+        } => Ok(serde_json::to_value(index.candidates_for_cutoff(
             &source,
             &receiver,
             photobridge_folder_source::millis(SystemTime::now()),
             8,
             relative.as_deref(),
+            max_created_ms,
         )?)?),
         Command::Page {
             source,

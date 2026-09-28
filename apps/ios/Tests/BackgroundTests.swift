@@ -8,8 +8,9 @@ import XCTest
   func testNativeBackgroundSessionAndNewPhotoDiscovery() async throws {
     // Install the exact test host, then grant Photos before running this test.
     // Fail immediately instead of waiting forever on a permission dialog.
-    guard PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized else {
-      XCTFail("Grant Photos on the disposable simulator after installing the test host")
+    let photoAccess = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    guard photoAccess == .authorized || photoAccess == .limited else {
+      XCTFail("Grant Photos on the disposable simulator after installing the test host (status \(photoAccess.rawValue))")
       return
     }
     let model = BackupModel.shared
@@ -153,6 +154,31 @@ import XCTest
     await model.discoverPhotos()
     await model.refresh()
     XCTAssertEqual(model.jobs.count, count)
+    await model.setAutoBackup(false)
+    var whileOff: String?
+    try await PHPhotoLibrary.shared().performChanges {
+      whileOff = PHAssetChangeRequest.creationRequestForAsset(from: image)
+        .placeholderForCreatedAsset?.localIdentifier
+    }
+    let excluded = try XCTUnwrap(whileOff)
+    await model.discoverPhotos()
+    await model.refresh()
+    XCTAssertFalse(model.jobs.contains { $0.asset.source_id == excluded })
+    await model.setAutoBackup(true)
+    await model.discoverPhotos()
+    await model.refresh()
+    XCTAssertFalse(model.jobs.contains { $0.asset.source_id == excluded })
+    var whileOn: String?
+    try await PHPhotoLibrary.shared().performChanges {
+      whileOn = PHAssetChangeRequest.creationRequestForAsset(from: image)
+        .placeholderForCreatedAsset?.localIdentifier
+    }
+    let included = try XCTUnwrap(whileOn)
+    try await waitUntil {
+      await model.discoverPhotos()
+      await model.refresh()
+      return model.jobs.contains { $0.asset.source_id == included && $0.state == "received" }
+    }
     await model.setAutoBackup(false)
     await model.setPaused(true)
     _ = try await Bridge.call(["op": "stop_receiver"])

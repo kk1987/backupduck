@@ -240,7 +240,8 @@
 "history_state_scanned" = "Scan finished";
 "history_counts" = "%d photos checked · %d waiting to prepare";
 "history_backup_paused" = "Resume backup to continue the library scan and transfers.";
-"history_explanation" = "Find existing photos, videos, Live Photos and burst members and add them to the backup queue. Only accessible photos are included. Pausing the scan stops discovery; queued transfers continue. Scan finished does not mean backup complete. Enable automatic backup of new photos to include future additions.";
+"history_explanation" = "This run backs up photos, videos, Live Photos and burst members already in your accessible library when you start it. Photos added later need automatic backup of new photos or another scan. Pausing stops discovery; queued transfers continue. Scan finished does not mean backup complete.";
+"error_history_snapshot_unavailable" = "This scan's saved photo list is unavailable. Start a new scan to include the current library; already queued transfers remain.";
 "history_operation_failed" = "The library scan could not continue. Your progress is saved; try again.";
 "event_history_scan_started" = "Existing-library scan started";
 "event_history_scan_paused" = "Existing-library scan paused";
@@ -508,7 +509,7 @@
 
 "folder_help" = "Folder backup help";
 "folder_automatic_guide" = "Automatically back up new and modified photos and videos. Turning this off stops new tasks; queued files continue transferring.";
-"folder_manual_guide" = "Back Up Existing Files processes files that have not been backed up. Unchanged backed-up files are skipped. When automatic backup is off, it stops after this run.";
+"folder_manual_guide" = "Back Up Existing Files processes files already in the folder when you start this run. Files created later need another run or automatic backup. Unchanged backed-up files are skipped; this run stops when finished.";
 "folder_stop_manual" = "Stop this backup";
 "folder_auto_active" = "Watching for new or modified files";
 "folder_manual_active" = "This backup is running";

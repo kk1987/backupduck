@@ -13,6 +13,7 @@ import Photos
     var enabled = false
     var receiverID: String?
     var token: Data?
+    var closingToken: Data? = nil
     var pending: [Pending] = []
     var historyUnavailable = false
   }
@@ -40,30 +41,91 @@ import Photos
     try JSONEncoder().encode(next).write(to: file, options: options)
     state = next
   }
-  func setEnabled(_ enabled: Bool, receiverID: String?) throws {
+  func setEnabled(_ enabled: Bool, receiverID: String?) async throws {
     var next = state
     if next.receiverID != receiverID {
       next = State()
       next.receiverID = receiverID
+      try persist(next)
+      revision += 1
     }
+    if next.enabled == enabled { return }
     if enabled {
+      // Finish the interval that was enabled before resetting the baseline.
+      if next.closingToken != nil { try await reconcileClosingWindow() }
+      next = state
       // Start from now, including newly imported photos with old capture dates.
       next.token = try NSKeyedArchiver.archivedData(
         withRootObject: PHPhotoLibrary.shared().currentChangeToken, requiringSecureCoding: true)
       next.historyUnavailable = false
+    } else if next.token != nil {
+      next.closingToken = try NSKeyedArchiver.archivedData(
+        withRootObject: PHPhotoLibrary.shared().currentChangeToken, requiringSecureCoding: true)
     }
     next.enabled = enabled
     try persist(next)
     revision += 1
   }
   func matchReceiver(_ receiverID: String?) throws {
-    if state.receiverID != receiverID { try setEnabled(false, receiverID: receiverID) }
+    if state.receiverID != receiverID {
+      var next = State()
+      next.receiverID = receiverID
+      try persist(next)
+      revision += 1
+    }
+  }
+
+  nonisolated static func changes(since saved: Data, through ending: Data? = nil)
+    throws -> (Data?, Set<String>, Set<String>)
+  {
+    guard let start = try NSKeyedUnarchiver.unarchivedObject(
+      ofClass: PHPersistentChangeToken.self, from: saved)
+    else { throw Bridge.Failure(code: "history_unavailable") }
+    let cutoff = try ending.flatMap {
+      try NSKeyedUnarchiver.unarchivedObject(ofClass: PHPersistentChangeToken.self, from: $0)
+    }
+    if ending != nil && cutoff == nil { throw Bridge.Failure(code: "history_unavailable") }
+    if let cutoff, start == cutoff { return (ending, [], []) }
+    var latest: PHPersistentChangeToken?
+    var inserted = Set<String>()
+    var deleted = Set<String>()
+    for change in try PHPhotoLibrary.shared().fetchPersistentChanges(since: start) {
+      let details = try change.changeDetails(for: .asset)
+      inserted.formUnion(details.insertedLocalIdentifiers)
+      inserted.subtract(details.deletedLocalIdentifiers)
+      deleted.formUnion(details.deletedLocalIdentifiers)
+      deleted.subtract(details.insertedLocalIdentifiers)
+      latest = change.changeToken
+      if let cutoff, latest == cutoff { break }
+    }
+    if let cutoff, latest != cutoff { throw Bridge.Failure(code: "history_unavailable") }
+    return (try latest.map {
+      try NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
+    }, inserted, deleted)
+  }
+  private func reconcileClosingWindow() async throws {
+    guard let saved = state.token, let cutoff = state.closingToken else { return }
+    let version = revision
+    let changes = try await Task.detached(priority: .utility) {
+      try Self.changes(since: saved, through: cutoff)
+    }.value
+    guard version == revision, state.closingToken == cutoff else {
+      throw Bridge.Failure(code: "conflict")
+    }
+    var next = state
+    next.pending.removeAll { changes.2.contains($0.id) }
+    let known = Set(next.pending.map(\.id))
+    next.pending.append(contentsOf: changes.1.subtracting(known).map { Pending(id: $0) })
+    next.token = cutoff
+    next.closingToken = nil
+    try persist(next)
   }
   nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
     Task { @MainActor in await BackupModel.shared.discoverPhotos() }
   }
   func discoverAndExport(using model: BackupModel) async {
-    guard state.enabled, !scanning, !model.paused, !model.importing,
+    guard (state.enabled || state.closingToken != nil || !state.pending.isEmpty),
+      !scanning, !model.paused, !model.importing,
       model.pairing?.receiverID == state.receiverID
     else { return }
     let authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -79,35 +141,13 @@ import Photos
     guard await model.canPrepareForReceiver() else { return }
     let version = revision
     do {
-      if !state.historyUnavailable, let savedToken = state.token {
+      if state.closingToken != nil { try await reconcileClosingWindow() }
+      guard version == revision else { return }
+      if state.enabled, !state.historyUnavailable, let savedToken = state.token {
         do {
           // PhotoKit fetches can block; keep change-history work off the UI thread.
           let changes = try await Task.detached(priority: .utility) {
-            () -> (Data?, Set<String>, Set<String>) in
-            guard
-              let token = try NSKeyedUnarchiver.unarchivedObject(
-                ofClass: PHPersistentChangeToken.self, from: savedToken)
-            else {
-              throw Bridge.Failure(code: "history_unavailable")
-            }
-            let result = try PHPhotoLibrary.shared().fetchPersistentChanges(since: token)
-            var latest: PHPersistentChangeToken?
-            var inserted = Set<String>()
-            var deleted = Set<String>()
-            for change in result {
-              let details = try change.changeDetails(for: .asset)
-              inserted.formUnion(details.insertedLocalIdentifiers)
-              inserted.subtract(details.deletedLocalIdentifiers)
-              deleted.formUnion(details.deletedLocalIdentifiers)
-              deleted.subtract(details.insertedLocalIdentifiers)
-              latest = change.changeToken
-            }
-            return (
-              try latest.map {
-                try NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
-              },
-              inserted, deleted
-            )
+            try Self.changes(since: savedToken)
           }.value
           guard version == revision, !Task.isCancelled else { return }
           if let token = changes.0 {
@@ -146,7 +186,7 @@ import Photos
       // re-exports it; the Rust asset identity prevents duplicate transfer.
       let due = state.pending.filter { $0.nextAttempt <= Date() }.prefix(5)
       for pending in due {
-        guard version == revision, state.enabled, !model.paused, !Task.isCancelled else { break }
+        guard version == revision, !model.paused, !Task.isCancelled else { break }
         let completed = await model.importAssets([pending.id], requestAuthorization: false)
         guard version == revision, !Task.isCancelled else { break }
         var next = state

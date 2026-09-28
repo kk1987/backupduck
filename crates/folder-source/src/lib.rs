@@ -63,6 +63,22 @@ impl Index {
           CREATE INDEX IF NOT EXISTS folder_job ON submitted(source,job);
           CREATE TABLE IF NOT EXISTS source_rules(source TEXT PRIMARY KEY,include TEXT NOT NULL,exclude TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS dismissed(source TEXT NOT NULL,relative TEXT NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(source,relative));").map_err(db)?;
+        let has_created = {
+            let mut columns = conn.prepare("PRAGMA table_info(files)").map_err(db)?;
+            let names = columns
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(db)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db)?;
+            names.iter().any(|column| column == "created")
+        };
+        if !has_created {
+            conn.execute(
+                "ALTER TABLE files ADD COLUMN created INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(db)?;
+        }
         Ok(Self { conn, scan: None })
     }
     pub fn begin(&mut self, source: &str, root: &Path, generation: u64) -> Result<()> {
@@ -257,6 +273,9 @@ impl Index {
             scan.files += 1;
             scan.bytes += meta.len();
             let modified = millis(meta.modified()?);
+            // Birth time identifies files introduced after a manual run began,
+            // even when a camera or copy tool preserves an older modified date.
+            let created = millis(meta.created()?);
             let revision = format!(
                 "{}:{}",
                 meta.len(),
@@ -273,7 +292,7 @@ impl Index {
             };
             #[cfg(not(unix))]
             let identity = relative.clone();
-            self.conn.execute("INSERT INTO files(source,relative,identity,revision,size,mime,modified,observed,generation,present) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,1) ON CONFLICT(source,relative) DO UPDATE SET identity=excluded.identity,observed=CASE WHEN files.revision=excluded.revision AND files.identity=excluded.identity THEN files.observed ELSE excluded.observed END,revision=excluded.revision,size=excluded.size,mime=excluded.mime,modified=excluded.modified,generation=excluded.generation,present=1", params![scan.source,relative,identity,revision,meta.len() as i64,mime,modified as i64,observed as i64,scan.generation as i64]).map_err(db)?;
+            self.conn.execute("INSERT INTO files(source,relative,identity,revision,size,mime,modified,observed,generation,present,created) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,1,?10) ON CONFLICT(source,relative) DO UPDATE SET identity=excluded.identity,observed=CASE WHEN files.revision=excluded.revision AND files.identity=excluded.identity THEN files.observed ELSE excluded.observed END,revision=excluded.revision,size=excluded.size,mime=excluded.mime,modified=excluded.modified,generation=excluded.generation,present=1,created=excluded.created", params![scan.source,relative,identity,revision,meta.len() as i64,mime,modified as i64,observed as i64,scan.generation as i64,created as i64]).map_err(db)?;
         }
         Ok(Summary {
             files: scan.files,
@@ -315,7 +334,18 @@ impl Index {
         limit: usize,
         relative: Option<&str>,
     ) -> Result<Vec<Entry>> {
-        let mut stmt=self.conn.prepare("SELECT relative,identity,revision,size,mime,modified FROM files f WHERE source=?1 AND present=1 AND observed<=?3 AND (?6 IS NULL OR relative=?6) AND NOT EXISTS(SELECT 1 FROM ignored i WHERE i.source=f.source AND i.relative=f.relative AND i.revision=f.revision AND (i.until_ms=0 OR i.until_ms>?5)) AND NOT EXISTS(SELECT 1 FROM dismissed d WHERE d.source=f.source AND d.relative=f.relative AND d.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM submitted s WHERE s.source=f.source AND s.identity=f.identity AND (s.receiver=?2 OR s.receiver='@baseline') AND s.revision=f.revision) ORDER BY modified DESC,relative LIMIT ?4").map_err(db)?;
+        self.candidates_for_cutoff(source, receiver, now, limit, relative, None)
+    }
+    pub fn candidates_for_cutoff(
+        &self,
+        source: &str,
+        receiver: &str,
+        now: u64,
+        limit: usize,
+        relative: Option<&str>,
+        max_created: Option<u64>,
+    ) -> Result<Vec<Entry>> {
+        let mut stmt=self.conn.prepare("SELECT relative,identity,revision,size,mime,modified FROM files f WHERE source=?1 AND present=1 AND observed<=?3 AND (?6 IS NULL OR relative=?6) AND (?7 IS NULL OR created<=?7) AND NOT EXISTS(SELECT 1 FROM ignored i WHERE i.source=f.source AND i.relative=f.relative AND i.revision=f.revision AND (i.until_ms=0 OR i.until_ms>?5)) AND NOT EXISTS(SELECT 1 FROM dismissed d WHERE d.source=f.source AND d.relative=f.relative AND d.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM submitted s WHERE s.source=f.source AND s.identity=f.identity AND (s.receiver=?2 OR s.receiver='@baseline') AND s.revision=f.revision) ORDER BY modified DESC,relative LIMIT ?4").map_err(db)?;
         let rows = stmt
             .query_map(
                 params![
@@ -324,7 +354,8 @@ impl Index {
                     now.saturating_sub(10_000) as i64,
                     limit.clamp(1, 200) as i64,
                     now as i64,
-                    relative
+                    relative,
+                    max_created.map(|value| value as i64)
                 ],
                 |r| {
                     let identity: String = r.get(1)?;
@@ -341,6 +372,24 @@ impl Index {
             )
             .map_err(db)?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db)
+    }
+    pub fn eligible_before(
+        &self,
+        source: &str,
+        relative: &str,
+        revision: &str,
+        cutoff: Option<u64>,
+    ) -> Result<bool> {
+        if let Some(cutoff) = cutoff {
+            let created: u64 = self.conn.query_row(
+                "SELECT created FROM files WHERE source=?1 AND relative=?2 AND revision=?3 AND present=1",
+                params![source, relative, revision], |row| row.get::<_, i64>(0),
+            ).optional().map_err(db)?.ok_or(Error::NotFound)? as u64;
+            if created > cutoff {
+                return Ok(false);
+            }
+        }
+        self.eligible(source, relative, revision)
     }
     pub fn mark(
         &self,
@@ -491,7 +540,15 @@ impl Index {
 
 impl Index {
     pub fn baseline(&self, source: &str, receiver: &str) -> Result<()> {
-        self.conn.execute("INSERT INTO submitted(source,identity,receiver,revision,job) SELECT source,identity,?2,revision,0 FROM files WHERE source=?1 AND present=1 ON CONFLICT(source,identity,receiver) DO NOTHING",params![source,receiver]).map_err(db)?;
+        self.baseline_before(source, receiver, None)
+    }
+    pub fn baseline_before(
+        &self,
+        source: &str,
+        receiver: &str,
+        max_created: Option<u64>,
+    ) -> Result<()> {
+        self.conn.execute("INSERT INTO submitted(source,identity,receiver,revision,job) SELECT source,identity,?2,revision,0 FROM files WHERE source=?1 AND present=1 AND (?3 IS NULL OR created<=?3) ON CONFLICT(source,identity,receiver) DO NOTHING",params![source,receiver,max_created.map(|value| value as i64)]).map_err(db)?;
         Ok(())
     }
     pub fn ignore(&self, source: &str, relative: &str, revision: &str) -> Result<()> {
@@ -554,7 +611,15 @@ impl Index {
         Ok(())
     }
     pub fn pending(&self, source: &str, receiver: &str) -> Result<i64> {
-        self.conn.query_row("SELECT COUNT(*) FROM files f WHERE source=?1 AND present=1 AND NOT EXISTS(SELECT 1 FROM dismissed d WHERE d.source=f.source AND d.relative=f.relative AND d.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM submitted s WHERE s.source=f.source AND s.identity=f.identity AND (s.receiver=?2 OR s.receiver='@baseline') AND s.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM ignored i WHERE i.source=f.source AND i.relative=f.relative AND i.revision=f.revision AND i.until_ms=0)",params![source,receiver],|r|r.get(0)).map_err(db)
+        self.pending_before(source, receiver, None)
+    }
+    pub fn pending_before(
+        &self,
+        source: &str,
+        receiver: &str,
+        max_created: Option<u64>,
+    ) -> Result<i64> {
+        self.conn.query_row("SELECT COUNT(*) FROM files f WHERE source=?1 AND present=1 AND (?3 IS NULL OR created<=?3) AND NOT EXISTS(SELECT 1 FROM dismissed d WHERE d.source=f.source AND d.relative=f.relative AND d.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM submitted s WHERE s.source=f.source AND s.identity=f.identity AND (s.receiver=?2 OR s.receiver='@baseline') AND s.revision=f.revision) AND NOT EXISTS(SELECT 1 FROM ignored i WHERE i.source=f.source AND i.relative=f.relative AND i.revision=f.revision AND i.until_ms=0)",params![source,receiver,max_created.map(|value| value as i64)],|r|r.get(0)).map_err(db)
     }
 }
 

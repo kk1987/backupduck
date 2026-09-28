@@ -91,6 +91,7 @@ enum Bridge {
   var historyControlRevision = 0
   var historicalCursor: HistoricalScanCursor?
   @Published var autoBackup = false
+  @Published var changingAutoBackup = false
   @Published var discoveryPending = 0
   @Published var historyUnavailable = false
   @Published var waitingForNetwork = false
@@ -272,7 +273,7 @@ enum Bridge {
       // Cancel requests signed for the old receiver before replacing its trust.
       if pairing?.receiverID != parsed.receiverID {
         await setPaused(true)
-        try discovery?.setEnabled(false, receiverID: parsed.receiverID)
+        try discovery?.matchReceiver(parsed.receiverID)
         updateDiscoveryStatus()
       }
       try await Keychain.saveAsync(try JSONEncoder().encode(parsed))
@@ -336,12 +337,15 @@ enum Bridge {
     historyUnavailable = discovery?.state.historyUnavailable ?? false
   }
   func setAutoBackup(_ enabled: Bool) async {
-    guard ready, pairing != nil else { return }
+    guard ready, pairing != nil, !changingAutoBackup else { return }
+    changingAutoBackup = true
+    defer { changingAutoBackup = false }
     if enabled, !(await authorizePhotos()) { return }
     do {
-      try discovery?.setEnabled(enabled, receiverID: pairing?.receiverID)
+      try await discovery?.setEnabled(enabled, receiverID: pairing?.receiverID)
       updateDiscoveryStatus()
       scheduleBackgroundWork()
+      if !paused { await discoverPhotos() }
     } catch { message = error.localizedDescription }
   }
   func discoverPhotos() async {
@@ -360,7 +364,8 @@ enum Bridge {
     #if os(iOS)
       BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: AppDelegate.processingIdentifier)
       guard ready, !paused, pairing != nil,
-        autoBackup || historicalImport?.state == "scanning" || pendingImports > 0
+        autoBackup || discoveryPending > 0 || discovery?.state.closingToken != nil
+          || historicalImport?.state == "scanning" || pendingImports > 0
           || jobs.contains(where: { ["queued", "running", "waiting"].contains($0.state) })
       else { return }
       let request = BGProcessingTaskRequest(identifier: AppDelegate.processingIdentifier)

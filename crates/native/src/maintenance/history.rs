@@ -5,6 +5,7 @@ use super::*;
 #[serde(rename_all = "snake_case")]
 pub enum HistoryAction {
     Start,
+    Restart,
     Pause,
     Resume,
 }
@@ -38,12 +39,14 @@ impl Maintenance {
         }
         let event = match &action {
             HistoryAction::Start => "history_scan_started",
+            HistoryAction::Restart => "history_scan_started",
             HistoryAction::Pause => "history_scan_paused",
             HistoryAction::Resume => "history_scan_resumed",
         };
+        let restarting = matches!(action, HistoryAction::Restart);
         let tx = self.conn.unchecked_transaction().map_err(database)?;
         match action {
-            HistoryAction::Start => {
+            HistoryAction::Start | HistoryAction::Restart => {
                 let old: Option<(i64, String)> = tx
                     .query_row(
                         "SELECT run,state FROM history_runs WHERE receiver=?1",
@@ -53,7 +56,7 @@ impl Maintenance {
                     .optional()
                     .map_err(database)?;
                 // Repeated clicks are idempotent; starting again is explicit after enumeration.
-                if old.as_ref().is_none_or(|(_, s)| s == "scanned") {
+                if restarting || old.as_ref().is_none_or(|(_, s)| s == "scanned") {
                     let run = old.map_or(1, |(r, _)| r.saturating_add(1));
                     tx.execute("INSERT INTO history_runs VALUES(?1,?2,'scanning') ON CONFLICT(receiver) DO UPDATE SET run=excluded.run,state=excluded.state",params![receiver,run]).map_err(database)?;
                     tx.execute("DELETE FROM history_members WHERE receiver=?1", [receiver])
@@ -147,6 +150,15 @@ mod tests {
             .history_batch("a", first.run, &sources, &known, false)
             .unwrap();
         assert_eq!((s.checked, s.pending), (2, 1));
+        let restarted = m.history_control("a", HistoryAction::Restart).unwrap();
+        assert!(restarted.run > first.run);
+        assert_eq!(restarted.checked, 0);
+        assert!(m
+            .history_batch("a", first.run, &sources, &known, false)
+            .is_err());
+        let first = restarted;
+        m.history_batch("a", first.run, &sources, &known, false)
+            .unwrap();
         m.history_control("a", HistoryAction::Pause).unwrap();
         assert!(m
             .history_batch("a", first.run, &sources, &known, true)

@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0-beta.20",
-  "build": 24,
+  "version": "0.1.0-beta.21",
+  "build": 25,
   "website": "https://photobridge-app.vercel.app",
   "repository": "qhhonx/photobridge",
   "distribution_repository": "qhhonx/photobridge"

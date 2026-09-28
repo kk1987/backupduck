@@ -64,7 +64,7 @@ private struct IOSBackupPreferences: View {
             set: { enabled in
               Task { await model.setAutoBackup(enabled) }
             })
-        ).disabled(!model.ready || model.pairing == nil)
+        ).disabled(!model.ready || model.pairing == nil || model.changingAutoBackup)
         if model.discoveryPending > 0 {
           LabeledContent("discovery_pending", value: model.discoveryPending.formatted())
         }

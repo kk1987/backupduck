@@ -20,7 +20,7 @@ struct MacPreferences: View {
           Toggle("auto_backup_new", isOn: Binding(
             get: { model.autoBackup },
             set: { enabled in Task { await model.setAutoBackup(enabled) } }))
-            .disabled(!model.ready || model.pairing == nil)
+            .disabled(!model.ready || model.pairing == nil || model.changingAutoBackup)
           Text("mac_library_automatic_note").foregroundStyle(.secondary)
           if model.pairing == nil {
             Label("mac_pair_first", systemImage: "externaldrive.badge.plus")

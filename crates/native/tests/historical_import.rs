@@ -46,8 +46,8 @@ fn stage(root: &Path, phase: &str) {
         assert_eq!(prior["checked"], 1000);
         assert_eq!(prior["pending"], 998);
         call(json!({"op":"history_control","receiver_id":"receiver-a","action":"resume"}));
-        // A fresh PhotoKit snapshot starts at zero after process death. This must
-        // not duplicate pending work or download the existing queued revisions.
+        // Replayed batches after process death must not duplicate pending work
+        // or download existing queued revisions.
         for start in (0..10000).step_by(200) {
             let sources: Vec<_> = (start..start + 200)
                 .map(|i| json!([format!("photo-{i}"), "1"]))

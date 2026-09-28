@@ -1,6 +1,7 @@
 import Foundation
 import Photos
 import SwiftUI
+import CryptoKit
 
 struct HistoricalImportStatus: Decodable, Equatable {
   let run: Int64
@@ -9,15 +10,92 @@ struct HistoricalImportStatus: Decodable, Equatable {
   let pending: Int
 }
 
-/// A process-local PhotoKit snapshot, never a durable offset into a mutable library.
-/// On restart enumerate metadata again; Rust remembers membership and queued revisions.
+/// Frozen membership for one historical scan. PhotoKit's fetch result is not
+/// durable: enumerating it again after a restart would include newer photos.
 @MainActor final class HistoricalScanCursor {
+  private struct Membership: Codable {
+    let receiver: String
+    let ids: [String]
+  }
+  private struct Progress: Codable {
+    var run: Int64?
+    var offset: Int
+  }
   let receiver: String
   let run: Int64
-  let assets: PHFetchResult<PHAsset>
-  var offset = 0
-  init(receiver: String, run: Int64, assets: PHFetchResult<PHAsset>) {
-    self.receiver = receiver; self.run = run; self.assets = assets
+  let ids: [String]
+  private let progressURL: URL
+  var offset: Int
+
+  private init(receiver: String, run: Int64, ids: [String], offset: Int, progressURL: URL) {
+    self.receiver = receiver; self.run = run; self.ids = ids
+    self.offset = offset; self.progressURL = progressURL
+  }
+  private static func paths(root: URL, receiver: String) -> (URL, URL, URL) {
+    let digest = SHA256.hash(data: Data(receiver.utf8)).map { String(format: "%02x", $0) }.joined()
+    let prefix = root.appendingPathComponent("historical-membership-\(digest)")
+    return (prefix.appendingPathExtension("json"),
+      root.appendingPathComponent("historical-progress-\(digest).json"),
+      root.appendingPathComponent("historical-schema-\(digest).marker"))
+  }
+  private static func save<T: Encodable>(_ value: T, to url: URL) throws {
+    #if os(iOS)
+      let options: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+    #else
+      let options: Data.WritingOptions = [.atomic]
+    #endif
+    try JSONEncoder().encode(value).write(to: url, options: options)
+  }
+  /// Capture identifiers at the button press. Insertions during enumeration
+  /// are removed using the persistent change token captured beforehand.
+  static func capture(root: URL, receiver: String) async throws {
+    let ids = try await Task.detached(priority: .utility) { () throws -> [String] in
+      let token = try NSKeyedArchiver.archivedData(
+        withRootObject: PHPhotoLibrary.shared().currentChangeToken, requiringSecureCoding: true)
+      let options = photoLibraryFetchOptions()
+      options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+      options.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d",
+        PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+      let assets = PHAsset.fetchAssets(with: options)
+      var result = [String]()
+      result.reserveCapacity(assets.count)
+      assets.enumerateObjects { asset, _, _ in result.append(asset.localIdentifier) }
+      let inserted = try PhotoLibraryChanges.changes(since: token).1
+      return result.filter { !inserted.contains($0) }
+    }.value
+    let paths = paths(root: root, receiver: receiver)
+    try save(Membership(receiver: receiver, ids: ids), to: paths.0)
+    try save(Progress(run: nil, offset: 0), to: paths.1)
+    try save(true, to: paths.2)
+  }
+  static func load(root: URL, receiver: String, run: Int64) async throws -> HistoricalScanCursor {
+    let paths = paths(root: root, receiver: receiver)
+    let files = FileManager.default
+    if !files.fileExists(atPath: paths.0.path) || !files.fileExists(atPath: paths.1.path) {
+      // Existing scans from older builds have no frozen membership. Migrate
+      // once; never recreate a missing snapshot for a scan started by this build.
+      guard !files.fileExists(atPath: paths.2.path) else {
+        throw Bridge.Failure(code: "history_snapshot_unavailable")
+      }
+      try await capture(root: root, receiver: receiver)
+    }
+    let membership = try JSONDecoder().decode(Membership.self, from: Data(contentsOf: paths.0))
+    var progress = try JSONDecoder().decode(Progress.self, from: Data(contentsOf: paths.1))
+    guard membership.receiver == receiver, progress.run == nil || progress.run == run,
+      (0...membership.ids.count).contains(progress.offset) else {
+      throw Bridge.Failure(code: "history_snapshot_unavailable")
+    }
+    if progress.run == nil {
+      progress.run = run
+      try save(progress, to: paths.1)
+    }
+    if !files.fileExists(atPath: paths.2.path) { try save(true, to: paths.2) }
+    return HistoricalScanCursor(receiver: receiver, run: run, ids: membership.ids,
+      offset: progress.offset, progressURL: paths.1)
+  }
+  func advance(to next: Int) throws {
+    try Self.save(Progress(run: run, offset: next), to: progressURL)
+    offset = next
   }
 }
 
@@ -43,10 +121,15 @@ extension BackupModel {
       return
     }
     do {
+      if action == "start" || action == "restart" {
+        try await HistoricalScanCursor.capture(root: root, receiver: target.receiverID)
+        guard pairing?.receiverID == target.receiverID else { return }
+      }
       let data = try await Bridge.call(["op": "history_control", "receiver_id": target.receiverID,
         "action": action])
       guard pairing?.receiverID == target.receiverID else { return }
       historicalImport = try JSONDecoder().decode(HistoricalImportStatus.self, from: data)
+      if action == "start" || action == "restart" { historicalCursor = nil }
       historyError = nil
       scheduleBackgroundWork()
       Task { await scanHistoricalImport() }
@@ -68,40 +151,39 @@ extension BackupModel {
     let version = historyControlRevision
     do {
       if historicalCursor?.receiver != target.receiverID || historicalCursor?.run != status.run {
-        let snapshot = await Task.detached(priority: .utility) {
-          let options = photoLibraryFetchOptions()
-          options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-          options.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d",
-            PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
-          return PHAsset.fetchAssets(with: options)
-        }.value
+        let snapshot = try await HistoricalScanCursor.load(root: root,
+          receiver: target.receiverID, run: status.run)
         guard !Task.isCancelled, !paused, version == historyControlRevision,
           pairing?.receiverID == target.receiverID else { return }
-        historicalCursor = HistoricalScanCursor(receiver: target.receiverID, run: status.run, assets: snapshot)
+        historicalCursor = snapshot
       }
       guard let cursor = historicalCursor else { return }
       let start = cursor.offset
-      let end = min(start + 200, cursor.assets.count)
-      let assets = cursor.assets
+      let end = min(start + 200, cursor.ids.count)
+      let ids = Array(cursor.ids[start..<end])
       let sources = await Task.detached(priority: .utility) {
-        (start..<end).map { index -> [String] in
-          let asset = assets.object(at: index)
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: photoLibraryFetchOptions())
+        var revisions = [String: String]()
+        assets.enumerateObjects { asset, _, _ in
           let revision = String(Int64((asset.modificationDate ?? asset.creationDate ?? Date(timeIntervalSince1970: 0)).timeIntervalSince1970 * 1000))
-          return [asset.localIdentifier, revision]
+          revisions[asset.localIdentifier] = revision
         }
+        return ids.compactMap { id -> [String]? in revisions[id].map { [id, $0] } }
       }.value
       guard !Task.isCancelled, !paused, version == historyControlRevision,
         pairing?.receiverID == target.receiverID else { return }
       let data = try await Bridge.call(["op": "history_batch", "receiver_id": target.receiverID,
-        "run": status.run, "sources": sources, "finished": end == assets.count])
+        "run": status.run, "sources": sources, "finished": end == cursor.ids.count])
       guard version == historyControlRevision, pairing?.receiverID == target.receiverID else { return }
       historicalImport = try JSONDecoder().decode(HistoricalImportStatus.self, from: data)
-      cursor.offset = end // Advance only after the batch and pending work commit together.
+      try cursor.advance(to: end) // Replay after a crash is idempotent in Rust.
       if historicalImport?.state == "scanned" { historicalCursor = nil }
       historyError = nil
     } catch {
       guard version == historyControlRevision else { return }
-      historyError = NSLocalizedString("history_operation_failed", comment: "")
+      historyError = (error as? Bridge.Failure)?.code == "history_snapshot_unavailable"
+        ? NSLocalizedString("error_history_snapshot_unavailable", comment: "")
+        : NSLocalizedString("history_operation_failed", comment: "")
     }
   }
 }
@@ -132,7 +214,11 @@ struct HistoricalImportSettings: View {
       }
       if let error = model.historyError {
         Text(error).foregroundStyle(.orange)
-        Button("retry_task") { Task { await model.refreshHistoricalImport(); await model.scanHistoricalImport() } }
+        if error == NSLocalizedString("error_history_snapshot_unavailable", comment: "") {
+          Button("history_scan_again") { Task { await model.controlHistoricalImport("restart") } }
+        } else {
+          Button("retry_task") { Task { await model.refreshHistoricalImport(); await model.scanHistoricalImport() } }
+        }
       }
     } header: { Text(title) } footer: { Text(explanation) }
       .disabled(!model.ready || model.pairing == nil || model.changingHistory)

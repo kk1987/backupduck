@@ -240,7 +240,8 @@
 "history_state_scanned" = "扫描已结束";
 "history_counts" = "已检查 %d 项 · %d 项待准备";
 "history_backup_paused" = "请恢复备份，以继续图库扫描和传输。";
-"history_explanation" = "发现已有的照片、视频、动图和连拍，自动加入备份队列；仅处理你允许访问的照片。暂停扫描只停止继续发现照片，已排队任务仍会传输。扫描结束不代表备份完成。开启“自动备份新增照片”可继续备份之后加入图库的照片。";
+"history_explanation" = "本轮只备份开始时图库中已有、且允许访问的照片、视频、动图和连拍。之后加入的项目需开启“自动备份新增照片”，或再启动一轮扫描。暂停只停止发现，已排队任务仍会传输；扫描结束不代表备份完成。";
+"error_history_snapshot_unavailable" = "本轮保存的照片清单不可用。可重新开始扫描当前图库；已排队的传输不受影响。";
 "history_operation_failed" = "图库扫描暂时无法继续，进度已保留，请重试。";
 "event_history_scan_started" = "已开始扫描已有图库";
 "event_history_scan_paused" = "已暂停扫描已有图库";
@@ -508,7 +509,7 @@
 
 "folder_help" = "文件夹备份说明";
 "folder_automatic_guide" = "开启后，自动备份此文件夹中新增和修改的照片、视频。关闭后不再加入新任务，已排队文件继续传输。";
-"folder_manual_guide" = "“备份现有文件”处理尚未备份的文件；未变化且已备份的文件会跳过。自动备份关闭时只执行本次备份，完成后停止。";
+"folder_manual_guide" = "“备份现有文件”只处理本轮开始时文件夹中已有的文件；之后新建的文件需要再备份一次或开启自动备份。未变化且已备份的文件会跳过，本轮完成后停止。";
 "folder_stop_manual" = "停止本次备份";
 "folder_auto_active" = "等待新增或修改的文件";
 "folder_manual_active" = "本次备份进行中";

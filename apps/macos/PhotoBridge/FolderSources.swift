@@ -29,6 +29,8 @@ struct FolderSource: Codable, Identifiable {
   var includePatterns: [String]?
   var excludePatterns: [String]?
   var lastKnownPath: String?
+  var manualCutoffMS: UInt64? = nil
+  var baselineCutoffMS: UInt64? = nil
   var automaticActive: Bool { automatic && enabled }
   var manualActive: Bool { enabled && !automatic }
 }
@@ -79,7 +81,16 @@ struct FolderSummary: Decodable, Equatable {
       // Preserve that pause as an off switch in the unified controls.
       let migrated = sources.contains { $0.automatic && !$0.enabled }
       for i in sources.indices where !sources[i].enabled { sources[i].automatic = false }
-      if migrated { save() }
+      // Older manual runs had no saved boundary. Freeze them at upgrade time.
+      let cutoff = UInt64(Date().timeIntervalSince1970 * 1000)
+      var boundedLegacy = false
+      for i in sources.indices where sources[i].manualActive && sources[i].manualCutoffMS == nil {
+        sources[i].manualCutoffMS = cutoff; boundedLegacy = true
+      }
+      for i in sources.indices where sources[i].baselinePending && sources[i].baselineCutoffMS == nil {
+        sources[i].baselineCutoffMS = cutoff; boundedLegacy = true
+      }
+      if migrated || boundedLegacy { save() }
       for source in sources {
         if source.includePatterns != nil || source.excludePatterns != nil {
           _ = try await call(["action": "rules", "source": source.id, "include": source.includePatterns ?? [], "exclude": source.excludePatterns ?? []])
@@ -99,6 +110,7 @@ struct FolderSummary: Decodable, Equatable {
     catch { self.error = error.localizedDescription }
   }
   func add(_ url: URL, automatic: Bool, existing: Bool, include: [String] = [], exclude: [String] = []) async throws {
+    let cutoff = UInt64(Date().timeIntervalSince1970 * 1000)
     let path = url.resolvingSymlinksInPath().standardizedFileURL.path
     let managed = backup.root.resolvingSymlinksInPath().path
     guard !path.hasPrefix(managed + "/"), !managed.hasPrefix(path + "/"), path != managed else {
@@ -116,7 +128,9 @@ struct FolderSummary: Decodable, Equatable {
     try await validateRules(include: include, exclude: exclude)
     let bookmark = try url.resolvingSymlinksInPath().bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
     let source = FolderSource(id: UUID().uuidString, name: url.lastPathComponent, bookmark: bookmark,
-      automatic: automatic, enabled: existing || automatic, receiver: backup.pairing?.receiverID, lastCheck: nil, baselinePending: !existing, includePatterns: include, excludePatterns: exclude, lastKnownPath: url.path)
+      automatic: automatic, enabled: existing || automatic, receiver: backup.pairing?.receiverID, lastCheck: nil, baselinePending: !existing, includePatterns: include, excludePatterns: exclude, lastKnownPath: url.path,
+      manualCutoffMS: !automatic && existing ? cutoff : nil,
+      baselineCutoffMS: !existing ? cutoff : nil)
     _ = try await call(["action": "rules", "source": source.id, "include": include, "exclude": exclude])
     sources.append(source); check(source.id); save()
   }
@@ -163,6 +177,7 @@ struct FolderSummary: Decodable, Equatable {
       return
     }
     let expectedControl = controlRevision[id, default: 0]
+    let cutoff = UInt64(Date().timeIntervalSince1970 * 1000)
     starting.insert(id); actionMessages[id] = "folder_starting"; error = nil
     defer { starting.remove(id) }
     do {
@@ -172,6 +187,7 @@ struct FolderSummary: Decodable, Equatable {
         let i = sources.firstIndex(where: { $0.id == id }) else { return }
       if !sources[i].automaticActive { sources[i].automatic = false }
       sources[i].enabled = true; sources[i].receiver = backup.pairing?.receiverID
+      if !sources[i].automatic { sources[i].manualCutoffMS = cutoff }
       sources[i].retryPaths = sources[i].issues.keys.sorted(); sources[i].baselinePending = false
       check(id); save()
       actionMessages[id] = backup.paused ? "folder_global_wait" : "folder_backup_requested"
@@ -324,7 +340,9 @@ struct FolderSummary: Decodable, Equatable {
             if let i = sources.firstIndex(where: { $0.id == id }) {
               sources[i].lastCheck = Date()
               if sources[i].baselinePending {
-                _ = try await call(["action": "baseline", "source": id, "receiver": "@baseline"])
+                var command: [String: Any] = ["action": "baseline", "source": id, "receiver": "@baseline"]
+                if let cutoff = sources[i].baselineCutoffMS { command["max_created_ms"] = cutoff }
+                _ = try await call(command)
                 if let current = sources.firstIndex(where: { $0.id == id }) { sources[current].baselinePending = false }
               }
               save()
@@ -370,7 +388,9 @@ struct FolderSummary: Decodable, Equatable {
       if source.receiver == nil, let i = sources.firstIndex(where: { $0.id == source.id }) { sources[i].receiver = receiver; save() }
       if source.baselinePending {
         guard source.lastCheck != nil else { return }
-        _ = try await call(["action": "baseline", "source": source.id, "receiver": "@baseline"])
+        var command: [String: Any] = ["action": "baseline", "source": source.id, "receiver": "@baseline"]
+        if let cutoff = source.baselineCutoffMS { command["max_created_ms"] = cutoff }
+        _ = try await call(command)
         if let i = sources.firstIndex(where: { $0.id == source.id }) { sources[i].baselinePending = false; save() }
         return
       }
@@ -379,6 +399,9 @@ struct FolderSummary: Decodable, Equatable {
       guard await backup.canPrepareForReceiver() else { setPhase(source.id, "waiting_for_wifi"); return }
       var candidateCommand: [String: Any] = ["action": "candidates", "source": source.id, "receiver": receiver]
       if let retryPath { candidateCommand["relative"] = retryPath }
+      let manualCutoff = source.automatic ? nil : source.manualCutoffMS
+      let candidateCutoff = retryPath == nil ? manualCutoff : nil
+      if let candidateCutoff { candidateCommand["max_created_ms"] = candidateCutoff }
       var entries = try JSONDecoder().decode([FolderEntry].self, from: await call(candidateCommand))
       if let retryPath, entries.isEmpty {
         if let states = try? await states(source.id, relatives: [retryPath]), states[retryPath] != nil, states[retryPath] != "excluded" {
@@ -394,12 +417,15 @@ struct FolderSummary: Decodable, Equatable {
         }
         if source.enabled {
           candidateCommand.removeValue(forKey: "relative")
+          if let manualCutoff { candidateCommand["max_created_ms"] = manualCutoff }
           entries = try JSONDecoder().decode([FolderEntry].self, from: await call(candidateCommand))
         } else { setPhase(source.id, "folder_settling"); return }
       }
       if entries.isEmpty, Date().timeIntervalSince(source.lastCheck ?? .distantPast) < 12 { setPhase(source.id, "folder_settling"); return }
       guard let entry = entries.first(where: { retries.contains($0.relative) || source.issues[$0.relative] != $0.revision }) else {
-        let pendingData = try await call(["action": "pending", "source": source.id, "receiver": receiver])
+        var pendingCommand: [String: Any] = ["action": "pending", "source": source.id, "receiver": receiver]
+        if let manualCutoff { pendingCommand["max_created_ms"] = manualCutoff }
+        let pendingData = try await call(pendingCommand)
         let pending = (try JSONSerialization.jsonObject(with: pendingData) as? [String: Int])?["count"] ?? 0
         if pending > 0 { setPhase(source.id, "folder_cache_wait"); return }
         setPhase(source.id, source.issues.isEmpty ? "folder_up_to_date" : "folder_attention")
@@ -408,8 +434,11 @@ struct FolderSummary: Decodable, Equatable {
       }
       currentEntry = entry
       setPhase(source.id, "folder_preparing")
+      let entryCutoff = entry.relative == retryPath ? nil : manualCutoff
       let prepared = try await FolderMedia.prepare(root: root, entry: entry) { relative in
-        guard let data = try? await self.call(["action": "eligible", "source": source.id, "relative": relative]) else { return false }
+        var eligibility: [String: Any] = ["action": "eligible", "source": source.id, "relative": relative]
+        if let entryCutoff { eligibility["max_created_ms"] = entryCutoff }
+        guard let data = try? await self.call(eligibility) else { return false }
         return (try? JSONDecoder().decode(Bool.self, from: data)) ?? false
       }
       var primary = entry

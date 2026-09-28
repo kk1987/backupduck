@@ -108,6 +108,55 @@ fn baseline_excludes_only_existing_and_ignore_can_be_retried() {
     assert_eq!(i.candidates("a", "r", now + 23000, 10).unwrap().len(), 1);
 }
 #[test]
+fn manual_run_excludes_files_created_after_its_start_even_with_old_modified_dates() {
+    let t = Temp::new();
+    fs::write(t.root().join("existing.jpg"), b"photo").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let cutoff = clock();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(t.root().join("later.jpg"), b"photo").unwrap();
+    let mut index = t.index();
+    let observed = clock();
+    scan(&mut index, "source", &t.root(), observed);
+    let candidates = index
+        .candidates_for_cutoff(
+            "source",
+            "receiver",
+            observed + 11_000,
+            10,
+            None,
+            Some(cutoff),
+        )
+        .unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].relative, "existing.jpg");
+    assert_eq!(
+        index
+            .pending_before("source", "receiver", Some(cutoff))
+            .unwrap(),
+        1
+    );
+    assert_eq!(index.pending("source", "receiver").unwrap(), 2);
+    index
+        .baseline_before("source", "@baseline", Some(cutoff))
+        .unwrap();
+    assert_eq!(
+        index
+            .candidates("source", "receiver", observed + 11_000, 10)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(!index
+        .eligible_before(
+            "source",
+            "later.jpg",
+            &index.entry("source", "later.jpg").unwrap().revision,
+            Some(cutoff)
+        )
+        .unwrap());
+}
+#[test]
 fn cancelled_scan_never_hides_previous_inventory() {
     let t = Temp::new();
     for n in 0..30 {
