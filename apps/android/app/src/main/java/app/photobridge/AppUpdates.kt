@@ -161,7 +161,7 @@ class UpdatesActivity : AppCompatActivity() {
                     release = it
                     status.text = if (it == null) getString(R.string.updates_current) else getString(R.string.updates_available, it.version)
                     button.setText(if (it == null) R.string.updates_check else R.string.updates_download)
-                }.onFailure { status.setText(R.string.updates_failed) }
+                }.onFailure { status.setText(R.string.updates_check_failed) }
             button.isEnabled = true
         }
     }
@@ -187,7 +187,7 @@ class UpdatesActivity : AppCompatActivity() {
                     status.setText(R.string.updates_confirm)
                 }
                 button.setText(R.string.updates_install)
-            }.onFailure { status.setText(R.string.updates_failed) }
+            }.onFailure { status.setText(R.string.updates_download_failed) }
             button.isEnabled = true
         }
     }
