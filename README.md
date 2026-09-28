@@ -31,7 +31,8 @@ licensing requests.
   conversion, burst metadata and per-sender transfer history.
 - A shared Rust engine with paired HTTPS, certificate pinning, original-resource
   checksums, resumable uploads, persistent queues and automatic transient retries.
-- Configurable storage budgets, private-staging reclamation and diagnostics.
+- Configurable storage budgets and Android receiver temperature protection,
+  private-staging reclamation and diagnostics.
 - Signed Sparkle updates on Mac and verified, user-confirmed APK updates on Android.
 - An English/Simplified Chinese website and native interfaces.
 

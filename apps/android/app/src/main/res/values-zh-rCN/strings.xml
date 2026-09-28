@@ -9,6 +9,9 @@
 <string name="receiver_idle">接收服务已停止</string>
 <string name="receiver_starting">正在启动安全接收服务…</string>
 <string name="receiver_ready">可以接收照片</string>
+<string name="receiver_thermal_paused">手机温度偏高，已暂停接收</string>
+<string name="receiver_thermal_reading">当前电池温度 %1$s°C，降温后自动恢复。已接收的进度会保留。</string>
+<string name="receiver_thermal_cooling">降温后自动恢复。已接收的进度会保留。</string>
 <string name="receiver_published">已向设备图库发布 %1$d 项</string>
 <string name="receiver_error">未能完成操作：%1$s</string>
 <string name="receiver_pair_instruction">使用 iPhone 上的 PhotoBridge 扫描。此二维码授予接收端访问权限，请仅用于自己的设备。</string>
@@ -69,6 +72,11 @@
 <string name="nav_settings">设置</string>
 <string name="receiver_pair_section">连接设备</string>
 <string name="receiver_behavior">接收行为</string>
+<string name="receiver_thermal_switch">手机过热时暂停接收</string>
+<string name="receiver_thermal_note">默认开启。电池温度达到设定值或系统报告严重过热时暂停；降温后自动恢复。</string>
+<string name="receiver_thermal_threshold">暂停温度</string>
+<string name="receiver_thermal_threshold_value">暂停温度：%1$d°C</string>
+<string name="receiver_thermal_option">%1$d°C</string>
 <string name="settings_diagnostics">诊断</string>
 <string name="logs_retention_settings">日志保留</string>
 <string name="storage_limits">空间预算</string>

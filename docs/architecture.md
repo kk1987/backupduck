@@ -62,6 +62,16 @@ returns an error without committing the asset. Native receivers must also expose
 actual space/temperature constraints. Reservation cancellation and orphan garbage
 collection are intentionally absent from this first milestone.
 
+The Android receiver reads battery temperature and Android's thermal status while
+running. Temperature protection is on by default at 40°C (adjustable from 35–45°C,
+or off). At the threshold or severe system thermal status it holds admission of
+new assets and subsequent upload chunks. It resumes after cooling below the
+threshold by 2°C and after the system status falls below moderate. The hold is
+combined with Google Photos cleanup holds, so one guard cannot clear the other.
+Sender busy responses retry from receiver-confirmed offsets; the original bytes
+and receipts are retained. The setting controls PhotoBridge's receiver, not
+Android's own thermal management.
+
 ## Receipt and target processing
 
 Receipt: `receiving -> received`.

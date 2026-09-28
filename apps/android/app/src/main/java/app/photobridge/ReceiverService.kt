@@ -20,7 +20,8 @@ internal data class RecentTransfer(val id: String, val filename: String, val kin
     val confirmedBytes: Long, val receipt: String, val processing: String)
 internal data class ReceiverSnapshot(val phase: String = "idle", val published: Int = 0, val error: String? = null,
     val received: Int = 0, val total: Int = 0, val failed: Int = 0, val reservedBytes: Long = 0,
-    val capacityBytes: Long = 0, val recent: List<RecentTransfer> = emptyList(), val processingName: String? = null)
+    val capacityBytes: Long = 0, val recent: List<RecentTransfer> = emptyList(), val processingName: String? = null,
+    val thermalHeld: Boolean = false, val temperatureDeciCelsius: Int? = null)
 internal object ReceiverState {
     val mutable = MutableStateFlow(ReceiverSnapshot())
     val snapshot = mutable.asStateFlow()
@@ -60,6 +61,7 @@ class ReceiverService : Service() {
                     ReceiverState.mutable.update { it.copy(phase = "starting") }
                     var opened = false
                     var dashboard: Job? = null
+                    var thermalMonitor: Job? = null
                     var advertisement: ReceiverAdvertisement? = null
                     var wifiLease: WifiManager.WifiLock? = null
                     try {
@@ -76,10 +78,38 @@ class ReceiverService : Service() {
                         wifiLease = getSystemService(WifiManager::class.java)
                             .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "PhotoBridge:receiver")
                             .apply { setReferenceCounted(false); acquire() }
-                        NativeBridge.request(JSONObject().put("op", "receiver_transfer_hold").put("held", cleanup.held))
+                        val initialThermal = readThermal(this@ReceiverService)
+                        val initialDecision = ThermalDecision().next(ReceiverThermalSettings.enabled(this@ReceiverService),
+                            ReceiverThermalSettings.threshold(this@ReceiverService), initialThermal)
+                        ReceiverHolds.setThermal(this@ReceiverService, initialDecision.held)
+                        if (initialDecision.held) updateThermalNotification(true)
                         ReceiverState.pairing = pairing.toString()
                         advertisement = runCatching { ReceiverAdvertisement(this@ReceiverService, pairing.getString("receiver_id"), 8484) }.getOrNull()
-                        ReceiverState.mutable.value = ReceiverSnapshot(phase = "ready")
+                        ReceiverState.mutable.value = ReceiverSnapshot(phase = "ready", thermalHeld = initialDecision.held,
+                            temperatureDeciCelsius = initialThermal.deciCelsius)
+                        thermalMonitor = scope.launch {
+                            try {
+                                var decision = initialDecision
+                                while (isActive) {
+                                    val reading = readThermal(this@ReceiverService)
+                                    val next = decision.next(ReceiverThermalSettings.enabled(this@ReceiverService),
+                                        ReceiverThermalSettings.threshold(this@ReceiverService), reading)
+                                    if (next.held != decision.held) {
+                                        ReceiverHolds.setThermal(this@ReceiverService, next.held)
+                                        updateThermalNotification(next.held)
+                                    }
+                                    decision = next
+                                    ReceiverState.mutable.update { it.copy(thermalHeld = decision.held,
+                                        temperatureDeciCelsius = reading.deciCelsius) }
+                                    delay(2_000)
+                                }
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) {
+                                // Do not leave an unmonitored receiver accepting more bytes.
+                                ReceiverState.mutable.update { it.copy(error = "thermal_monitor_unavailable") }
+                                stopSelf()
+                            }
+                        }
                         dashboard = launch {
                             while (isActive) {
                                 runCatching {
@@ -106,8 +136,14 @@ class ReceiverService : Service() {
                             val healthy = NativeBridge.request(JSONObject().put("op", "receiver_status")) as JSONObject
                             check(healthy.getBoolean("running")) { "receiver_unavailable" }
                             val space = NativeBridge.request(JSONObject().put("op", "receiver_overview")) as JSONObject
-                            cleanup.tick(space.getLong("free_bytes"), space.getLong("min_free_bytes"))
-                            if (!cleanup.held) ReceiverState.mediaOperations.withLock { retention.step(this@ReceiverService); publish() }
+                            if (ReceiverHolds.thermalHeld) ReceiverHolds.sync(this@ReceiverService)
+                            else cleanup.tick(space.getLong("free_bytes"), space.getLong("min_free_bytes"))
+                            if (!cleanup.held && !ReceiverHolds.thermalHeld) ReceiverState.mediaOperations.withLock {
+                                if (!cleanup.held && !ReceiverHolds.thermalHeld) {
+                                    retention.step(this@ReceiverService)
+                                    publish()
+                                }
+                            }
                             delay(5_000)
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
@@ -116,11 +152,14 @@ class ReceiverService : Service() {
                     } finally {
                         withContext(NonCancellable + Dispatchers.IO) {
                             advertisement?.close()
+                            thermalMonitor?.cancelAndJoin()
                             dashboard?.cancelAndJoin()
                             ReceiverState.pairing = null
                             if (opened) runCatching { NativeBridge.request(JSONObject().put("op", "stop_receiver")) }
+                            ReceiverHolds.reset()
                             wifiLease?.let { lease -> if (lease.isHeld) lease.release() }
-                            ReceiverState.mutable.update { it.copy(phase = if (scope.isActive) "waiting" else "idle", processingName = null) }
+                            ReceiverState.mutable.update { it.copy(phase = if (scope.isActive) "waiting" else "idle",
+                                processingName = null, thermalHeld = false, temperatureDeciCelsius = null) }
                         }
                     }
                     delay(5_000)
@@ -134,6 +173,7 @@ class ReceiverService : Service() {
         if (items.length() == 0) { cursor = ""; return }
         for (index in 0 until items.length()) {
             currentCoroutineContext().ensureActive()
+            if (ReceiverHolds.thermalHeld) break
             val item = items.getJSONObject(index)
             cursor = item.getString("id")
             if (item.getString("processing") == "failed") continue
@@ -178,6 +218,16 @@ class ReceiverService : Service() {
         return manager.getLinkProperties(network)?.linkAddresses?.map { it.address }
             ?.filterIsInstance<Inet4Address>()?.firstOrNull { !it.isLoopbackAddress }?.hostAddress
             ?: error("wifi_required")
+    }
+    private fun updateThermalNotification(held: Boolean) {
+        runCatching {
+            val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val notification = Notification.Builder(this, "receiver")
+                .setContentTitle(getString(R.string.app_name))
+                .setContentText(getString(if (held) R.string.receiver_thermal_paused else R.string.receiver_notification))
+                .setSmallIcon(android.R.drawable.stat_sys_upload).setContentIntent(open).build()
+            getSystemService(NotificationManager::class.java).notify(1, notification)
+        }
     }
     override fun onTimeout(startId: Int, fgsType: Int) {
         ReceiverState.mutable.update { it.copy(phase = "waiting", error = "system_time_limit") }

@@ -31,6 +31,6 @@ internal class PhotosCleanup(private val context: Context) {
             cooldown(if (pending) 60_000 else 5 * 60_000)
             withContext(Dispatchers.Main) { PhotosProbeService.clean() }
         }
-        NativeBridge.request(JSONObject().put("op", "receiver_transfer_hold").put("held", held))
+        ReceiverHolds.sync(context)
     }
 }

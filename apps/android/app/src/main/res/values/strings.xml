@@ -9,6 +9,9 @@
 <string name="receiver_idle">Receiver is stopped</string>
 <string name="receiver_starting">Starting secure receiver…</string>
 <string name="receiver_ready">Ready to receive</string>
+<string name="receiver_thermal_paused">Phone is warm · receiving paused</string>
+<string name="receiver_thermal_reading">Battery temperature: %1$s°C. Receiving resumes after cooling. Progress is kept.</string>
+<string name="receiver_thermal_cooling">Receiving resumes after cooling. Progress is kept.</string>
 <string name="receiver_published">Published %1$d items to the device gallery</string>
 <string name="receiver_error">Could not complete this operation: %1$s</string>
 <string name="receiver_pair_instruction">Scan this code in PhotoBridge on your iPhone. It grants access to this receiver. Share it only with your own devices.</string>
@@ -69,6 +72,11 @@
 <string name="nav_settings">Settings</string>
 <string name="receiver_pair_section">Connect your devices</string>
 <string name="receiver_behavior">Receiving</string>
+<string name="receiver_thermal_switch">Pause receiving when the phone is hot</string>
+<string name="receiver_thermal_note">On by default. Pauses at the chosen battery temperature or when Android reports severe heat; resumes after cooling.</string>
+<string name="receiver_thermal_threshold">Pause temperature</string>
+<string name="receiver_thermal_threshold_value">Pause temperature: %1$d°C</string>
+<string name="receiver_thermal_option">%1$d°C</string>
 <string name="settings_diagnostics">Diagnostics</string>
 <string name="logs_retention_settings">Log retention</string>
 <string name="storage_limits">Storage limits</string>

@@ -194,7 +194,7 @@ class PhotosProbeService : AccessibilityService() {
                 screenLease?.let { runCatching { if (it.isHeld) it.release() } }
                 mutableState.value = mutableState.value.copy(running = false, observation = cleanup.reason)
                 withContext(NonCancellable + Dispatchers.IO) { runCatching {
-                    NativeBridge.request(JSONObject().put("op", "receiver_transfer_hold").put("held", cleanup.held))
+                    ReceiverHolds.sync(this@PhotosProbeService)
                 } }
             }
         }

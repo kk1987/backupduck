@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navigation: BottomNavigationView
     private lateinit var status: TextView
     private lateinit var detail: TextView
+    private lateinit var thermalNotice: TextView
     private lateinit var recoveryText: TextView
     private lateinit var recoveryAction: Button
     private lateinit var pair: Button
@@ -153,6 +154,7 @@ class MainActivity : AppCompatActivity() {
         card(panel) { body ->
             status = label(body, getString(R.string.receiver_idle), 22)
             detail = label(body, "", 15, secondaryColor())
+            thermalNotice = label(body, "", 14, secondaryColor()).apply { visibility = View.GONE }
             recoveryText = label(body, "", 15, secondaryColor()).apply { visibility = View.GONE }
             recoveryAction = action(body, R.string.receiver_help_title) {
                 receiverProblem(ReceiverState.snapshot.value)?.let { problem ->
@@ -213,6 +215,36 @@ class MainActivity : AppCompatActivity() {
             })
             label(body, getString(if (Build.VERSION.SDK_INT >= 35) R.string.receiver_restore_note_modern else R.string.receiver_restore_note_legacy), 14, secondaryColor())
         }
+        card(panel) { body ->
+            val protection = MaterialSwitch(this).apply {
+                setText(R.string.receiver_thermal_switch)
+                isChecked = ReceiverThermalSettings.enabled(this@MainActivity)
+                minimumHeight = dp(56)
+            }
+            body.addView(protection)
+            label(body, getString(R.string.receiver_thermal_note), 14, secondaryColor())
+            val threshold = action(body, R.string.receiver_thermal_threshold) {}
+            threshold.isEnabled = protection.isChecked
+            protection.setOnCheckedChangeListener { _, checked ->
+                ReceiverThermalSettings.setEnabled(this@MainActivity, checked)
+                threshold.isEnabled = checked
+            }
+            fun updateThreshold() {
+                threshold.text = getString(R.string.receiver_thermal_threshold_value,
+                    ReceiverThermalSettings.threshold(this@MainActivity))
+            }
+            updateThreshold()
+            threshold.setOnClickListener {
+                val choices = ReceiverThermalSettings.choices
+                val labels = choices.map { getString(R.string.receiver_thermal_option, it) }.toTypedArray()
+                MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.receiver_thermal_threshold)
+                    .setSingleChoiceItems(labels, choices.indexOf(ReceiverThermalSettings.threshold(this@MainActivity))) { dialog, index ->
+                        ReceiverThermalSettings.setThreshold(this@MainActivity, choices[index])
+                        updateThreshold()
+                        dialog.dismiss()
+                    }.setNegativeButton(R.string.receiver_close, null).show()
+            }
+        }
         section(panel, R.string.settings_diagnostics)
         card(panel) { body ->
             action(body, R.string.logs_retention_settings) { showStorageControls(StorageSection.LOGS) {} }
@@ -254,13 +286,17 @@ class MainActivity : AppCompatActivity() {
             recoveryAction.setText(problem.action)
         }
         status.text = when (state.phase) {
-            "ready" -> getString(R.string.receiver_ready)
+            "ready" -> getString(if (state.thermalHeld) R.string.receiver_thermal_paused else R.string.receiver_ready)
             "starting" -> getString(R.string.receiver_starting)
             "waiting" -> getString(R.string.receiver_waiting)
             "error" -> getString(R.string.settings_failed)
             else -> getString(R.string.receiver_idle)
         }
         detail.text = (if (state.phase == "idle") localTotals ?: getString(R.string.history_loading) else getString(R.string.receiver_totals, state.received, state.total, state.published))
+        thermalNotice.visibility = if (state.phase == "ready" && state.thermalHeld) View.VISIBLE else View.GONE
+        thermalNotice.text = state.temperatureDeciCelsius?.let {
+            getString(R.string.receiver_thermal_reading, String.format(java.util.Locale.getDefault(), "%.1f", it / 10.0))
+        } ?: getString(R.string.receiver_thermal_cooling)
         processing.text = state.processingName?.let { getString(R.string.receiver_processing, it) } ?: ""
         processing.visibility = if (state.processingName == null) View.GONE else View.VISIBLE
         processingProgress.visibility = processing.visibility
