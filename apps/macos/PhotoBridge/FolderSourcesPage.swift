@@ -674,7 +674,7 @@ private struct FolderFileRow: View {
         Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
       }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
       Image(systemName: taskSymbol(entry.state))
-        .foregroundStyle(entry.state == "received" ? .green : .secondary)
+        .foregroundStyle(entry.state == "received" ? .blue : .secondary)
         .help(LocalizedStringKey(entry.state.map { "state_" + $0 } ?? "folder_not_queued"))
     }.padding(.vertical, 10)
   }
