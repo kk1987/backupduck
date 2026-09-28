@@ -54,8 +54,8 @@ fn jpeg_live_photo_keeps_original_mov() {
     )
     .unwrap();
     let result = std::fs::read(output).unwrap();
-    assert!(result.windows(mov.len()).any(|window| window == mov));
-    assert!(result.ends_with(b"SEFT"));
+    assert!(result.ends_with(mov));
+    assert!(!result.windows(4).any(|window| window == b"SEFH"));
     assert!(String::from_utf8_lossy(&result).contains("Item:Mime=\"video/quicktime\""));
     assert_eq!(std::fs::read(image).unwrap(), jpeg);
     std::fs::remove_dir_all(root).unwrap();
@@ -102,11 +102,13 @@ fn real_jpeg_live_photo_when_available() {
         &result[new_scan..new_scan + original_still.len() - old_scan],
         &original_still[old_scan..]
     );
-    assert!(result
-        .windows(original_video.len())
-        .any(|window| window == original_video));
-    assert!(result.ends_with(b"SEFT"));
+    assert!(result.ends_with(&original_video));
+    assert!(!result.windows(4).any(|window| window == b"SEFH"));
     assert!(String::from_utf8_lossy(&result).contains("Item:Mime=\"video/quicktime\""));
+    assert!(String::from_utf8_lossy(&result).contains(&format!(
+        "Item:Semantic=\"GainMap\" Item:Length=\"{}\"",
+        old_entries[1].0
+    )));
 }
 
 const XMP: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
@@ -377,8 +379,8 @@ fn ordinary_xmp_is_merged_without_touching_image_or_video() {
     assert!(String::from_utf8_lossy(&result).contains(r#"test:value="kept"/>"#));
     assert!(String::from_utf8_lossy(&result).contains("test:value=\"kept\""));
     assert!(String::from_utf8_lossy(&result).contains("GCamera:MotionPhoto=\"1\""));
-    assert!(result.windows(video.len()).any(|w| w == video));
-    assert!(result.ends_with(b"SEFT"));
+    assert!(result.ends_with(video));
+    assert!(!result.windows(4).any(|w| w == b"SEFH"));
     assert_eq!(std::fs::read(image).unwrap(), plain);
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -408,10 +410,14 @@ fn ordinary_xmp_with_mpf_keeps_auxiliary_jpeg_and_rebases_offsets() {
     assert_eq!(entries[0].0 as usize, auxiliary);
     assert_eq!(entries[1].0 as usize, GAIN_MAP.len());
     assert_eq!(&result[auxiliary..auxiliary + GAIN_MAP.len()], GAIN_MAP);
-    assert!(result.windows(video.len()).any(|w| w == video));
-    assert!(result.ends_with(b"SEFT"));
+    assert!(result.ends_with(video));
+    assert!(!result.windows(4).any(|w| w == b"SEFH"));
     assert!(String::from_utf8_lossy(&result).contains("test:value=\"kept\""));
     assert!(String::from_utf8_lossy(&result).contains("GCamera:MotionPhoto=\"1\""));
+    assert!(String::from_utf8_lossy(&result).contains(&format!(
+        "Item:Semantic=\"GainMap\" Item:Length=\"{}\"",
+        GAIN_MAP.len()
+    )));
     assert_eq!(std::fs::read(image).unwrap(), source);
     std::fs::remove_dir_all(root).unwrap();
 }

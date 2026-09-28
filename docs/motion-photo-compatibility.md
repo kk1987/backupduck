@@ -108,6 +108,46 @@ MOV were byte-identical, confirming that the production receiver took the
 direct path without transcoding. Google Photos cloud recognition of these
 retried copies has not yet been verified.
 
+## JPEG cloud recognition after local publication
+
+The next check found that local Pixel playback and successful MediaStore
+publication still did not guarantee Google Photos cloud animation for the
+shared-library JPG/MOV samples. The downloaded cloud object for one static
+sample matched its Pixel gallery copy byte-for-byte, so this was not a lost
+video during cloud transfer. The old direct JPEG writer described the appended
+MOV while omitting the MPF auxiliary JPEG from its XMP container directory,
+declared a primary padding gap that did not match the file, and appended a SEF
+footer after the MOV. This conflicts with Android's [Motion Photo container
+layout](https://developer.android.com/media/platform/motion-photo-format),
+which requires a directory item for each concatenated resource and the video
+as the final item.
+
+Two authorized copies of one sample were backed up to Google Photos on the
+test Pixel. Changing only the container padding left the cloud item static.
+The copy with MP4/H.264 video and AAC audio showed an animation control in
+Google Photos Web, and the animation opened. The latter retained the original
+JPEG and copied its H.264 video samples; only the audio needed encoding. This
+narrows the tested cause to the video container/audio compatibility, while the
+old JPEG directory and trailing-footer violations remain format defects.
+
+The writer now lists the preserved MPF auxiliary JPEG, makes the appended video
+the exact end of the file, and removes the invented padding and SEF footer.
+Android's JPG+MOV publication path now uses Media3 Transformer to produce
+MP4/H.264/AAC before packaging. Media3 can copy compatible compressed video
+samples into the new container without re-encoding them; it converts audio
+when necessary. The still image and its MPF auxiliary image are not decoded or
+re-encoded on this direct path. Regression tests check the directory, MPF
+offsets, source bytes, and exact video tail. Previously published copies are
+not rewritten by an app update; the final Android output still requires a
+separate device-and-cloud acceptance check.
+
+The sender now follows Android's processing state after its transfer receipt.
+It reports a gallery publication failure independently of transfer success and
+keeps polling the receiver after a processing retry without retransmitting the
+originals. "Added to phone gallery" is still distinct from a Google Photos
+cloud backup or playable animation; there is no Google cloud success signal in
+the PhotoBridge protocol.
+
 ## Future investigation checklist
 
 1. Verify the original still and paired video against sender/receiver checksums.

@@ -38,6 +38,8 @@ struct BackupJob: Decodable, Identifiable, Equatable {
   let state: String
   let confirmedBytes: UInt64
   let errorCode: String?
+  var processing: String? = nil
+  var processingError: String? = nil
   var attempts: Int? = nil
   var nextAttemptAt: Int64? = nil
   var stateChangedAt: Int64? = nil
@@ -50,6 +52,8 @@ struct BackupJob: Decodable, Identifiable, Equatable {
     case sortValue = "sort_value"
     case confirmedBytes = "confirmed_bytes"
     case errorCode = "error_code"
+    case processing
+    case processingError = "processing_error"
   }
 }
 
@@ -135,6 +139,7 @@ enum Bridge {
   @Published var pendingImports = 0
   @Published var preparationReason: String?
   private var lastStorageRefresh = Date.distantPast
+  private var lastProcessingRefresh = Date.distantPast
   @Published var hasMoreJobs = false
   private var jobsLimit = 200
   @Published var queueRevision: Int64 = -1
@@ -235,6 +240,12 @@ enum Bridge {
           receiverDiscovery.update(pairing: pairing, active: Self.canPoll)
           if Self.canPoll {
             Task { await self.syncDeviceProfile() }
+            if let pairing, Date().timeIntervalSince(lastProcessingRefresh) >= 15 {
+              lastProcessingRefresh = Date()
+              if let value = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(pairing)) {
+                _ = try? await Bridge.call(["op": "refresh_processing", "pairing": value])
+              }
+            }
             await refresh()
             if !paused { _ = await canPrepareForReceiver() }
             await BackgroundTransfer.shared.kick()
@@ -810,6 +821,8 @@ struct SenderSummary: Decodable {
   var next_retry_at: Int64?
   var total = 0
   var received = 0
+  var published = 0
+  var publication_failed = 0
   var waiting = 0
   var failed = 0
   var queued = 0

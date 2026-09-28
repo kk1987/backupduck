@@ -618,6 +618,9 @@ enum Command {
     RunSender {
         pairing: Pairing,
     },
+    RefreshProcessing {
+        pairing: Pairing,
+    },
     PauseSender {
         paused: bool,
     },
@@ -1245,6 +1248,47 @@ fn dispatch(command: Command) -> Result<Value> {
         Command::RunSender { pairing } => Ok(serde_json::to_value(
             runtime().block_on(sender()?.run_once(&pairing))?,
         )?),
+        Command::RefreshProcessing { pairing } => {
+            let host = sender()?;
+            let due = host.sender.lock().map_err(lock)?.processing_due(
+                &pairing.receiver_id,
+                now(),
+                12,
+            )?;
+            if due.is_empty() {
+                return Ok(json!({"checked": 0}));
+            }
+            let client = pairing.client()?;
+            let checked = runtime().block_on(async {
+                let mut checked = 0;
+                for (id, asset_id) in due {
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        client.status(&asset_id),
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(status)) => {
+                            host.sender.lock().map_err(lock)?.observe_processing(
+                                id,
+                                &status,
+                                now(),
+                            )?;
+                            checked += 1;
+                        }
+                        _ => {
+                            host.sender
+                                .lock()
+                                .map_err(lock)?
+                                .postpone_processing(id, now())?;
+                            break;
+                        }
+                    }
+                }
+                Ok::<_, Error>(checked)
+            })?;
+            Ok(json!({"checked": checked}))
+        }
         Command::PauseSender { paused } => {
             sender()?.pause(paused)?;
             sender()?.maintenance.lock().map_err(lock)?.log(

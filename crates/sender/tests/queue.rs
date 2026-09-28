@@ -64,6 +64,47 @@ fn status(j: &Job, received: bool) -> AssetStatus {
 }
 
 #[test]
+fn gallery_failure_stays_visible_and_retry_never_requeues_original_bytes() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    add(&mut s);
+    let j = s.claim("receiver-1", 0).unwrap().unwrap();
+    let mut receipt = status(&j, true);
+    receipt.processing = ProcessingState::Pending;
+    s.acknowledge(&j.attempt(), &receipt).unwrap();
+    assert_eq!(
+        s.job(j.id).unwrap().processing,
+        Some(ProcessingState::Pending)
+    );
+    assert_eq!(s.processing_due("receiver-1", 1, 10).unwrap().len(), 1);
+    assert!(s.claim("receiver-1", 1).unwrap().is_none());
+
+    receipt.processing = ProcessingState::Failed;
+    receipt.processing_error = Some("unsupported".into());
+    s.observe_processing(j.id, &receipt, 2).unwrap();
+    assert_eq!(
+        s.job(j.id).unwrap().processing_error.as_deref(),
+        Some("unsupported")
+    );
+    assert_eq!(s.summary("receiver-1").unwrap()["publication_failed"], 1);
+    assert!(s.processing_due("receiver-1", 20, 10).unwrap().is_empty());
+
+    receipt.processing = ProcessingState::Complete;
+    receipt.processing_error = None;
+    s.observe_processing(j.id, &receipt, 63).unwrap();
+    drop(s);
+    let mut s = Sender::open(&t.0).unwrap();
+    assert_eq!(s.job(j.id).unwrap().state, JobState::Received);
+    assert_eq!(
+        s.job(j.id).unwrap().processing,
+        Some(ProcessingState::Complete)
+    );
+    assert_eq!(s.summary("receiver-1").unwrap()["published"], 1);
+    assert!(s.processing_due("receiver-1", 1000, 10).unwrap().is_empty());
+    assert!(s.claim("receiver-1", 1000).unwrap().is_none());
+}
+
+#[test]
 fn capture_order_survives_restart_and_keeps_running_and_delayed_jobs() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();

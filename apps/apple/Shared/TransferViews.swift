@@ -62,6 +62,14 @@ struct TransferRow: View {
     return progress.displayedBytes(confirmed: job.confirmedBytes, total: job.totalBytes)
   }
   private var statusKey: String {
+    if job.state == "received" {
+      switch job.processing {
+      case "complete": return "state_published"
+      case "failed": return "state_publication_failed"
+      case "pending": return "state_publication_pending"
+      default: return "state_received"
+      }
+    }
     guard job.state == "running" else { return "state_" + job.state }
     if progress?.waitingForNetwork == true { return "waiting_for_wifi" }
     guard let progress, progress.sent > 0 else { return "state_scheduled" }
@@ -90,8 +98,8 @@ struct TransferRow: View {
         HStack {
           Text(job.asset.resources.first?.filename ?? "").lineLimit(1)
           Spacer()
-          Image(systemName: taskSymbol(job.state)).foregroundStyle(
-            job.state == "received" ? .blue : job.state == "failed" ? .orange : .secondary)
+          Image(systemName: job.state == "received" && job.processing == "failed" ? "exclamationmark.circle" : taskSymbol(job.state)).foregroundStyle(
+            job.state == "received" && job.processing == "failed" ? .orange : job.state == "received" ? .blue : job.state == "failed" ? .orange : .secondary)
         }
         HStack(spacing: 8) {
           Label(LocalizedStringKey("library_filter_" + (job.asset.metadata?["burst_group_ref"] != nil ? "burst" : job.asset.kind)),
@@ -317,11 +325,17 @@ struct BackupStatusIndicator: View {
     if let message = model.message { return message }
     if model.pairing == nil { return NSLocalizedString("receiver_unpaired", comment: "") }
     if !model.ready { return NSLocalizedString("backup_initializing", comment: "") }
-    if model.summary.failed > 0 {
-      return String(format: NSLocalizedString("backup_status_failed_count", comment: ""), model.summary.failed)
+    if model.summary.failed + model.summary.publication_failed > 0 {
+      return String(format: NSLocalizedString("backup_status_failed_count", comment: ""), model.summary.failed + model.summary.publication_failed)
     }
     if model.waitingForNetwork { return NSLocalizedString("waiting_for_wifi", comment: "") }
     if let reason = model.waitingReason { return NSLocalizedString("error_" + reason, comment: "") }
+    if model.summary.received > model.summary.published + model.summary.publication_failed {
+      return NSLocalizedString("backup_status_publication_pending", comment: "")
+    }
+    if model.summary.received > 0 {
+      return NSLocalizedString("backup_status_gallery_complete", comment: "")
+    }
     return NSLocalizedString(model.paused ? "backup_paused" : "backup_status_ready", comment: "")
   }
   private var status: (key: String, symbol: String, color: Color) {
@@ -330,7 +344,7 @@ struct BackupStatusIndicator: View {
       : ("backup_indicator_attention", "exclamationmark.circle", .orange) }
     if model.pairing == nil { return ("backup_indicator_unpaired", "link", .secondary) }
     if model.paused { return ("backup_indicator_paused", "pause.circle", .secondary) }
-    if model.message != nil || model.summary.failed > 0 {
+    if model.message != nil || model.summary.failed + model.summary.publication_failed > 0 {
       return ("backup_indicator_attention", "exclamationmark.circle", .orange)
     }
     if model.waitingForNetwork || model.receiverUnavailable {
@@ -342,6 +356,12 @@ struct BackupStatusIndicator: View {
     if model.waitingReason != nil { return ("backup_indicator_retry", "clock", .orange) }
     if model.pendingImports > 0 || model.summary.queued > 0 {
       return ("backup_indicator_waiting", "clock", .secondary)
+    }
+    if model.summary.received > model.summary.published + model.summary.publication_failed {
+      return ("backup_indicator_publication_pending", "clock", .secondary)
+    }
+    if model.summary.received > 0 {
+      return ("backup_indicator_gallery_complete", "photo.on.rectangle", .accentColor)
     }
     return ("backup_indicator_ready", "checkmark.circle", .green)
   }
@@ -371,6 +391,8 @@ struct BackupStatusIndicator: View {
               Text(title).textSelection(.enabled)
               Text(String(format: NSLocalizedString("transfer_summary", comment: ""),
                 model.summary.received, model.summary.total)).foregroundStyle(.secondary)
+              Text(String(format: NSLocalizedString("publication_summary", comment: ""),
+                model.summary.published, model.summary.received)).foregroundStyle(.secondary)
               if model.waitingForNetwork || model.receiverUnavailable { Text("waiting_for_wifi") }
               WaitingStatus(model: model)
             }.frame(maxWidth: .infinity, alignment: .leading)

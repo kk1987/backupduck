@@ -16,6 +16,14 @@ pub use sorting::JobQuery;
 fn db(e: rusqlite::Error) -> Error {
     Error::Storage(e.to_string())
 }
+fn processing_name(state: &ProcessingState) -> &'static str {
+    match state {
+        ProcessingState::NotRequested => "not_requested",
+        ProcessingState::Pending => "pending",
+        ProcessingState::Complete => "complete",
+        ProcessingState::Failed => "failed",
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
@@ -39,6 +47,11 @@ pub struct Job {
     pub confirmed_bytes: u64,
     pub error_code: Option<String>,
     pub native_task_id: Option<String>,
+    /// Receiver gallery publication, independent of the verified transfer receipt.
+    #[serde(default)]
+    pub processing: Option<ProcessingState>,
+    #[serde(default)]
+    pub processing_error: Option<String>,
     #[serde(default)]
     pub state_changed_at_ms: Option<i64>,
     #[serde(default)]
@@ -116,6 +129,7 @@ impl Sender {
                 UNIQUE(receiver_id,asset_id));
             CREATE INDEX IF NOT EXISTS jobs_due ON jobs(receiver_id,state,next_attempt_at,id);
             CREATE TABLE IF NOT EXISTS native_checkpoints(job_id INTEGER PRIMARY KEY,status TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS processing_observations(job_id INTEGER PRIMARY KEY,state TEXT,error TEXT,checked_at INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS receiver_features(receiver_id TEXT PRIMARY KEY,bundle_upload INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
             INSERT OR IGNORE INTO settings VALUES('paused',0);
@@ -183,7 +197,7 @@ impl Sender {
         self.conn.query_row("SELECT id FROM jobs WHERE receiver_id=?1 AND json_extract(manifest,'$.source_id')=?2 AND json_extract(manifest,'$.revision')=?3 ORDER BY id DESC LIMIT 1",params![receiver,source,revision],|r|r.get(0)).optional().map_err(db)
     }
     pub fn job(&self, id: i64) -> Result<Job> {
-        let row = self.conn.query_row("SELECT receiver_id,manifest,sources,state,generation,attempts,next_attempt_at,confirmed_bytes,error_code,native_task_id FROM jobs WHERE id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
+        let row = self.conn.query_row("SELECT j.receiver_id,j.manifest,j.sources,j.state,j.generation,j.attempts,j.next_attempt_at,j.confirmed_bytes,j.error_code,j.native_task_id,j.state_changed_at_ms,p.state,p.error FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id WHERE j.id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<i64>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
         Ok(Job {
             id,
             receiver_id: row.0,
@@ -196,14 +210,12 @@ impl Sender {
             confirmed_bytes: row.7 as u64,
             error_code: row.8,
             native_task_id: row.9,
-            state_changed_at_ms: self
-                .conn
-                .query_row(
-                    "SELECT state_changed_at_ms FROM jobs WHERE id=?1",
-                    [id],
-                    |r| r.get(0),
-                )
-                .map_err(db)?,
+            processing: row
+                .11
+                .map(|s| serde_json::from_value(serde_json::Value::String(s)))
+                .transpose()?,
+            processing_error: row.12,
+            state_changed_at_ms: row.10,
             sort_value: None,
         })
     }
@@ -411,6 +423,12 @@ impl Sender {
         }
         result["total"] = count.into();
         result["confirmed_bytes"] = bytes.into();
+        let (published, publication_failed): (i64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(CASE WHEN p.state='complete' THEN 1 ELSE 0 END),0), COALESCE(SUM(CASE WHEN p.state='failed' THEN 1 ELSE 0 END),0) FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id WHERE j.receiver_id=?1 AND j.state='received' AND (?2 IS NULL OR COALESCE(json_extract(j.manifest,'$.metadata.source_ref'),'library')=?2)",
+            params![receiver, source], |r| Ok((r.get(0)?, r.get(1)?)),
+        ).map_err(db)?;
+        result["published"] = published.into();
+        result["publication_failed"] = publication_failed.into();
         let waiting: Option<(String,i64)> = self.conn.query_row("SELECT error_code,next_attempt_at FROM jobs WHERE receiver_id=?1 AND state='waiting' AND (?2 IS NULL OR COALESCE(json_extract(manifest,'$.metadata.source_ref'),'library')=?2) ORDER BY next_attempt_at,id LIMIT 1",params![receiver,source],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(db)?;
         result["waiting_reason"] = waiting
             .as_ref()
@@ -582,6 +600,10 @@ impl Sender {
         .map_err(db)?;
         tx.execute("UPDATE jobs SET confirmed_bytes=?1,state=?2,native_task_id=NULL,attempts=0,next_attempt_at=0,error_code=NULL WHERE id=?3",
             params![bytes as i64, if status.receipt==ReceiptState::Received {"received"} else {"queued"},a.job_id]).map_err(db)?;
+        if status.receipt == ReceiptState::Received {
+            tx.execute("INSERT OR REPLACE INTO processing_observations(job_id,state,error,checked_at) VALUES(?1,?2,?3,0)",
+                params![a.job_id, processing_name(&status.processing), status.processing_error]).map_err(db)?;
+        }
         tx.commit().map_err(db)?;
         Ok(())
     }
@@ -604,6 +626,57 @@ impl Sender {
             return Err(Error::Capacity);
         }
         self.conn.execute("UPDATE jobs SET confirmed_bytes=?1,state=?2,native_task_id=CASE WHEN ?2='received' THEN NULL ELSE native_task_id END WHERE id=?3",params![bytes as i64,if status.receipt==ReceiptState::Received {"received"} else {"running"},a.job_id]).map_err(db)?;
+        if status.receipt == ReceiptState::Received {
+            self.conn.execute("INSERT OR REPLACE INTO processing_observations(job_id,state,error,checked_at) VALUES(?1,?2,?3,0)",
+                params![a.job_id, processing_name(&status.processing), status.processing_error]).map_err(db)?;
+        }
+        Ok(())
+    }
+    /// Select a small due batch without changing transport completion or retrying bytes.
+    pub fn processing_due(
+        &self,
+        receiver: &str,
+        now: i64,
+        limit: u32,
+    ) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self.conn.prepare("SELECT j.id,j.asset_id FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id WHERE j.receiver_id=?1 AND j.state='received' AND (p.state IS NULL OR p.state!='complete') AND (p.checked_at IS NULL OR p.checked_at<=?2) ORDER BY COALESCE(p.checked_at,0),j.id DESC LIMIT ?3").map_err(db)?;
+        let result = stmt
+            .query_map(params![receiver, now, limit.clamp(1, 20)], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .map_err(db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db)?;
+        Ok(result)
+    }
+    pub fn observe_processing(&mut self, id: i64, status: &AssetStatus, now: i64) -> Result<()> {
+        let job = self.job(id)?;
+        if job.state != JobState::Received
+            || job.asset.id()? != status.asset_id
+            || status.receipt != ReceiptState::Received
+        {
+            return Err(Error::Conflict("processing observation identity".into()));
+        }
+        let next = now.saturating_add(if status.processing == ProcessingState::Failed {
+            60
+        } else {
+            15
+        });
+        self.conn.execute("INSERT OR REPLACE INTO processing_observations(job_id,state,error,checked_at) VALUES(?1,?2,?3,?4)",
+            params![id, processing_name(&status.processing), status.processing_error, next]).map_err(db)?;
+        if job.processing.as_ref() != Some(&status.processing)
+            || job.processing_error != status.processing_error
+        {
+            // Refresh the UI revision without rewriting a transfer receipt.
+            self.conn
+                .execute("UPDATE settings SET value=value+1 WHERE key='revision'", [])
+                .map_err(db)?;
+        }
+        Ok(())
+    }
+    pub fn postpone_processing(&mut self, id: i64, now: i64) -> Result<()> {
+        self.conn.execute("INSERT INTO processing_observations(job_id,checked_at) VALUES(?1,?2) ON CONFLICT(job_id) DO UPDATE SET checked_at=excluded.checked_at",
+            params![id, now.saturating_add(30)]).map_err(db)?;
         Ok(())
     }
     pub fn fail(&mut self, a: &Attempt, failure: Failure, now: i64) -> Result<()> {

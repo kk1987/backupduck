@@ -2,6 +2,9 @@
 set -eu
 cd "$(dirname "$0")/.."
 export MACOSX_DEPLOYMENT_TARGET=14.0
+# Stripping host proc-macro dylibs during a release build can produce a
+# malformed Mach-O LINKEDIT on macOS. Strip the final application below.
+export CARGO_PROFILE_RELEASE_STRIP=none
 ./scripts/fetch-sparkle.sh
 export CARGO_ENCODED_RUSTFLAGS=$(printf '%s\037%s' "--remap-path-prefix=$PWD=/photobridge" "--remap-path-prefix=$HOME=/builder")
 cargo build --locked --release --target aarch64-apple-darwin -p photobridge-native --features folder-source

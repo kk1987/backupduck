@@ -63,19 +63,30 @@ internal object MotionProcessor {
                 var dated: File? = null
                 try {
                     dated = MediaDates.prepare(context, still, "image/jpeg", asset.optJSONObject("metadata"))
+                    // Google Photos can retain a JPEG+QuickTime MOV byte-for-byte yet
+                    // publish only a static cloud image. Media3 copies compatible
+                    // H.264 samples into MP4 and converts unsupported audio to AAC.
+                    // The JPEG, including its MPF auxiliary image, stays untouched.
+                    val packagedVideo = if (directVideoMime == "video/quicktime" && resumeLocator == null) {
+                        if (mp4.exists()) check(mp4.delete()) { "storage" }
+                        try { transcode(context, video, mp4) }
+                        catch (_: TimeoutCancellationException) { throw IOException("video_conversion_timeout") }
+                        mp4
+                    } else video
                     NativeBridge.request(JSONObject().put("op", "package_motion")
-                        .put("jpeg", dated.path).put("mp4", video.path).put("output", motion.path)
-                        .put("video_mime", directVideoMime)
+                        .put("jpeg", dated.path).put("mp4", packagedVideo.path).put("output", motion.path)
+                        .put("video_mime", if (packagedVideo == mp4) "video/mp4" else directVideoMime)
                         .put("metadata", asset.optJSONObject("metadata") ?: JSONObject()))
                     if (resumeLocator == null || matchesPreparedCopy(item, motion)) {
                         return MediaPublisher.publishFile(context, motion, item, "image/jpeg", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)
                     }
+                    throw IllegalStateException("gallery_copy_changed")
                 } catch (error: IllegalStateException) {
                     if (!isUnsupportedContainer(error)) throw error
                 } finally { if (dated != still) dated?.delete() }
             }
             prepareStill(still, jpeg)
-            val keepOriginalVideo = directVideoMime != null && resumeLocator == null
+            val keepOriginalVideo = directVideoMime == "video/mp4" && resumeLocator == null
             val packagedVideo = if (keepOriginalVideo) video else {
                 if (mp4.exists()) check(mp4.delete()) { "storage" }
                 try { transcode(context, video, mp4) }
@@ -144,7 +155,12 @@ internal object MotionProcessor {
                     transformer = Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                         .addListener(object : Transformer.Listener {
                             override fun onCompleted(composition: Composition, result: ExportResult) {
-                                if (continuation.isActive) continuation.resume(Unit)
+                                if (continuation.isActive) {
+                                    if (result.videoMimeType != MimeTypes.VIDEO_H264 ||
+                                        result.audioMimeType != null && result.audioMimeType != MimeTypes.AUDIO_AAC)
+                                        continuation.resumeWithException(IOException("video_conversion"))
+                                    else continuation.resume(Unit)
+                                }
                             }
                             override fun onError(composition: Composition, result: ExportResult, error: ExportException) {
                                 if (continuation.isActive) continuation.resumeWithException(IOException("video_conversion"))
