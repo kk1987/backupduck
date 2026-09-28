@@ -55,5 +55,7 @@ jobs:
       - run: rustup target add aarch64-linux-android
       - run: sdkmanager 'platforms;android-36' 'ndk;27.1.12297006'
       - run: scripts/build-android.sh
+      - run: ./gradlew testDebugUnitTest
+        working-directory: apps/android
       - run: ./gradlew assembleDebugAndroidTest
         working-directory: apps/android

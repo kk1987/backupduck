@@ -62,6 +62,7 @@ jobs:
           scripts/build-macos.sh
           python3 tests/sparkle_integration.py
           scripts/build-android.sh
+          (cd apps/android && ./gradlew testDebugUnitTest)
           scripts/package-release.sh
           python3 scripts/sign-release.py
           python3 scripts/verify-release.py
