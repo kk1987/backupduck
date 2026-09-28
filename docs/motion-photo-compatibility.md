@@ -59,6 +59,28 @@ and format conformance therefore do not establish cloud compatibility. This
 validation supports the HEIC metadata fix; it does not justify switching the
 receiver's default output to JPEG or transcoding every Live Photo.
 
+## JPEG Live Photos with existing XMP
+
+Another failure occurs before gallery publication. Two real shared JPG/MOV
+Live Photos were received byte-for-byte, but the Pixel reported
+`receipt=received, processing=failed`; neither appeared in Android MediaStore.
+The original JPGs each contain an Adobe XMP APP1 packet. Passing those exact
+files to the JPEG Motion Photo packager returns
+`Unsupported("preexisting XMP packet")`: the direct path accepts only a clean
+JPEG or its supported Ultra HDR layout. The native JSON bridge deliberately
+reduces this to the stable code `unsupported`, while the Android fallback used
+to recognize only the Rust display prefix `unsupported capability:`. It
+therefore skipped the image-decoding fallback and marked publication failed.
+
+The Android caller now recognizes the bridge's stable code and decodes these
+JPGs to a clean still before packaging with the original paired video. This
+fix applies to the input layout, not to a specific iPhone model. The observed
+successful HEIC Live Photos use a different packaging path. Receiver history
+records a bounded processing error code on new failures, and failed originals
+remain available for an explicit processing retry. The Mac transfer receipt
+means the phone has the files; it does not mean Android gallery publication or
+Google Photos cloud backup has finished.
+
 ## Future investigation checklist
 
 1. Verify the original still and paired video against sender/receiver checksums.

@@ -26,6 +26,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
     let c = context.coordinator
     c.parent = self
     if c.generation != library.generation {
+      c.clearPresentationCache()
       let sameFilter = (c.filter == nil || c.filter == library.filter)
         && (c.scrollResetGeneration == nil || c.scrollResetGeneration == library.scrollResetGeneration)
       if sameFilter, c.restored { c.rememberScroll() }
@@ -67,6 +68,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
       view.insertItems(at: (old..<c.count).map { IndexPath(item: $0, section: 0) })
     }
     if c.contentGeneration != library.contentGeneration {
+      c.clearPresentationCache()
       c.contentGeneration = library.contentGeneration
       for path in view.indexPathsForVisibleItems {
         if let cell = view.cellForItem(at: path) as? PhotoCell { c.configure(cell, path: path) }
@@ -75,11 +77,13 @@ struct IOSLibraryGrid: UIViewRepresentable {
     }
     if c.preparationRevision != preparationRevision {
       c.preparationRevision = preparationRevision
+      c.clearPresentationCache()
       c.scrolled()
     }
     if c.queueRevision != queueRevision || c.receiverID != receiverID {
       c.queueRevision = queueRevision
       c.receiverID = receiverID
+      c.clearPresentationCache()
       c.scrolled()
     }
     if c.appliedSelection != library.selection {
@@ -113,9 +117,14 @@ struct IOSLibraryGrid: UIViewRepresentable {
     var restored = false
     var applyingSelection = false
     var appliedSelection: Set<String>?
+    private var presentation: [String: (count: Int?, state: String?)] = [:]
     var filter: LibraryFilter?
     var scrollResetGeneration: Int?
     init(_ parent: IOSLibraryGrid) { self.parent = parent }
+    func clearPresentationCache() { presentation.removeAll(keepingCapacity: true) }
+    private func presentationKey(_ asset: PHAsset) -> String {
+      asset.localIdentifier + "|" + PhotoLibraryModel.revision(asset)
+    }
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int)
       -> Int
     { count }
@@ -147,6 +156,9 @@ struct IOSLibraryGrid: UIViewRepresentable {
       if let asset = parent.library.asset(at: path.item) {
         cell.configure(asset, pipeline: parent.library.thumbnails, pixels: 400,
           identifier: parent.library.identifier(at: path.item))
+        if let cached = presentation[presentationKey(asset)] {
+          cell.setGroup(count: cached.count, state: cached.state)
+        }
       }
     }
     func collectionView(
@@ -201,6 +213,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
         let visible = paths.compactMap { parent.library.asset(at: $0.item) }
         let groups = await parent.library.visibleGroups(visible)
         guard !Task.isCancelled, generation == self.parent.library.generation else { return }
+        guard !Set(paths).isDisjoint(with: collection.indexPathsForVisibleItems) else { return }
         guard let states = await librarySourceStates(groups, receiver: receiverID) else { return }
         guard !Task.isCancelled, generation == self.parent.library.generation,
           receiverID == self.parent.receiverID, revision == self.parent.queueRevision,
@@ -209,10 +222,14 @@ struct IOSLibraryGrid: UIViewRepresentable {
           if let cell = collection.cellForItem(at: path) as? PhotoCell {
             guard cell.assetID == identities[path] else { continue }
             let group = groups[cell.assetID ?? ""]
-            let burst = parent.library.asset(at: path.item)?.burstIdentifier != nil
-            cell.setGroup(count: burst ? group?.count : nil, state: group?.state(states))
+            guard let asset = parent.library.asset(at: path.item) else { continue }
+            let count = asset.burstIdentifier != nil ? group?.count : nil
+            let state = group?.state(states)
+            self.presentation[self.presentationKey(asset)] = (count, state)
+            cell.setGroup(count: count, state: state)
           }
         }
+        if self.presentation.count > 256 { self.presentation.removeAll(keepingCapacity: true) }
       }
     }
   }
@@ -234,6 +251,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
   private let status = UIImageView()
   private let cloud = UIImageView()
   private let burstCount = UILabel()
+  private let duration = UILabel()
   private var groupDescription = ""
   private var request: PHImageRequestID = PHInvalidImageRequestID
   private var pipeline: ThumbnailPipeline?
@@ -263,6 +281,14 @@ struct IOSLibraryGrid: UIViewRepresentable {
     burstCount.adjustsFontSizeToFitWidth = true
     burstCount.isHidden = true
     contentView.addSubview(burstCount)
+    duration.textColor = .white
+    duration.backgroundColor = .black.withAlphaComponent(0.55)
+    duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    duration.textAlignment = .center
+    duration.layer.cornerRadius = 5
+    duration.clipsToBounds = true
+    duration.isHidden = true
+    contentView.addSubview(duration)
     cloud.isHidden = true
     media.isHidden = true
     isAccessibilityElement = true
@@ -273,6 +299,8 @@ struct IOSLibraryGrid: UIViewRepresentable {
     photo.frame = contentView.bounds
     media.frame = CGRect(x: 6, y: 6, width: 22, height: 22)
     burstCount.frame = CGRect(x: 31, y: 6, width: 42, height: 22)
+    let durationWidth = min(bounds.width - 12, max(42, duration.intrinsicContentSize.width + 12))
+    duration.frame = CGRect(x: bounds.width - durationWidth - 6, y: 6, width: durationWidth, height: 20)
     cloud.frame = CGRect(x: 6, y: bounds.height - 28, width: 22, height: 22)
     status.frame = CGRect(x: bounds.width - 28, y: bounds.height - 28, width: 22, height: 22)
   }
@@ -299,6 +327,9 @@ struct IOSLibraryGrid: UIViewRepresentable {
       ? "livephoto" : asset.mediaType == .video ? "video.fill" : nil
     media.image = symbol.flatMap { UIImage(systemName: $0) }
     media.isHidden = symbol == nil
+    duration.text = asset.mediaType == .video ? videoDurationLabel(asset.duration) : nil
+    duration.isHidden = asset.mediaType != .video
+    setNeedsLayout()
     accessibilityLabel = (asset.creationDate?.formatted(date: .abbreviated, time: .shortened) ?? "") + (asset.burstIdentifier != nil ? " " + NSLocalizedString("library_filter_burst", comment: "") : "")
     if !sameAsset { setGroup(count: nil, state: nil); photo.image = nil }
     request = pipeline.request(asset, pixels: pixels) { [weak self] image, inCloud in
@@ -322,9 +353,9 @@ struct IOSLibraryGrid: UIViewRepresentable {
   func setState(_ state: String?) {
     status.image = UIImage(systemName: taskSymbol(state))
     status.tintColor =
-      state == "received" || state == "received_previous" ? .systemGreen : state == "failed" ? .systemOrange : .white
+      state == "received" || state == "received_previous" ? .systemBlue : state == "failed" ? .systemOrange : .white
     accessibilityValue = groupDescription + NSLocalizedString(
-      state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
+      state == "received" ? "state_received_detail" : state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
   }
   func cancel() {
     pipeline?.cancel(request)

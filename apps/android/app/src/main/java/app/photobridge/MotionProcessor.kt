@@ -55,7 +55,7 @@ internal object MotionProcessor {
                         .put("metadata", asset.optJSONObject("metadata") ?: JSONObject()))
                     return MediaPublisher.publishFile(context, heicMotion, item, "image/heic", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)
                 } catch (error: IllegalStateException) {
-                    if (pendingMime == "image/heic" || !error.message.orEmpty().startsWith("unsupported capability:")) throw error
+                    if (pendingMime == "image/heic" || !isUnsupportedContainer(error)) throw error
                 } finally { if (dated != still) dated?.delete() }
             }
             if ((stillName.endsWith(".jpg") || stillName.endsWith(".jpeg")) && directVideoMime != null &&
@@ -71,7 +71,7 @@ internal object MotionProcessor {
                         return MediaPublisher.publishFile(context, motion, item, "image/jpeg", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)
                     }
                 } catch (error: IllegalStateException) {
-                    if (!error.message.orEmpty().startsWith("unsupported capability:")) throw error
+                    if (!isUnsupportedContainer(error)) throw error
                 } finally { if (dated != still) dated?.delete() }
             }
             prepareStill(still, jpeg)
@@ -97,6 +97,9 @@ internal object MotionProcessor {
             work.delete()
         }
     }
+    /** NativeBridge exposes stable error codes, not the Rust error's display text. */
+    internal fun isUnsupportedContainer(error: IllegalStateException): Boolean =
+        error.message == "unsupported" || error.message.orEmpty().startsWith("unsupported capability:")
     private fun matchesPreparedCopy(item: JSONObject, output: File): Boolean {
         val evidence = NativeBridge.request(JSONObject().put("op", "gallery_evidence").put("id", item.getString("id"))) as JSONObject
         val expected = evidence.optJSONObject("copy")?.optString("sha256") ?: return false

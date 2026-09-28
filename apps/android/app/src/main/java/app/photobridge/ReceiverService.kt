@@ -196,6 +196,7 @@ class ReceiverService : Service() {
             }
             val filename = item.getJSONObject("asset").getJSONArray("resources").getJSONObject(0).getString("filename")
             ReceiverState.mutable.update { it.copy(processingName = filename) }
+            var failureCode: String? = null
             val success = try {
                 val copy = MediaPublisher.publish(this, item)
                 NativeBridge.request(JSONObject().put("op", "gallery_publication").put("id", cursor).put("copy", copy.json()))
@@ -203,10 +204,12 @@ class ReceiverService : Service() {
                 true
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
-                ReceiverState.mutable.update { it.copy(error = safeError(error)) }
+                failureCode = safeError(error)
+                ReceiverState.mutable.update { it.copy(error = failureCode) }
                 false
             }
-            if (!success) NativeBridge.request(JSONObject().put("op", "processed").put("id", cursor).put("success", false))
+            if (!success) NativeBridge.request(JSONObject().put("op", "processed").put("id", cursor)
+                .put("success", false).put("error", failureCode ?: "operation_failed"))
             ReceiverState.mutable.update { it.copy(processingName = null) }
         }
     }

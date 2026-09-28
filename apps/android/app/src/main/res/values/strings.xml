@@ -94,6 +94,9 @@
 <string name="filter_motion">Motion photos</string>
 <string name="history_more">Load more</string>
 <string name="history_count">%1$d of %2$d items</string>
+<string name="history_failed_shortcut">View gallery failures</string>
+<string name="history_failed_shortcut_count">%1$d not in gallery</string>
+<string name="receiver_item_failed_unsupported">Received · Motion processing failed</string>
 <string name="history_empty">No matching transfers. New items will appear here.</string>
 <string name="history_loading">Loading transfers…</string>
 <string name="history_retry">Try again</string>

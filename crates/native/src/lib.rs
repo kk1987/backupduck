@@ -718,6 +718,8 @@ enum Command {
     Processed {
         id: String,
         success: bool,
+        #[serde(default)]
+        error: Option<String>,
     },
 }
 struct Hosts {
@@ -1488,7 +1490,7 @@ fn dispatch(command: Command) -> Result<Value> {
             let items = r.publications(&after, 50)?;
             Ok(serde_json::to_value(items)?)
         }
-        Command::Processed { id, success } => {
+        Command::Processed { id, success, error } => {
             let h = HOSTS.lock().map_err(lock)?;
             let host = h.receiver.as_ref().ok_or(Error::NotFound)?;
             let mut r = host.receiver.lock().map_err(lock)?;
@@ -1504,13 +1506,14 @@ fn dispatch(command: Command) -> Result<Value> {
             )?;
             if status.processing != ProcessingState::Complete {
                 r.set_processing(&id, ProcessingState::Pending)?;
-                r.set_processing(
+                r.set_processing_result(
                     &id,
                     if success {
                         ProcessingState::Complete
                     } else {
                         ProcessingState::Failed
                     },
+                    error.as_deref(),
                 )?;
             }
             Ok(json!({}))

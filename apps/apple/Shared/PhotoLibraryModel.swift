@@ -433,8 +433,8 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
 
 func taskSymbol(_ state: String?) -> String {
   switch state {
-  case "received": "checkmark.circle.fill"
-  case "received_previous": "checkmark.circle"
+  case "received": "arrow.down.circle.fill"
+  case "received_previous": "arrow.down.circle"
   case "partial": "circle.lefthalf.filled"
   case "scheduled", "running": "arrow.up.circle"
   case "waiting": "clock.arrow.circlepath"
@@ -446,4 +446,14 @@ func taskSymbol(_ state: String?) -> String {
   case "queued": "clock"
   default: "circle.dashed"
   }
+}
+
+func videoDurationLabel(_ duration: TimeInterval) -> String {
+  let seconds = max(0, Int(duration.rounded()))
+  let hours = seconds / 3600
+  let minutes = (seconds / 60) % 60
+  let remainder = seconds % 60
+  return hours > 0
+    ? String(format: "%d:%02d:%02d", hours, minutes, remainder)
+    : String(format: "%d:%02d", minutes, remainder)
 }

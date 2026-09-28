@@ -184,6 +184,8 @@ pub struct AssetStatus {
     pub asset_id: String,
     pub receipt: ReceiptState,
     pub processing: ProcessingState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processing_error: Option<String>,
     pub resources: Vec<ResourceStatus>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]

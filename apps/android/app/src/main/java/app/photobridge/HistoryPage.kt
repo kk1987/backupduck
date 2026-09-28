@@ -28,6 +28,8 @@ internal class HistoryPage(private val activity: MainActivity, private val model
     private val message: TextView
     private val more: Button
     private val retry: Button
+    private val failedShortcut: Button
+    private val statusFilter: Spinner
     private val list: RecyclerView
     private val adapter = TransferAdapter(activity)
     private val layout = LinearLayoutManager(activity)
@@ -37,11 +39,11 @@ internal class HistoryPage(private val activity: MainActivity, private val model
         setPadding(activity.dp(20), activity.dp(4), activity.dp(20), 0)
         val filters = LinearLayout(activity)
         addView(filters)
-        fun filter(title: Int, choices: List<Pair<String, Int>>, selected: String, changed: (String) -> Unit) {
+        fun filter(title: Int, choices: List<Pair<String, Int>>, selected: String, changed: (String) -> Unit): Spinner {
             val group = LinearLayout(activity).apply { orientation = VERTICAL }
             filters.addView(group, LayoutParams(0, -2, 1f))
             activity.label(group, activity.getString(title), 13, activity.secondaryColor())
-            group.addView(Spinner(activity).apply {
+            val spinner = Spinner(activity).apply {
                 contentDescription = activity.getString(title)
                 adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, choices.map { activity.getString(it.second) })
                 setSelection(choices.indexOfFirst { it.first == selected }.coerceAtLeast(0))
@@ -49,9 +51,11 @@ internal class HistoryPage(private val activity: MainActivity, private val model
                     override fun onNothingSelected(parent: AdapterView<*>?) {}
                     override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { changed(choices[position].first) }
                 }
-            }, LayoutParams(-1, activity.dp(48)))
+            }
+            group.addView(spinner, LayoutParams(-1, activity.dp(40)))
+            return spinner
         }
-        filter(R.string.history_status, listOf("all" to R.string.filter_all, "receiving" to R.string.filter_receiving,
+        statusFilter = filter(R.string.history_status, listOf("all" to R.string.filter_all, "receiving" to R.string.filter_receiving,
             "processing" to R.string.filter_processing, "published" to R.string.filter_published, "failed" to R.string.filter_failed), model.state.value.filter) {
             if (it != model.state.value.filter) activity.lifecycleScope.launch { model.select(root, filter = it) }
         }
@@ -59,7 +63,18 @@ internal class HistoryPage(private val activity: MainActivity, private val model
             "video" to R.string.filter_video, "motion" to R.string.filter_motion), model.state.value.kind) {
             if (it != model.state.value.kind) activity.lifecycleScope.launch { model.select(root, kind = it) }
         }
-        val senderPicker = activity.action(this, R.string.history_sender_all) {
+        val tools = LinearLayout(activity).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        addView(tools)
+        count = activity.label(tools, "", 12, activity.secondaryColor()).apply {
+            layoutParams = LayoutParams(0, -2, 1f)
+        }
+        failedShortcut = activity.action(tools, R.string.history_failed_shortcut) {
+            activity.lifecycleScope.launch { model.select(root, filter = "failed") }
+        }.apply {
+            minimumHeight = activity.dp(40)
+            layoutParams = LayoutParams(-2, activity.dp(40))
+        }
+        val senderPicker = activity.action(tools, R.string.history_sender_all) {
             activity.lifecycleScope.launch {
                 val peers = withContext(Dispatchers.IO) { runCatching { DeviceProfiles.read(activity).getJSONArray("peers") }.getOrNull() }
                 val ids = mutableListOf<String?>(null,"unknown")
@@ -74,6 +89,9 @@ internal class HistoryPage(private val activity: MainActivity, private val model
                         activity.lifecycleScope.launch { model.select(root,sender=ids[which]) }
                     }.setNegativeButton(R.string.receiver_close,null).show()
             }
+        }.apply {
+            minimumHeight = activity.dp(40)
+            layoutParams = LayoutParams(-2, activity.dp(40))
         }
         activity.lifecycleScope.launch {
             model.state.collect { state ->
@@ -82,7 +100,6 @@ internal class HistoryPage(private val activity: MainActivity, private val model
                     else state.items.firstOrNull()?.senderNames?.takeIf { it.isNotBlank() } ?: activity.getString(R.string.history_sender_filtered)
             }
         }
-        count = activity.label(this, "", 13, activity.secondaryColor())
         val content = FrameLayout(activity)
         addView(content, LayoutParams(-1, 0, 1f))
         list = RecyclerView(activity).apply {
@@ -102,11 +119,14 @@ internal class HistoryPage(private val activity: MainActivity, private val model
             setPadding(activity.dp(24), activity.dp(24), activity.dp(24), activity.dp(24))
         }
         content.addView(message, FrameLayout.LayoutParams(-1, -1))
-        more = activity.action(this, R.string.history_more) {
-            activity.lifecycleScope.launch { if (model.state.value.failed) model.select(root) else model.more(root) }
-        }
         val footer = LinearLayout(activity)
         addView(footer)
+        more = activity.action(footer, R.string.history_more) {
+            activity.lifecycleScope.launch { if (model.state.value.failed) model.select(root) else model.more(root) }
+        }.apply {
+            minimumHeight = activity.dp(40)
+            layoutParams = LayoutParams(0, activity.dp(40), 1f)
+        }
         retry = activity.action(footer, R.string.receiver_retry_processing) {
             if (!retrying) activity.lifecycleScope.launch {
                 retrying = true
@@ -115,6 +135,9 @@ internal class HistoryPage(private val activity: MainActivity, private val model
                 if (result.isFailure) Toast.makeText(activity, R.string.settings_start_first, Toast.LENGTH_LONG).show()
                 else model.refreshVisible(root, firstVisible())
             }
+        }.apply {
+            minimumHeight = activity.dp(40)
+            layoutParams = LayoutParams(0, activity.dp(40), 1f)
         }
     }
     fun firstVisible() = layout.findFirstVisibleItemPosition().coerceAtLeast(0)
@@ -129,12 +152,17 @@ internal class HistoryPage(private val activity: MainActivity, private val model
             }
         }
         count.text = activity.getString(R.string.history_count, state.items.size, state.total)
+        val statusIndex = listOf("all", "receiving", "processing", "published", "failed").indexOf(state.filter)
+        if (statusIndex >= 0 && statusFilter.selectedItemPosition != statusIndex) statusFilter.setSelection(statusIndex)
+        val failedCount = ReceiverState.snapshot.value.failed
+        failedShortcut.visibility = if (failedCount > 0) View.VISIBLE else View.GONE
+        failedShortcut.text = activity.getString(R.string.history_failed_shortcut_count, failedCount)
         message.visibility = if (state.items.isEmpty()) View.VISIBLE else View.GONE
         message.setText(when { state.loading -> R.string.history_loading; state.failed -> R.string.settings_failed; else -> R.string.history_empty })
         more.visibility = if (state.nextCursor != null || state.failed) View.VISIBLE else View.GONE
         more.isEnabled = !state.loading
         more.setText(if (state.failed) R.string.history_retry else R.string.history_more)
-        retry.visibility = if (ReceiverState.snapshot.value.failed > 0 || state.items.any { it.processing == "failed" }) View.VISIBLE else View.GONE
+        retry.visibility = if (failedCount > 0 || state.items.any { it.processing == "failed" }) View.VISIBLE else View.GONE
     }
 }
 
@@ -156,24 +184,24 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
         fun cancel() { signal?.cancel(); work?.cancel(); signal = null; itemID = null }
     }
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val row = LinearLayout(activity).apply { gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, activity.dp(14), 0, activity.dp(14)) }
+        val row = LinearLayout(activity).apply { gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, activity.dp(8), 0, activity.dp(8)) }
         row.layoutParams = RecyclerView.LayoutParams(-1, -2)
         val image = ImageView(activity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-        row.addView(image, LinearLayout.LayoutParams(activity.dp(60), activity.dp(60)).apply { marginEnd = activity.dp(14) })
+        row.addView(image, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginEnd = activity.dp(12) })
         val body = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         row.addView(body, LinearLayout.LayoutParams(0, -2, 1f))
         val name = TextView(activity).apply { textSize = 16f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; includeFontPadding = false }
         body.addView(name)
         val sender = TextView(activity).apply { textSize = 12f; setTextColor(activity.secondaryColor()); maxLines=1; ellipsize=TextUtils.TruncateAt.END }
         body.addView(sender)
-        val summary = LinearLayout(activity).apply { setPadding(0, activity.dp(7), 0, 0); gravity = android.view.Gravity.CENTER_VERTICAL }
+        val summary = LinearLayout(activity).apply { setPadding(0, activity.dp(3), 0, 0); gravity = android.view.Gravity.CENTER_VERTICAL }
         body.addView(summary)
         val status = TextView(activity).apply { textSize = 12f; setTextColor(activity.secondaryColor()); includeFontPadding = false }
         summary.addView(status, LinearLayout.LayoutParams(0, -2, 1f))
         val size = TextView(activity).apply { textSize = 12f; setTextColor(activity.secondaryColor()); includeFontPadding = false }
         summary.addView(size)
         val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
-        body.addView(progress, LinearLayout.LayoutParams(-1, activity.dp(4)).apply { topMargin = activity.dp(8) })
+        body.addView(progress, LinearLayout.LayoutParams(-1, activity.dp(3)).apply { topMargin = activity.dp(4) })
         return Holder(row, image, name, status, progress, size, sender)
     }
     override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -181,7 +209,7 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
         holder.cancel(); holder.itemID = item.id
         holder.name.text = item.filename
         holder.sender.text = activity.getString(R.string.history_from, item.senderNames.ifBlank { activity.getString(R.string.history_sender_unknown) })
-        holder.status.text = activity.getString(if (item.originalsReleased && item.releaseReason == "gallery") R.string.history_relay_reclaimed else if (item.originalsReleased) R.string.history_archived else if (item.processing == "complete") R.string.filter_published else item.statusLabel)
+        holder.status.text = activity.getString(if (item.originalsReleased && item.releaseReason == "gallery") R.string.history_relay_reclaimed else if (item.originalsReleased) R.string.history_archived else if (item.processing == "complete") R.string.filter_published else if (item.kind == "motion" && item.processing == "failed" && item.processingError == "unsupported") R.string.receiver_item_failed_unsupported else item.statusLabel)
         holder.progress.visibility = if (item.receipt == "received") View.GONE else View.VISIBLE
         holder.size.text = if (item.receipt == "received") Formatter.formatFileSize(activity, item.totalBytes)
             else "${Formatter.formatFileSize(activity, item.confirmedBytes)} / ${Formatter.formatFileSize(activity, item.totalBytes)}"

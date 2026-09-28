@@ -263,6 +263,7 @@ struct MacLibraryGrid: NSViewRepresentable {
   private let status = NSImageView()
   private let cloud = NSImageView()
   private let burstCount = NSTextField(labelWithString: "")
+  private let duration = NSTextField(labelWithString: "")
   private var groupDescription = ""
   override func loadView() {
     view = NSView()
@@ -290,6 +291,15 @@ struct MacLibraryGrid: NSViewRepresentable {
     burstCount.layer?.cornerRadius = 4
     burstCount.isHidden = true
     view.addSubview(burstCount)
+    duration.textColor = .white
+    duration.backgroundColor = NSColor.black.withAlphaComponent(0.55)
+    duration.drawsBackground = true
+    duration.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    duration.alignment = .center
+    duration.wantsLayer = true
+    duration.layer?.cornerRadius = 5
+    duration.isHidden = true
+    view.addSubview(duration)
     cloud.isHidden = true
     media.isHidden = true
     view.setAccessibilityElement(true)
@@ -303,6 +313,9 @@ struct MacLibraryGrid: NSViewRepresentable {
     CATransaction.commit()
     media.frame = NSRect(x: 8, y: view.bounds.height - 32, width: 24, height: 24)
     burstCount.frame = NSRect(x: 36, y: view.bounds.height - 30, width: 42, height: 20)
+    let durationWidth = min(view.bounds.width - 16, max(42, duration.intrinsicContentSize.width + 12))
+    duration.frame = NSRect(x: view.bounds.width - durationWidth - 8,
+      y: view.bounds.height - 30, width: durationWidth, height: 20)
     cloud.frame = NSRect(x: 8, y: 8, width: 24, height: 24)
     status.frame = NSRect(x: view.bounds.width - 32, y: 8, width: 24, height: 24)
   }
@@ -329,6 +342,9 @@ struct MacLibraryGrid: NSViewRepresentable {
       ? "livephoto" : asset.mediaType == .video ? "video.fill" : nil
     media.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
     media.isHidden = symbol == nil
+    duration.stringValue = asset.mediaType == .video ? videoDurationLabel(asset.duration) : ""
+    duration.isHidden = asset.mediaType != .video
+    view.needsLayout = true
     view.setAccessibilityLabel(
       (asset.creationDate?.formatted(date: .abbreviated, time: .shortened) ?? "") + " "
         + NSLocalizedString(
@@ -359,9 +375,9 @@ struct MacLibraryGrid: NSViewRepresentable {
   func setState(_ state: String?) {
     status.image = NSImage(systemSymbolName: taskSymbol(state), accessibilityDescription: nil)
     status.contentTintColor =
-      state == "received" || state == "received_previous" ? .systemGreen : state == "failed" ? .systemOrange : .white
+      state == "received" || state == "received_previous" ? .systemBlue : state == "failed" ? .systemOrange : .white
     status.toolTip = groupDescription + NSLocalizedString(
-      state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
+      state == "received" ? "state_received_detail" : state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
     view.setAccessibilityValue(status.toolTip)
   }
   func cancel() {

@@ -91,7 +91,7 @@ struct TransferRow: View {
           Text(job.asset.resources.first?.filename ?? "").lineLimit(1)
           Spacer()
           Image(systemName: taskSymbol(job.state)).foregroundStyle(
-            job.state == "received" ? .green : job.state == "failed" ? .orange : .secondary)
+            job.state == "received" ? .blue : job.state == "failed" ? .orange : .secondary)
         }
         HStack(spacing: 8) {
           Label(LocalizedStringKey("library_filter_" + (job.asset.metadata?["burst_group_ref"] != nil ? "burst" : job.asset.kind)),

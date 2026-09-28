@@ -871,6 +871,7 @@ mod tests {
                 asset_id: job.asset.id().unwrap(),
                 receipt: ReceiptState::Received,
                 processing: ProcessingState::NotRequested,
+                processing_error: None,
                 resources: job
                     .asset
                     .resources

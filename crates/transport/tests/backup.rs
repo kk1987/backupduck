@@ -174,14 +174,18 @@ fn motion_commit_is_atomic_and_processing_never_reuploads() {
         .unwrap();
     store.commit(&id).unwrap();
     store.set_processing(&id, ProcessingState::Pending).unwrap();
-    store.set_processing(&id, ProcessingState::Failed).unwrap();
+    store
+        .set_processing_result(&id, ProcessingState::Failed, Some("unsupported"))
+        .unwrap();
     let status = store.register(a.clone()).unwrap();
     assert!(matches!(
         next_action(&a, &status, MAX_CHUNK_BYTES).unwrap(),
         TransferAction::Done
     ));
     assert_eq!(status.processing, ProcessingState::Failed);
+    assert_eq!(status.processing_error.as_deref(), Some("unsupported"));
     store.set_processing(&id, ProcessingState::Pending).unwrap();
+    assert_eq!(store.status(&id).unwrap().processing_error, None);
     store
         .set_processing(&id, ProcessingState::Complete)
         .unwrap();

@@ -103,6 +103,10 @@ impl Receiver {
             conn.execute("ALTER TABLE assets ADD COLUMN release_reason TEXT", [])
                 .map_err(db)?;
         }
+        if !columns.iter().any(|c| c == "processing_error") {
+            conn.execute("ALTER TABLE assets ADD COLUMN processing_error TEXT", [])
+                .map_err(db)?;
+        }
         let mut receiver = Self {
             root,
             conn,
@@ -452,12 +456,12 @@ impl Receiver {
     }
     pub fn status(&self, id: &str) -> Result<AssetStatus> {
         let asset = self.asset(id)?;
-        let (received, processing, released): (bool, String, bool) = self
+        let (received, processing, released, processing_error): (bool, String, bool, Option<String>) = self
             .conn
             .query_row(
-                "SELECT received,processing,originals_released FROM assets WHERE id=?1",
+                "SELECT received,processing,originals_released,processing_error FROM assets WHERE id=?1",
                 [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .map_err(db)?;
         let processing = match processing.as_str() {
@@ -475,6 +479,7 @@ impl Receiver {
                 ReceiptState::Receiving
             },
             processing,
+            processing_error,
             resources: asset
                 .resources
                 .iter()
@@ -572,13 +577,29 @@ impl Receiver {
     pub fn retry_processing(&mut self) -> Result<usize> {
         self.conn
             .execute(
-                "UPDATE assets SET processing='pending' WHERE received=1 AND processing='failed'",
+                "UPDATE assets SET processing='pending',processing_error=NULL WHERE received=1 AND processing='failed'",
                 [],
             )
             .map_err(db)
     }
     /// Target work has its own state. Failure never rolls back the receipt.
     pub fn set_processing(&mut self, id: &str, next: ProcessingState) -> Result<AssetStatus> {
+        self.set_processing_result(id, next, None)
+    }
+    pub fn set_processing_result(
+        &mut self,
+        id: &str,
+        next: ProcessingState,
+        error: Option<&str>,
+    ) -> Result<AssetStatus> {
+        if error.is_some_and(|code| {
+            code.is_empty()
+                || code.len() > 40
+                || !code.bytes().all(|c| c.is_ascii_lowercase() || c == b'_')
+        }) || (error.is_some() && next != ProcessingState::Failed)
+        {
+            return Err(Error::Invalid("processing error code".into()));
+        }
         let current = self.status(id)?;
         if current.receipt != ReceiptState::Received {
             return Err(Error::Conflict("asset not received".into()));
@@ -603,8 +624,8 @@ impl Receiver {
         };
         self.conn
             .execute(
-                "UPDATE assets SET processing=?2 WHERE id=?1",
-                params![id, value],
+                "UPDATE assets SET processing=?2,processing_error=?3 WHERE id=?1",
+                params![id, value, error],
             )
             .map_err(db)?;
         self.status(id)

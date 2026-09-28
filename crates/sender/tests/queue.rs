@@ -54,6 +54,7 @@ fn status(j: &Job, received: bool) -> AssetStatus {
             ReceiptState::Receiving
         },
         processing: ProcessingState::NotRequested,
+        processing_error: None,
         resources: vec![ResourceStatus {
             sha256: j.asset.resources[0].sha256.clone(),
             offset: if received { 10 } else { 5 },

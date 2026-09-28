@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
 internal data class HistoryItem(val cursor: Long, val id: String, val filename: String, val kind: String,
-    val totalBytes: Long, val confirmedBytes: Long, val receipt: String, val processing: String, val originalsReleased: Boolean, val releaseReason: String? = null, val senderNames: String = "") {
+    val totalBytes: Long, val confirmedBytes: Long, val receipt: String, val processing: String,
+    val processingError: String?, val originalsReleased: Boolean, val releaseReason: String? = null, val senderNames: String = "") {
     val statusLabel: Int get() = when {
         receipt != "received" -> R.string.receiver_item_receiving
         processing == "complete" -> R.string.receiver_item_published
@@ -64,7 +65,8 @@ internal class HistoryModel : ViewModel() {
                     val names = if (peers == null) "" else (0 until peers.length()).joinToString(" · ") { peers.getJSONObject(it).getJSONObject("profile").getString("name") }
                     HistoryItem(row.getLong("cursor"), row.getString("id"), row.getString("filename"), row.getString("kind"),
                         row.getLong("total_bytes"), row.getLong("confirmed_bytes"), row.getString("receipt"),
-                        row.getString("processing"), row.getBoolean("originals_released"), row.optString("release_reason").takeIf { it == "gallery" || it == "archive" }, names)
+                        row.getString("processing"), if (row.isNull("processing_error")) null else row.getString("processing_error"),
+                        row.getBoolean("originals_released"), row.optString("release_reason").takeIf { it == "gallery" || it == "archive" }, names)
                 }
                 Triple(items, data.getInt("total"), if (data.isNull("next_cursor")) null else data.getLong("next_cursor"))
             } }
