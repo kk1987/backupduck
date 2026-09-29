@@ -1,6 +1,7 @@
 use photobridge_core::*;
 use photobridge_native::{ReceiverHost, SenderHost};
 use photobridge_sender::JobState;
+use photobridge_store::catalog::Catalog;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -82,6 +83,23 @@ async fn native_queue_transfers_over_paired_tls_and_preserves_originals() {
     let job = sender.run_once(&r.pairing).await.unwrap().unwrap();
     assert_eq!(job.state, JobState::Received);
     assert_eq!(job.confirmed_bytes, (photo.len() + video.len()) as u64);
+    let history = Catalog::open(&t.0.join("receiver/store"))
+        .unwrap()
+        .page(None, "all", "all", 50)
+        .unwrap();
+    assert_eq!(history.items[0].captured_at_ms, Some(1_780_000_000_000));
+    assert!(history.items[0].received_at_ms.unwrap() > 0);
+    assert_eq!(history.items[0].published_at_ms, None);
+    r.receiver.lock().unwrap().commit(&a.id().unwrap()).unwrap();
+    assert_eq!(
+        Catalog::open(&t.0.join("receiver/store"))
+            .unwrap()
+            .page(None, "all", "all", 50)
+            .unwrap()
+            .items[0]
+            .received_at_ms,
+        history.items[0].received_at_ms
+    );
     {
         let mut receiver = r.receiver.lock().unwrap();
         assert_eq!(
@@ -113,7 +131,23 @@ async fn native_queue_transfers_over_paired_tls_and_preserves_originals() {
         receiver
             .set_processing(&a.id().unwrap(), ProcessingState::Failed)
             .unwrap();
+        receiver
+            .set_processing(&a.id().unwrap(), ProcessingState::Pending)
+            .unwrap();
+        receiver
+            .set_processing(&a.id().unwrap(), ProcessingState::Complete)
+            .unwrap();
     }
+    assert!(
+        Catalog::open(&t.0.join("receiver/store"))
+            .unwrap()
+            .page(None, "all", "all", 50)
+            .unwrap()
+            .items[0]
+            .published_at_ms
+            .unwrap()
+            > 0
+    );
     for p in paths.values() {
         std::fs::remove_file(p).unwrap();
     }

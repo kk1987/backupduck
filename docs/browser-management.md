@@ -1,6 +1,8 @@
 # Receiver browser management
 
-The Android receiver can host a small management page for a computer on the same Wi-Fi network. In **Settings → Browser management**, enable the switch while receiving is running, then open the displayed address on the computer and enter the code shown on the Pixel. The page shows receiver totals and transfer history, including items still receiving, items added to the phone gallery, and failures. **Retry failures** asks the receiver to process its retained originals again.
+The Android receiver can host a management page for a computer on the same Wi-Fi network. In **Settings → Browser management**, enable the switch while receiving is running, then open the displayed address on the computer and enter the code shown on the Pixel. The page shows received, waiting, gallery-published, and failed totals, storage, and a filterable transfer table. **Retry failures** asks the receiver to process its retained originals again. Auto refresh runs every eight seconds while the page is visible and can be turned off. After loading older pages, the table pauses automatic updates until refreshed; the overview continues updating.
+
+The table shows the sender's capture time and the Pixel's receive-complete time. Receive-complete and gallery-publication timestamps are recorded starting with this version; older records show **Not recorded** instead of an inferred time. Capture time is unavailable when the sender did not provide it. These times describe local transfer and gallery handling, not Google Photos cloud upload.
 
 This page manages the **Pixel receiver**, not the iPhone or Mac sender queue. A transfer marked **Added to phone gallery** has passed Android gallery publication; it does not prove that Google Photos uploaded the item to the cloud. The page does not expose photos or originals for download.
 

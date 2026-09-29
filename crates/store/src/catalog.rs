@@ -18,6 +18,9 @@ pub struct HistoryItem {
     pub receipt: &'static str,
     pub processing: String,
     pub processing_error: Option<String>,
+    pub captured_at_ms: Option<i64>,
+    pub received_at_ms: Option<i64>,
+    pub published_at_ms: Option<i64>,
     pub originals_released: bool,
     pub release_reason: Option<String>,
     pub senders: Vec<super::devices::Peer>,
@@ -131,7 +134,19 @@ impl Catalog {
         } else {
             "NULL"
         };
-        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4")).map_err(super::db)?;
+        let has_received_at: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='received_at_ms')", [], |r| r.get(0)).map_err(super::db)?;
+        let received_at_column = if has_received_at {
+            "received_at_ms"
+        } else {
+            "NULL"
+        };
+        let has_published_at: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='published_at_ms')", [], |r| r.get(0)).map_err(super::db)?;
+        let published_at_column = if has_published_at {
+            "published_at_ms"
+        } else {
+            "NULL"
+        };
+        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column},{received_at_column},{published_at_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4")).map_err(super::db)?;
         let records = query
             .query_map(
                 params![state, kind, before, limit as i64 + 1, sender],
@@ -145,6 +160,8 @@ impl Catalog {
                         r.get::<_, bool>(5)?,
                         r.get::<_, Option<String>>(6)?,
                         r.get::<_, Option<String>>(7)?,
+                        r.get::<_, Option<i64>>(8)?,
+                        r.get::<_, Option<i64>>(9)?,
                     ))
                 },
             )
@@ -163,6 +180,8 @@ impl Catalog {
             originals_released,
             release_reason,
             processing_error,
+            received_at_ms,
+            published_at_ms,
         ) in records.into_iter().take(limit)
         {
             let asset: Asset = serde_json::from_str(&manifest)?;
@@ -214,6 +233,13 @@ impl Catalog {
                 receipt: if received { "received" } else { "receiving" },
                 processing,
                 processing_error,
+                captured_at_ms: asset
+                    .metadata
+                    .get("created_at_ms")
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .filter(|value| *value > 0),
+                received_at_ms,
+                published_at_ms,
                 originals_released,
                 release_reason,
                 senders,

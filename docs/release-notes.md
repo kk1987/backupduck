@@ -1,3 +1,9 @@
+# Beta 30
+
+- Redesign the Pixel browser dashboard with a compact overview, storage status, and a transfer table that filters by state and media type.
+- Show capture, receive-complete, and phone-gallery publication times when available. New receiver events record their timestamps; older records stay marked as not recorded.
+- Refresh visible data automatically every eight seconds, with an on/off control and manual refresh. Loading older pages pauses list refresh to keep the table stable; the overview continues to update.
+
 # Beta 29
 
 - On Mac and iOS, the “Back up selected” confirmation now includes an off-by-default option to back up items already received by the current Pixel again. Pending transfers are never duplicated.

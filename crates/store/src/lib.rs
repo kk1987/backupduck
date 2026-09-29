@@ -12,7 +12,16 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+fn now_ms() -> Result<i64> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| Error::Storage("system clock before epoch".into()))?
+        .as_millis();
+    i64::try_from(millis).map_err(|_| Error::Storage("system clock overflow".into()))
+}
 
 fn db(error: rusqlite::Error) -> Error {
     Error::Storage(error.to_string())
@@ -105,6 +114,14 @@ impl Receiver {
         }
         if !columns.iter().any(|c| c == "processing_error") {
             conn.execute("ALTER TABLE assets ADD COLUMN processing_error TEXT", [])
+                .map_err(db)?;
+        }
+        if !columns.iter().any(|c| c == "received_at_ms") {
+            conn.execute("ALTER TABLE assets ADD COLUMN received_at_ms INTEGER", [])
+                .map_err(db)?;
+        }
+        if !columns.iter().any(|c| c == "published_at_ms") {
+            conn.execute("ALTER TABLE assets ADD COLUMN published_at_ms INTEGER", [])
                 .map_err(db)?;
         }
         let mut receiver = Self {
@@ -281,9 +298,9 @@ impl Receiver {
     }
     /// Bounded, host-only receiver dashboard. Never returns source paths or credentials.
     pub fn overview(&self) -> Result<serde_json::Value> {
-        let (total, received, published, failed): (i64,i64,i64,i64) = self.conn.query_row(
-            "SELECT COUNT(*),COALESCE(SUM(received),0),COALESCE(SUM(processing='complete'),0),COALESCE(SUM(processing='failed'),0) FROM assets", [],
-            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(db)?;
+        let (total, received, published, failed, waiting): (i64,i64,i64,i64,i64) = self.conn.query_row(
+            "SELECT COUNT(*),COALESCE(SUM(received),0),COALESCE(SUM(processing='complete'),0),COALESCE(SUM(processing='failed'),0),COALESCE(SUM(received=1 AND processing IN ('pending','not_requested')),0) FROM assets", [],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(db)?;
         let reserved: i64 = self
             .conn
             .query_row("SELECT COALESCE(SUM(size),0) FROM blobs", [], |r| r.get(0))
@@ -306,7 +323,7 @@ impl Receiver {
             items.push(serde_json::json!({"id":id,"filename":asset.resources[0].filename,"kind":asset.kind,"total_bytes":bytes,"confirmed_bytes":confirmed,"receipt":status.receipt,"processing":status.processing,"originals_released":self.originals_released(&id)?}));
         }
         Ok(
-            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"recent":items}),
+            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"waiting":waiting,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"recent":items}),
         )
     }
     pub fn register(&mut self, asset: Asset) -> Result<AssetStatus> {
@@ -569,7 +586,7 @@ impl Receiver {
             }
         }
         self.conn
-            .execute("UPDATE assets SET received=1 WHERE id=?1", [id])
+            .execute("UPDATE assets SET received_at_ms=CASE WHEN received=0 THEN ?2 ELSE received_at_ms END,received=1 WHERE id=?1", params![id, now_ms()?])
             .map_err(db)?;
         self.status(id)
     }
@@ -624,8 +641,8 @@ impl Receiver {
         };
         self.conn
             .execute(
-                "UPDATE assets SET processing=?2,processing_error=?3 WHERE id=?1",
-                params![id, value, error],
+                "UPDATE assets SET processing=?2,processing_error=?3,published_at_ms=CASE WHEN ?2='complete' THEN COALESCE(published_at_ms,?4) ELSE published_at_ms END WHERE id=?1",
+                params![id, value, error, now_ms()?],
             )
             .map_err(db)?;
         self.status(id)

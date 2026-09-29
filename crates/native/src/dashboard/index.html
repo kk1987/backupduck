@@ -8,27 +8,43 @@
   <script defer src="/app.js"></script>
 </head>
 <body>
-  <main>
-    <header><div><p class="eyebrow">PhotoBridge</p><h1 id="page-title">接收端管理</h1></div><span id="connection" class="pill">局域网</span></header>
-    <section id="login-panel" class="card login">
-      <h2 id="login-title">输入手机上的访问码</h2>
-      <p id="login-help">在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看。每次开启都会更换访问码。</p>
-      <form id="login-form"><label id="code-label" for="code">访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><button id="login-button" type="submit">进入管理页</button></form>
-    </section>
-    <div id="dashboard" hidden>
-      <section class="cards" aria-label="接收概览">
-        <div class="card metric"><span id="label-received">已接收</span><strong id="received">—</strong></div>
-        <div class="card metric"><span id="label-published">已加入手机相册</span><strong id="published">—</strong></div>
-        <div class="card metric"><span id="label-failed">待处理失败</span><strong id="failed">—</strong></div>
-        <div class="card metric"><span id="label-storage">保留的原件</span><strong id="reserved">—</strong></div>
-      </section>
-      <section class="card transfers">
-        <div class="section-head"><div><h2 id="transfers-title">传输记录</h2><p id="cloud-note">加入手机相册不代表 Google 相册云端已备份。</p></div><div class="actions"><select id="state-filter" aria-label="状态"><option value="all">全部</option><option value="processing">处理中</option><option value="published">已加入相册</option><option value="failed">处理失败</option></select><button id="refresh" type="button">刷新</button><button id="retry" type="button">重试失败项</button></div></div>
-        <p id="message" role="status"></p>
-        <div id="items" class="items"></div>
-        <button id="more" type="button" hidden>加载更多</button>
-      </section>
-    </div>
-  </main>
+  <div class="shell">
+    <aside class="sidebar" aria-label="PhotoBridge">
+      <div class="brand"><span class="brand-mark">PB</span><div><strong>PhotoBridge</strong><small id="brand-subtitle">接收端管理</small></div></div>
+      <div class="side-section" id="side-section">工作台</div>
+      <a class="side-link active" href="#overview-section"><span class="side-icon">◫</span><span id="nav-overview">概览</span></a>
+      <a class="side-link" href="#transfers-section"><span class="side-icon">⇅</span><span id="nav-transfers">传输记录</span></a>
+      <div class="sidebar-bottom"><span class="online-dot"></span><span id="sidebar-local">仅在当前局域网访问</span></div>
+    </aside>
+    <main>
+      <header class="topbar"><div class="breadcrumb"><span>PhotoBridge</span><span class="slash">/</span><strong id="breadcrumb-current">接收端</strong></div><span class="top-local" id="top-local">本地管理页</span></header>
+      <div class="content">
+        <section id="login-panel" class="login-card card">
+          <div class="login-symbol">↗</div>
+          <h1 id="login-title">连接你的 Pixel</h1>
+          <p id="login-help">在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看访问码。每次开启都会更换。</p>
+          <form id="login-form"><label id="code-label" for="code">10 位访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><button id="login-button" class="primary" type="submit">进入管理页</button></form>
+        </section>
+        <div id="dashboard" hidden>
+          <div class="page-heading"><div><p class="eyebrow" id="eyebrow">PIXEL RECEIVER</p><h1 id="page-title">接收概览</h1><p id="page-description">查看接收、加入手机相册和待处理的文件。</p></div><div class="live-chip"><span class="online-dot"></span><span id="live-text">接收端在线</span></div></div>
+          <section id="overview-section" class="overview-grid" aria-label="接收概览">
+            <div class="card metric"><div class="metric-top"><span id="label-received">已接收</span><span class="metric-icon blue">⇩</span></div><strong id="received">—</strong><small id="received-hint">手机已确认收到的文件</small></div>
+            <div class="card metric"><div class="metric-top"><span id="label-published">已加入相册</span><span class="metric-icon green">✓</span></div><strong id="published">—</strong><small id="published-hint">手机媒体库处理完成</small></div>
+            <div class="card metric"><div class="metric-top"><span id="label-waiting">等待处理</span><span class="metric-icon amber">◷</span></div><strong id="waiting">—</strong><small id="waiting-hint">已接收，尚未加入相册</small></div>
+            <div class="card metric"><div class="metric-top"><span id="label-failed">处理失败</span><span class="metric-icon red">!</span></div><strong id="failed">—</strong><small id="failed-hint">可在下方重试</small></div>
+          </section>
+          <section class="card storage-card" aria-label="存储概览"><div><span class="storage-icon">▤</span><div><strong id="storage-title">接收端存储</strong><p id="storage-detail">读取中…</p></div></div><div class="storage-value"><span id="reserved-label">保留原件</span><strong id="reserved">—</strong></div></section>
+          <section id="transfers-section" class="card transfers">
+            <div class="section-heading"><div><h2 id="transfers-title">传输记录</h2><p id="cloud-note">“已加入相册”指 Pixel 手机相册，不代表 Google 相册云端已备份。</p></div><button id="retry" type="button">重试失败项</button></div>
+            <div class="toolbar"><div class="filters"><label class="sr-only" id="state-label" for="state-filter">状态</label><select id="state-filter" aria-labelledby="state-label"><option value="all">全部状态</option><option value="receiving">接收中</option><option value="processing">等待处理</option><option value="published">已加入相册</option><option value="failed">处理失败</option></select><label class="sr-only" id="kind-label" for="kind-filter">类型</label><select id="kind-filter" aria-labelledby="kind-label"><option value="all">全部类型</option><option value="photo">照片</option><option value="video">视频</option><option value="motion">实况照片</option></select></div><div class="refresh-controls"><label class="auto-control" for="auto-refresh"><input id="auto-refresh" type="checkbox" checked><span id="auto-label">自动刷新</span></label><button id="refresh" type="button" aria-label="立即刷新">↻ <span id="refresh-label">刷新</span></button></div></div>
+            <div class="list-meta"><span id="result-count">—</span><span id="updated-at">—</span></div>
+            <p id="message" role="status" hidden></p>
+            <div class="table-scroll"><table><thead><tr><th id="col-file" scope="col">文件</th><th id="col-status" scope="col">状态</th><th id="col-captured" scope="col">拍摄时间</th><th id="col-received" scope="col">接收完成</th><th id="col-published" scope="col">加入相册</th><th id="col-size" scope="col">大小</th></tr></thead><tbody id="items"></tbody></table></div>
+            <div class="table-footer"><span id="footer-note">每次加载最多 50 项</span><button id="more" type="button" hidden>加载更多</button></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
 </body>
 </html>
