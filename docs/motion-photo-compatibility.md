@@ -127,8 +127,9 @@ test Pixel. Changing only the container padding left the cloud item static.
 The copy with MP4/H.264 video and AAC audio showed an animation control in
 Google Photos Web, and the animation opened. The latter retained the original
 JPEG and copied its H.264 video samples; only the audio needed encoding. This
-narrows the tested cause to the video container/audio compatibility, while the
-old JPEG directory and trailing-footer violations remain format defects.
+comparison did not isolate the cause: the successful copy changed the video
+container and audio as well as the JPEG directory and trailing footer. The
+padding-only copy still had the other format defects.
 
 The writer now lists the preserved MPF auxiliary JPEG, makes the appended video
 the exact end of the file, and removes the invented padding and SEF footer.
@@ -140,6 +141,37 @@ re-encoded on this direct path. Regression tests check the directory, MPF
 offsets, source bytes, and exact video tail. Previously published copies are
 not rewritten by an app update; the final Android output still requires a
 separate device-and-cloud acceptance check.
+
+### Seven-file investigation (2026-09-29)
+
+The seven gallery copies from 2026-09-27 were pulled from the test Pixel. The
+cloud objects for `d821`, `3658`, and `d894` had no animation control; `3765`
+and `30a9` did. The `bd8c` object said it was preparing the Motion Photo, which
+is an unresolved state rather than evidence of failure. All seven embedded
+videos are QuickTime MOV with AVC/H.264 video and 48 kHz mono PCM audio. All
+seven videos decode, and the still/video pairing IDs match. Their old JPEG
+Motion Photo copies also share the same structural defects: the MPF gain-map
+JPEG is absent from the XMP container directory, the primary item declares a
+nonexistent 24-byte padding gap, and the MOV is preceded by an undeclared SEF
+prefix and followed by a SEF footer. Their MPF entries themselves point to
+the correct image boundaries. Thus MOV versus MP4, PCM versus AAC, and MPF
+geometry alone do not distinguish the known cloud outcomes.
+
+The [Android Motion Photo 1.0 format](https://developer.android.com/media/platform/motion-photo-format)
+allows `video/quicktime`, but requires a tightly packed directory and the video
+as the last file item. Its optional audio track is described as AAC. The
+working cloud samples show that Google Photos sometimes tolerates the old
+defects, not that the defects are safe. Why it tolerates particular samples is
+still unproven.
+
+For a controlled test, reconstructed copies of the three static samples were
+made with the production JPEG writer. The JPEG compressed image, MPF auxiliary
+JPEG and MOV bytes are preserved; only the Motion Photo container layout and
+metadata are corrected. If these copies animate after cloud processing, the
+receiver can keep the no-encoding path. If any remain static, the next separate
+experiment changes only PCM audio to AAC while copying the H.264 video samples.
+No receiver policy should be changed on the basis of the earlier MP4/AAC result
+alone.
 
 The sender now follows Android's processing state after its transfer receipt.
 It reports a gallery publication failure independently of transfer success and
