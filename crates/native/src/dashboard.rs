@@ -1,0 +1,435 @@
+//! Opt-in, receiver-local browser management. The web credential is ephemeral
+//! and never shares the transfer pairing token or exposes photo bytes.
+use super::*;
+use axum::{
+    extract::{DefaultBodyLimit, Query, Request, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
+};
+use photobridge_store::catalog::Catalog;
+use std::time::{Duration, Instant};
+
+const HTML: &str = include_str!("dashboard/index.html");
+const CSS: &str = include_str!("dashboard/style.css");
+const JS: &str = include_str!("dashboard/app.js");
+
+#[derive(Clone)]
+struct WebState {
+    receiver: Arc<Mutex<Receiver>>,
+    root: PathBuf,
+    origin: String,
+    code: String,
+    session: String,
+    attempts: Arc<Mutex<(u8, Instant)>>,
+}
+
+pub(super) struct DashboardHost {
+    address: SocketAddr,
+    code: String,
+    handle: axum_server::Handle,
+    task: tokio::task::JoinHandle<()>,
+}
+
+fn random_hex() -> Result<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|_| Error::Storage("dashboard random source".into()))?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn random_code() -> Result<String> {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).map_err(|_| Error::Storage("dashboard random source".into()))?;
+    Ok(format!(
+        "{:010}",
+        u64::from_be_bytes(bytes) % 10_000_000_000
+    ))
+}
+
+fn equal_secret(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |difference, (x, y)| difference | (x ^ y))
+        == 0
+}
+
+async fn security(State(state): State<WebState>, request: Request, next: Next) -> Response {
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok());
+    if host != Some(state.origin.trim_start_matches("http://")) {
+        return StatusCode::MISDIRECTED_REQUEST.into_response();
+    }
+    if let Some(origin) = request
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|h| h.to_str().ok())
+    {
+        if origin != state.origin {
+            return StatusCode::FORBIDDEN.into_response();
+        }
+    }
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'",
+    ));
+    response
+}
+
+fn authorized(headers: &HeaderMap, state: &WebState) -> bool {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|token| equal_secret(token, &state.session))
+}
+
+async fn index() -> Html<&'static str> {
+    Html(HTML)
+}
+async fn css() -> ([(header::HeaderName, &'static str); 1], &'static str) {
+    ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], CSS)
+}
+async fn js() -> ([(header::HeaderName, &'static str); 1], &'static str) {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        JS,
+    )
+}
+
+#[derive(Deserialize)]
+struct Login {
+    code: String,
+}
+async fn login(State(state): State<WebState>, Json(input): Json<Login>) -> Response {
+    let mut attempts = match state.attempts.lock() {
+        Ok(value) => value,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    if attempts.1.elapsed() > Duration::from_secs(300) {
+        *attempts = (0, Instant::now());
+    }
+    if attempts.0 >= 5 {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    if !equal_secret(&input.code, &state.code) {
+        attempts.0 += 1;
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    *attempts = (0, Instant::now());
+    Json(json!({"token":state.session})).into_response()
+}
+
+async fn overview(State(state): State<WebState>, headers: HeaderMap) -> Response {
+    if !authorized(&headers, &state) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let receiver = state.receiver.clone();
+    match tokio::task::spawn_blocking(move || receiver.lock().map_err(lock)?.overview()).await {
+        Ok(Ok(value)) => Json(json!({
+            "total": value["total"],
+            "received": value["received"],
+            "published": value["published"],
+            "failed": value["failed"],
+            "reserved_bytes": value["reserved_bytes"],
+        }))
+        .into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct HistoryQuery {
+    state: Option<String>,
+    kind: Option<String>,
+    before: Option<i64>,
+}
+async fn history(
+    State(state): State<WebState>,
+    headers: HeaderMap,
+    Query(query): Query<HistoryQuery>,
+) -> Response {
+    if !authorized(&headers, &state) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let root = state.root.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        Catalog::open(&root.join("store"))?.page(
+            query.before,
+            query.state.as_deref().unwrap_or("all"),
+            query.kind.as_deref().unwrap_or("all"),
+            50,
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(value)) => Json(json!({
+            "next_cursor": value.next_cursor,
+            "total": value.total,
+            "items": value.items.into_iter().map(|item| json!({
+                "filename": item.filename,
+                "kind": item.kind,
+                "total_bytes": item.total_bytes,
+                "confirmed_bytes": item.confirmed_bytes,
+                "receipt": item.receipt,
+                "processing": item.processing,
+                "processing_error": item.processing_error,
+                "senders": item.senders.into_iter().map(|peer| peer.profile.name).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        })).into_response(),
+        Ok(Err(Error::Invalid(_))) => StatusCode::BAD_REQUEST.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn retry(State(state): State<WebState>, headers: HeaderMap) -> Response {
+    if !authorized(&headers, &state) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let receiver = state.receiver.clone();
+    match tokio::task::spawn_blocking(move || receiver.lock().map_err(lock)?.retry_processing())
+        .await
+    {
+        Ok(Ok(count)) => Json(json!({"count":count})).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+fn router(state: WebState) -> Router {
+    Router::new()
+        .route("/", get(index))
+        .route("/style.css", get(css))
+        .route("/app.js", get(js))
+        .route("/api/login", post(login))
+        .route("/api/overview", get(overview))
+        .route("/api/history", get(history))
+        .route("/api/retry", post(retry))
+        .layer(DefaultBodyLimit::max(1024))
+        .layer(middleware::from_fn_with_state(state.clone(), security))
+        .with_state(state)
+}
+
+impl DashboardHost {
+    pub(super) fn start(
+        receiver: Arc<Mutex<Receiver>>,
+        root: PathBuf,
+        listen: SocketAddr,
+    ) -> Result<Self> {
+        if listen.ip().is_unspecified() {
+            return Err(Error::Invalid("dashboard interface".into()));
+        }
+        let listener = std::net::TcpListener::bind(listen)?;
+        listener.set_nonblocking(true)?;
+        let address = listener.local_addr()?;
+        let code = random_code()?;
+        let state = WebState {
+            receiver,
+            root,
+            origin: format!("http://{address}"),
+            code: code.clone(),
+            session: random_hex()?,
+            attempts: Arc::new(Mutex::new((0, Instant::now()))),
+        };
+        let handle = axum_server::Handle::new();
+        let server = axum_server::from_tcp(listener).handle(handle.clone());
+        let task = runtime().spawn(async move {
+            let _ = server.serve(router(state).into_make_service()).await;
+        });
+        Ok(Self {
+            address,
+            code,
+            handle,
+            task,
+        })
+    }
+    pub(super) fn info(&self) -> Value {
+        json!({"url":format!("http://{}",self.address),"code":self.code})
+    }
+}
+
+impl Drop for DashboardHost {
+    fn drop(&mut self) {
+        self.handle.shutdown();
+        self.task.abort();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn browser_access_requires_phone_code_and_separate_session() {
+        let root =
+            std::env::temp_dir().join(format!("photobridge-dashboard-{}", random_hex().unwrap()));
+        fs::create_dir_all(root.join("store")).unwrap();
+        let receiver = Arc::new(Mutex::new(
+            Receiver::open(root.join("store"), 1 << 20).unwrap(),
+        ));
+        let dashboard = DashboardHost::start(
+            receiver,
+            root.clone(),
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+        )
+        .unwrap();
+        let info = dashboard.info();
+        let base = info["url"].as_str().unwrap();
+        let code = info["code"].as_str().unwrap();
+        let client = reqwest::Client::new();
+        let mut ready = false;
+        for _ in 0..50 {
+            if client.get(base).send().await.is_ok() {
+                ready = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(ready);
+        assert_eq!(
+            client
+                .get(format!("{base}/api/overview"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client
+                .post(format!("{base}/api/retry"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client
+                .get(base)
+                .header(header::HOST, "elsewhere.example")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::MISDIRECTED_REQUEST
+        );
+        let page = client.get(base).send().await.unwrap();
+        assert_eq!(page.status(), StatusCode::OK);
+        assert_eq!(page.headers()[header::CACHE_CONTROL], "no-store");
+        assert!(!page.text().await.unwrap().contains(code));
+        assert_eq!(
+            client
+                .post(format!("{base}/api/login"))
+                .header(header::ORIGIN, "http://elsewhere.example")
+                .json(&json!({"code":code}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            client
+                .post(format!("{base}/api/login"))
+                .json(&json!({"code":"bad"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let response = client
+            .post(format!("{base}/api/login"))
+            .json(&json!({"code":code}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let token = response.json::<Value>().await.unwrap()["token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_ne!(token, code);
+        let overview = client
+            .get(format!("{base}/api/overview"))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(overview.status(), StatusCode::OK);
+        assert_eq!(overview.json::<Value>().await.unwrap()["total"], 0);
+        assert_eq!(
+            client
+                .get(format!("{base}/api/history?state=bogus"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        let retry = client
+            .post(format!("{base}/api/retry"))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(retry.status(), StatusCode::OK);
+        assert_eq!(retry.json::<Value>().await.unwrap()["count"], 0);
+        drop(dashboard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn browser_code_locks_after_five_failures() {
+        let root =
+            std::env::temp_dir().join(format!("photobridge-dashboard-{}", random_hex().unwrap()));
+        fs::create_dir_all(root.join("store")).unwrap();
+        let receiver = Arc::new(Mutex::new(
+            Receiver::open(root.join("store"), 1 << 20).unwrap(),
+        ));
+        let dashboard = DashboardHost::start(
+            receiver,
+            root.clone(),
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+        )
+        .unwrap();
+        let info = dashboard.info();
+        let base = info["url"].as_str().unwrap();
+        let client = reqwest::Client::new();
+        for _ in 0..5 {
+            let response = client
+                .post(format!("{base}/api/login"))
+                .json(&json!({"code":"bad"}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+        let response = client
+            .post(format!("{base}/api/login"))
+            .json(&json!({"code":info["code"]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        drop(dashboard);
+        fs::remove_dir_all(root).unwrap();
+    }
+}

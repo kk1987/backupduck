@@ -1,0 +1,9 @@
+# Receiver browser management
+
+The Android receiver can host a small management page for a computer on the same Wi-Fi network. In **Settings → Browser management**, enable the switch while receiving is running, then open the displayed address on the computer and enter the code shown on the Pixel. The page shows receiver totals and transfer history, including items still receiving, items added to the phone gallery, and failures. **Retry failures** asks the receiver to process its retained originals again.
+
+This page manages the **Pixel receiver**, not the iPhone or Mac sender queue. A transfer marked **Added to phone gallery** has passed Android gallery publication; it does not prove that Google Photos uploaded the item to the cloud. The page does not expose photos or originals for download.
+
+The feature is off by default. Its listener exists only while receiving and browser management are both on, and it binds to the receiver's current Wi-Fi IPv4 address on port 8485. The transfer service remains on its separate paired HTTPS port 8484. Browser management uses **plain HTTP** to avoid a self-signed certificate warning in ordinary browsers, so the address, access code, and session traffic are not encrypted. Use it only on a trusted private Wi-Fi; turn it off on public or shared networks. A new 10-digit code and independent session token are generated whenever the listener starts. Five wrong code attempts trigger a five-minute lockout. Disabling the switch or stopping the receiver closes the listener and invalidates the session.
+
+The page bundles its assets locally, requires a code before returning status or history, checks the numeric Host and Origin headers, does not enable cross-origin requests, and returns `no-store` responses. It does not share the transfer pairing token. A different device on the same trusted Wi-Fi can reach the HTTP port if it knows the code; this is not remote Internet access or a cloud relay.

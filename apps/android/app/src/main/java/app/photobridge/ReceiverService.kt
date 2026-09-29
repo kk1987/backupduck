@@ -84,6 +84,11 @@ class ReceiverService : Service() {
                         ReceiverHolds.setThermal(this@ReceiverService, initialDecision.held)
                         if (initialDecision.held) updateThermalNotification(true)
                         ReceiverState.pairing = pairing.toString()
+                        if (ReceiverDashboardSettings.enabled(this@ReceiverService)) {
+                            runCatching { NativeBridge.request(JSONObject().put("op", "start_dashboard")) }
+                                .onFailure { runCatching { NativeBridge.request(JSONObject().put("op", "record_event")
+                                    .put("receiver", true).put("code", "dashboard_unavailable")) } }
+                        }
                         advertisement = runCatching { ReceiverAdvertisement(this@ReceiverService, pairing.getString("receiver_id"), 8484) }.getOrNull()
                         ReceiverState.mutable.value = ReceiverSnapshot(phase = "ready", thermalHeld = initialDecision.held,
                             temperatureDeciCelsius = initialThermal.deciCelsius)

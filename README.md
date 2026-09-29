@@ -33,6 +33,7 @@ licensing requests.
   checksums, resumable uploads, persistent queues and automatic transient retries.
 - Configurable storage budgets and Android receiver temperature protection,
   private-staging reclamation and diagnostics.
+- Optional [browser management](docs/browser-management.md) for viewing Pixel receiver transfers and retrying failed gallery processing from a computer on trusted Wi-Fi.
 - Signed Sparkle updates on Mac and verified, user-confirmed APK updates on Android.
 - An English/Simplified Chinese website and native interfaces.
 

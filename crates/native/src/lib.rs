@@ -6,6 +6,7 @@
 ))]
 compile_error!("folder-source is a desktop-only capability");
 mod background;
+mod dashboard;
 #[cfg(feature = "folder-source")]
 mod folders;
 mod maintenance;
@@ -156,11 +157,13 @@ fn identity(root: &Path, addr: SocketAddr) -> Result<Identity> {
 }
 pub struct ReceiverHost {
     root: PathBuf,
+    listen: SocketAddr,
     pub receiver: Arc<Mutex<Receiver>>,
     pub pairing: Pairing,
     maintenance: Arc<Mutex<maintenance::Maintenance>>,
     handle: axum_server::Handle,
     task: tokio::task::JoinHandle<()>,
+    dashboard: Option<dashboard::DashboardHost>,
 }
 impl ReceiverHost {
     pub async fn start(root: &Path, addr: SocketAddr, capacity: u64) -> Result<Self> {
@@ -223,12 +226,31 @@ impl ReceiverHost {
         });
         Ok(Self {
             root: root.into(),
+            listen: addr,
             receiver,
             pairing: ident.pairing,
             maintenance,
             handle,
             task,
+            dashboard: None,
         })
+    }
+    fn start_dashboard(&mut self) -> Result<Value> {
+        if self.dashboard.is_none() {
+            let port = if self.listen.port() == 8484 { 8485 } else { 0 };
+            self.dashboard = Some(dashboard::DashboardHost::start(
+                self.receiver.clone(),
+                self.root.clone(),
+                SocketAddr::new(self.listen.ip(), port),
+            )?);
+        }
+        Ok(self.dashboard.as_ref().expect("dashboard started").info())
+    }
+    fn dashboard_info(&self) -> Result<Value> {
+        self.dashboard
+            .as_ref()
+            .map(dashboard::DashboardHost::info)
+            .ok_or(Error::NotFound)
     }
     pub fn healthy(&self) -> bool {
         !self.task.is_finished()
@@ -236,6 +258,7 @@ impl ReceiverHost {
 }
 impl Drop for ReceiverHost {
     fn drop(&mut self) {
+        self.dashboard = None;
         self.handle.shutdown();
         self.task.abort();
     }
@@ -672,6 +695,9 @@ enum Command {
         video_mime: String,
     },
     StopReceiver,
+    StartDashboard,
+    StopDashboard,
+    DashboardInfo,
     ReceiverStatus,
     ReceiverOverview,
     ReceiverLogs {
@@ -1405,6 +1431,25 @@ fn dispatch(command: Command) -> Result<Value> {
             HOSTS.lock().map_err(lock)?.receiver = None;
             Ok(json!({}))
         }
+        Command::StartDashboard => HOSTS
+            .lock()
+            .map_err(lock)?
+            .receiver
+            .as_mut()
+            .ok_or(Error::NotFound)?
+            .start_dashboard(),
+        Command::StopDashboard => {
+            let mut hosts = HOSTS.lock().map_err(lock)?;
+            hosts.receiver.as_mut().ok_or(Error::NotFound)?.dashboard = None;
+            Ok(json!({}))
+        }
+        Command::DashboardInfo => HOSTS
+            .lock()
+            .map_err(lock)?
+            .receiver
+            .as_ref()
+            .ok_or(Error::NotFound)?
+            .dashboard_info(),
         Command::RetryProcessing => {
             let h = HOSTS.lock().map_err(lock)?;
             let host = h.receiver.as_ref().ok_or(Error::NotFound)?;

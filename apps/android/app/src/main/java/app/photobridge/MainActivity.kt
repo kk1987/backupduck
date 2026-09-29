@@ -2,6 +2,9 @@ package app.photobridge
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -257,6 +260,34 @@ class MainActivity : AppCompatActivity() {
             })
             label(body, getString(R.string.receiver_motion_conversion_note), 14, secondaryColor())
         }
+        section(panel, R.string.dashboard_section)
+        card(panel) { body ->
+            var changing = false
+            val switch = MaterialSwitch(this).apply {
+                setText(R.string.dashboard_switch)
+                isChecked = ReceiverDashboardSettings.enabled(this@MainActivity)
+                minimumHeight = dp(56)
+            }
+            body.addView(switch)
+            label(body, getString(R.string.dashboard_note), 14, secondaryColor())
+            action(body, R.string.dashboard_access) { showDashboardAccess() }
+            switch.setOnCheckedChangeListener { _, checked ->
+                if (changing) return@setOnCheckedChangeListener
+                switch.isEnabled = false
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching {
+                        if (ReceiverState.snapshot.value.phase == "ready") NativeBridge.request(JSONObject().put("op", if (checked) "start_dashboard" else "stop_dashboard"))
+                    } }
+                    changing = true
+                    if (result.isSuccess) ReceiverDashboardSettings.setEnabled(this@MainActivity, checked)
+                    else switch.isChecked = !checked
+                    changing = false
+                    switch.isEnabled = true
+                    if (result.isFailure) Toast.makeText(this@MainActivity, R.string.dashboard_unavailable, Toast.LENGTH_LONG).show()
+                    else if (checked && ReceiverState.snapshot.value.phase == "ready") showDashboardAccess()
+                }
+            }
+        }
         section(panel, R.string.settings_diagnostics)
         card(panel) { body ->
             action(body, R.string.logs_retention_settings) { showStorageControls(StorageSection.LOGS) {} }
@@ -276,6 +307,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
     internal fun openSettings() { navigation.selectedItemId = 4 }
+    private fun showDashboardAccess() {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching {
+                NativeBridge.request(JSONObject().put("op", "dashboard_info")) as JSONObject
+            } }
+            result.onSuccess { info ->
+                val url = info.getString("url")
+                val code = info.getString("code")
+                val instructions = TextView(this@MainActivity).apply {
+                    text = getString(R.string.dashboard_access_details, url, code)
+                    textSize = 17f
+                    setTextIsSelectable(true)
+                    setPadding(dp(24), dp(12), dp(24), dp(12))
+                }
+                MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.dashboard_access)
+                    .setView(instructions).setNegativeButton(R.string.receiver_close, null)
+                    .setPositiveButton(R.string.dashboard_copy_address) { _, _ ->
+                        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText("PhotoBridge", url))
+                    }.show()
+            }.onFailure { Toast.makeText(this@MainActivity, R.string.dashboard_start_receiver, Toast.LENGTH_LONG).show() }
+        }
+    }
     private fun openHelp(topic: ReceiverHelpTopic? = null) {
         startActivity(Intent(this, ReceiverHelpActivity::class.java).apply { topic?.let { putExtra("topic", it.key) } })
     }

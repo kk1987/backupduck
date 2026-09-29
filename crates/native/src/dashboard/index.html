@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhotoBridge · 接收端</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">PhotoBridge</p><h1 id="page-title">接收端管理</h1></div><span id="connection" class="pill">局域网</span></header>
+    <section id="login-panel" class="card login">
+      <h2 id="login-title">输入手机上的访问码</h2>
+      <p id="login-help">在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看。每次开启都会更换访问码。</p>
+      <form id="login-form"><label id="code-label" for="code">访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><button id="login-button" type="submit">进入管理页</button></form>
+    </section>
+    <div id="dashboard" hidden>
+      <section class="cards" aria-label="接收概览">
+        <div class="card metric"><span id="label-received">已接收</span><strong id="received">—</strong></div>
+        <div class="card metric"><span id="label-published">已加入手机相册</span><strong id="published">—</strong></div>
+        <div class="card metric"><span id="label-failed">待处理失败</span><strong id="failed">—</strong></div>
+        <div class="card metric"><span id="label-storage">保留的原件</span><strong id="reserved">—</strong></div>
+      </section>
+      <section class="card transfers">
+        <div class="section-head"><div><h2 id="transfers-title">传输记录</h2><p id="cloud-note">加入手机相册不代表 Google 相册云端已备份。</p></div><div class="actions"><select id="state-filter" aria-label="状态"><option value="all">全部</option><option value="processing">处理中</option><option value="published">已加入相册</option><option value="failed">处理失败</option></select><button id="refresh" type="button">刷新</button><button id="retry" type="button">重试失败项</button></div></div>
+        <p id="message" role="status"></p>
+        <div id="items" class="items"></div>
+        <button id="more" type="button" hidden>加载更多</button>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

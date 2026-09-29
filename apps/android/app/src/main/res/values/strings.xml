@@ -73,6 +73,14 @@
 <string name="receiver_pair_section">Connect your devices</string>
 <string name="receiver_behavior">Receiving</string>
 <string name="receiver_motion_settings">Live Photos</string>
+<string name="dashboard_section">Browser management</string>
+<string name="dashboard_switch">Allow management from a computer</string>
+<string name="dashboard_note">Off by default. On the same trusted Wi-Fi, a computer can view receiving progress and transfers, and retry failures. Local HTTP is not encrypted; keep it off on public Wi-Fi.</string>
+<string name="dashboard_access">Show browser address and code</string>
+<string name="dashboard_access_details">On your computer, open:\n%1$s\n\nAccess code: %2$s\n\nThe code changes each time browser management starts. Keep it private.</string>
+<string name="dashboard_copy_address">Copy address</string>
+<string name="dashboard_start_receiver">Start receiving and enable browser management first.</string>
+<string name="dashboard_unavailable">Browser management could not start. Check your Wi-Fi connection and try again.</string>
 <string name="receiver_motion_conversion_switch">Allow compatibility conversion</string>
 <string name="receiver_motion_conversion_note">Off by default. PhotoBridge first tries to keep the original image and video. If it cannot package a Live Photo, turning this on lets it create a new JPEG and MP4 copy. This can take longer and change quality; the received originals are kept.</string>
 <string name="receiver_motion_conversion_recovery">The original photo and video are safe on this phone, but this Live Photo cannot be added to the gallery without conversion. Turn on “Allow compatibility conversion” in Settings, then tap “Retry failed processing” in Transfers.</string>
