@@ -162,6 +162,8 @@ struct HistoryQuery {
     state: Option<String>,
     kind: Option<String>,
     before: Option<i64>,
+    page: Option<u32>,
+    per_page: Option<u32>,
 }
 async fn history(
     State(state): State<WebState>,
@@ -171,20 +173,31 @@ async fn history(
     if !authorized(&headers, &state) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let numbered = query.page.is_some() || query.per_page.is_some();
+    if numbered && query.before.is_some() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let page = query.page.unwrap_or(1);
+    let per_page = query.per_page.unwrap_or(20);
     let root = state.root.clone();
     let result = tokio::task::spawn_blocking(move || {
-        Catalog::open(&root.join("store"))?.page(
-            query.before,
-            query.state.as_deref().unwrap_or("all"),
-            query.kind.as_deref().unwrap_or("all"),
-            50,
-        )
+        let catalog = Catalog::open(&root.join("store"))?;
+        let state = query.state.as_deref().unwrap_or("all");
+        let kind = query.kind.as_deref().unwrap_or("all");
+        if numbered {
+            catalog.numbered_page(state, kind, page, per_page)
+        } else {
+            catalog.page(query.before, state, kind, 50)
+        }
     })
     .await;
     match result {
         Ok(Ok(value)) => Json(json!({
             "next_cursor": value.next_cursor,
             "total": value.total,
+            "page": if numbered { Some(page) } else { None },
+            "per_page": if numbered { Some(per_page) } else { None },
+            "pages": if numbered { Some(((value.total.max(1) - 1) / i64::from(per_page)) + 1) } else { None },
             "items": value.items.into_iter().map(|item| json!({
                 "filename": item.filename,
                 "kind": item.kind,
@@ -196,6 +209,7 @@ async fn history(
                 "captured_at_ms": item.captured_at_ms,
                 "received_at_ms": item.received_at_ms,
                 "published_at_ms": item.published_at_ms,
+                "originals_released": item.originals_released,
                 "senders": item.senders.into_iter().map(|peer| peer.profile.name).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         })).into_response(),
@@ -380,6 +394,28 @@ mod tests {
             .unwrap();
         assert_eq!(overview.status(), StatusCode::OK);
         assert_eq!(overview.json::<Value>().await.unwrap()["total"], 0);
+        let numbered = client
+            .get(format!("{base}/api/history?page=1&per_page=20"))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(numbered.status(), StatusCode::OK);
+        let numbered = numbered.json::<Value>().await.unwrap();
+        assert_eq!(numbered["page"], 1);
+        assert_eq!(numbered["pages"], 1);
+        assert_eq!(numbered["per_page"], 20);
+        assert_eq!(numbered["total"], 0);
+        assert_eq!(
+            client
+                .get(format!("{base}/api/history?page=0&per_page=20"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(
             client
                 .get(format!("{base}/api/history?state=bogus"))

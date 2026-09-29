@@ -546,10 +546,29 @@ fn receiver_catalog_filters_before_pagination_and_survives_stop() {
         .map(|r| &r.id)
         .collect();
     assert_eq!(ids.len(), 205);
+    let numbered_first = catalog.numbered_page("all", "all", 1, 20).unwrap();
+    let numbered_second = catalog.numbered_page("all", "all", 2, 20).unwrap();
+    let numbered_last = catalog.numbered_page("all", "all", 11, 20).unwrap();
+    assert_eq!(numbered_first.items.len(), 20);
+    assert_eq!(numbered_second.items.len(), 20);
+    assert_eq!(numbered_last.items.len(), 5);
+    assert_eq!(numbered_first.items[0].id, first.items[0].id);
+    assert_eq!(numbered_second.items[0].id, first.items[20].id);
+    assert_eq!(numbered_last.items[0].id, last.items[0].id);
+    assert!(catalog.numbered_page("all", "all", 0, 20).is_err());
+    assert!(catalog.numbered_page("all", "all", 1, 30).is_err());
     let failed = catalog.page(None, "failed", "motion", 100).unwrap();
     assert_eq!(failed.total, 1);
     assert_eq!(failed.items[0].id, failed_id);
     assert_eq!(failed.items[0].confirmed_bytes, failed.items[0].total_bytes);
+    assert_eq!(
+        catalog
+            .numbered_page("failed", "motion", 1, 20)
+            .unwrap()
+            .items[0]
+            .id,
+        failed_id
+    );
     assert_eq!(
         catalog.page(None, "receiving", "photo", 100).unwrap().total,
         102

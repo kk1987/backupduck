@@ -1,3 +1,8 @@
+# Beta 31
+
+- Simplify the Pixel browser transfer table and add a per-item detail view for sender, media type, three local timestamps, receive progress, retained-original state, and processing guidance.
+- Add a status guide and receiver-side numbered pagination with 20/50/100 items per page, page selection, and direct jump. Filters apply to the full history before pagination.
+
 # Beta 30
 
 - Redesign the Pixel browser dashboard with a compact overview, storage status, and a transfer table that filters by state and media type.

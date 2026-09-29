@@ -86,6 +86,31 @@ impl Catalog {
         limit: u32,
         sender: Option<&str>,
     ) -> Result<HistoryPage> {
+        self.page_internal(before, state, kind, limit, sender, None)
+    }
+    /// Numbered browser pages. Filters are applied before LIMIT/OFFSET.
+    pub fn numbered_page(
+        &self,
+        state: &str,
+        kind: &str,
+        page: u32,
+        per_page: u32,
+    ) -> Result<HistoryPage> {
+        if page == 0 || page > 100_000 || ![20, 50, 100].contains(&per_page) {
+            return Err(Error::Invalid("history page".into()));
+        }
+        let offset = i64::from(page - 1) * i64::from(per_page);
+        self.page_internal(None, state, kind, per_page, None, Some(offset))
+    }
+    fn page_internal(
+        &self,
+        before: Option<i64>,
+        state: &str,
+        kind: &str,
+        limit: u32,
+        sender: Option<&str>,
+        numbered_offset: Option<i64>,
+    ) -> Result<HistoryPage> {
         if sender.is_some_and(|id| id != "unknown" && !photobridge_core::valid_digest(id)) {
             return Err(Error::Invalid("sender filter".into()));
         }
@@ -146,10 +171,17 @@ impl Catalog {
         } else {
             "NULL"
         };
-        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column},{received_at_column},{published_at_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4")).map_err(super::db)?;
+        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column},{received_at_column},{published_at_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4 OFFSET ?6")).map_err(super::db)?;
         let records = query
             .query_map(
-                params![state, kind, before, limit as i64 + 1, sender],
+                params![
+                    state,
+                    kind,
+                    before,
+                    limit as i64 + i64::from(numbered_offset.is_none()),
+                    sender,
+                    numbered_offset.unwrap_or(0)
+                ],
                 |r| {
                     Ok((
                         r.get::<_, i64>(0)?,
@@ -168,7 +200,7 @@ impl Catalog {
             .map_err(super::db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(super::db)?;
-        let more = records.len() > limit;
+        let more = numbered_offset.is_none() && records.len() > limit;
         let mut items = Vec::new();
         let peers = super::devices::DeviceDirectory::open(&self.root, "en")?.peers()?;
         for (
