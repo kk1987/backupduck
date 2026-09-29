@@ -17,6 +17,8 @@
 <string name="receiver_pair_instruction">Scan this code in PhotoBridge on your iPhone. It grants access to this receiver. Share it only with your own devices.</string>
 <string name="receiver_cloud_note">Received means files are verified on this device. Enable backup for the PhotoBridge folder in Google Photos. Cloud backup is handled by Google Photos.</string>
 <string name="receiver_motion_note">Motion assets keep their original photo and video. Unsupported conversions stay available for retry.</string>
+<string name="receiver_motion_compatibility">Improve cloud motion photo compatibility</string>
+<string name="receiver_motion_compatibility_note">JPG + MOV keeps its original video by default. If the cloud shows a still image, enable compatibility processing; future photos may convert audio or video. Already backed-up photos are unchanged.</string>
 <string name="receiver_network_missing">Connect to a Wi-Fi network first.</string>
 <string name="receiver_notification">Receiving photos securely</string>
 <string name="receiver_retry_processing">Retry failed processing</string>

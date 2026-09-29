@@ -216,6 +216,15 @@ class MainActivity : AppCompatActivity() {
             label(body, getString(if (Build.VERSION.SDK_INT >= 35) R.string.receiver_restore_note_modern else R.string.receiver_restore_note_legacy), 14, secondaryColor())
         }
         card(panel) { body ->
+            body.addView(MaterialSwitch(this).apply {
+                setText(R.string.receiver_motion_compatibility)
+                isChecked = MotionCompatibilitySettings.enabled(this@MainActivity)
+                setOnCheckedChangeListener { _, checked -> MotionCompatibilitySettings.setEnabled(this@MainActivity, checked) }
+                minimumHeight = dp(56)
+            })
+            label(body, getString(R.string.receiver_motion_compatibility_note), 14, secondaryColor())
+        }
+        card(panel) { body ->
             val protection = MaterialSwitch(this).apply {
                 setText(R.string.receiver_thermal_switch)
                 isChecked = ReceiverThermalSettings.enabled(this@MainActivity)

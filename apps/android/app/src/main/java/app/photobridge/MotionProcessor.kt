@@ -63,11 +63,12 @@ internal object MotionProcessor {
                 var dated: File? = null
                 try {
                     dated = MediaDates.prepare(context, still, "image/jpeg", asset.optJSONObject("metadata"))
-                    // Google Photos can retain a JPEG+QuickTime MOV byte-for-byte yet
-                    // publish only a static cloud image. Media3 copies compatible
-                    // H.264 samples into MP4 and converts unsupported audio to AAC.
-                    // The JPEG, including its MPF auxiliary image, stays untouched.
-                    val packagedVideo = if (directVideoMime == "video/quicktime" && resumeLocator == null) {
+                    // Prefer the original MOV. Google Photos cloud compatibility
+                    // cannot be inferred from local playback or codec names, so
+                    // conversion is an explicit receiver setting for new copies.
+                    val convert = directVideoMime == "video/quicktime" && resumeLocator == null &&
+                        MotionCompatibilitySettings.enabled(context)
+                    val packagedVideo = if (convert) {
                         if (mp4.exists()) check(mp4.delete()) { "storage" }
                         try { transcode(context, video, mp4) }
                         catch (_: TimeoutCancellationException) { throw IOException("video_conversion_timeout") }
@@ -79,6 +80,21 @@ internal object MotionProcessor {
                         .put("metadata", asset.optJSONObject("metadata") ?: JSONObject()))
                     if (resumeLocator == null || matchesPreparedCopy(item, motion)) {
                         return MediaPublisher.publishFile(context, motion, item, "image/jpeg", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)
+                    }
+                    // A pending gallery copy may have been prepared by an older
+                    // app version or before the setting changed. Only convert if
+                    // the original MOV does not match its recorded hash.
+                    if (directVideoMime == "video/quicktime") {
+                        if (mp4.exists()) check(mp4.delete()) { "storage" }
+                        try { transcode(context, video, mp4) }
+                        catch (_: TimeoutCancellationException) { throw IOException("video_conversion_timeout") }
+                        NativeBridge.request(JSONObject().put("op", "package_motion")
+                            .put("jpeg", dated.path).put("mp4", mp4.path).put("output", motion.path)
+                            .put("video_mime", "video/mp4")
+                            .put("metadata", asset.optJSONObject("metadata") ?: JSONObject()))
+                        if (matchesPreparedCopy(item, motion)) {
+                            return MediaPublisher.publishFile(context, motion, item, "image/jpeg", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)
+                        }
                     }
                     throw IllegalStateException("gallery_copy_changed")
                 } catch (error: IllegalStateException) {
@@ -173,5 +189,13 @@ internal object MotionProcessor {
             // Runs on the application's main looper even after coroutine cancellation.
             transformer?.cancel()
         }
+    }
+}
+
+internal object MotionCompatibilitySettings {
+    private const val PREFS = "motion_compatibility"
+    fun enabled(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("convert_jpeg_mov", false)
+    fun setEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("convert_jpeg_mov", enabled).apply()
     }
 }
