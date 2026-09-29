@@ -132,26 +132,14 @@ old JPEG directory and trailing-footer violations remain format defects.
 
 The writer now lists the preserved MPF auxiliary JPEG, makes the appended video
 the exact end of the file, and removes the invented padding and SEF footer.
-The first beta.25 implementation converted every JPG+MOV input to MP4/H.264/AAC.
-This was too broad. Seven real received JPG+MOV assets all contain H.264 video
-and PCM audio, yet their Google Photos cloud results differed: some played,
-three were static, and one could not load animation. Codec labels alone cannot
-identify a failing asset. The repaired JPEG writer now makes the MPF directory,
-video tail, and padding conformant. Its corrected direct MOV output has not yet
-been validated in Google Photos cloud. The receiver therefore again defaults to
-packaging the original MOV unchanged, and offers an explicit compatibility
-setting for *new* JPG+MOV gallery copies. If enabled, Media3 produces
-MP4/H.264/AAC; compatible compressed video may be copied without re-encoding,
-but the app does not yet verify that for each export. The still image and MPF
-auxiliary JPEG are not decoded or re-encoded on the direct path. Unsupported
-direct input still uses the existing processing fallback.
-
-The receiver cannot learn whether Google Photos cloud will play a gallery copy:
-MediaStore publication and local playback are not a cloud acceptance signal.
-It must not silently claim an automatic cloud-triggered fallback. Changing the
-compatibility setting does not rewrite an existing gallery or cloud item.
-Regression tests check the directory, MPF offsets, source bytes, and exact
-video tail. A corrected direct output still needs device-and-cloud validation.
+Android's JPG+MOV publication path now uses Media3 Transformer to produce
+MP4/H.264/AAC before packaging. Media3 can copy compatible compressed video
+samples into the new container without re-encoding them; it converts audio
+when necessary. The still image and its MPF auxiliary image are not decoded or
+re-encoded on this direct path. Regression tests check the directory, MPF
+offsets, source bytes, and exact video tail. Previously published copies are
+not rewritten by an app update; the final Android output still requires a
+separate device-and-cloud acceptance check.
 
 The sender now follows Android's processing state after its transfer receipt.
 It reports a gallery publication failure independently of transfer success and

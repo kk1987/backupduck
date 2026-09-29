@@ -17,8 +17,6 @@
 <string name="receiver_pair_instruction">使用 iPhone 上的 PhotoBridge 扫描。此二维码授予接收端访问权限，请仅用于自己的设备。</string>
 <string name="receiver_cloud_note">“已接收”表示文件已在本机校验。请在 Google 相册中启用 PhotoBridge 文件夹备份，云端上传由 Google 相册完成。</string>
 <string name="receiver_motion_note">动图保留原始照片和视频，不支持的转换可以稍后重试。</string>
-<string name="receiver_motion_compatibility">增强实况照片云端兼容性</string>
-<string name="receiver_motion_compatibility_note">默认保留 JPG＋MOV 原视频。若云端显示静态图，可开启兼容处理；之后收到的照片可能转换音频或视频。已备份照片不会改变。</string>
 <string name="receiver_network_missing">请先连接 Wi-Fi 网络。</string>
 <string name="receiver_notification">正在安全接收照片</string>
 <string name="receiver_retry_processing">重试处理失败的项目</string>
