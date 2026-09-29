@@ -4,7 +4,13 @@
 <string name="receiver_intro">通过 Wi-Fi 接收 iPhone 或 Mac 上的原始照片与视频。请将两台设备连接到同一网络。</string>
 <string name="receiver_start">开始接收</string>
 <string name="receiver_stop">停止接收</string>
-<string name="receiver_pair">显示配对码</string>
+<string name="receiver_pair">显示 iPhone 配对码</string>
+<string name="receiver_pair_start">启动并显示 iPhone 配对码</string>
+<string name="receiver_pair_auto_start_hint">选择下方的配对方式，应用会自动启动接收。</string>
+<string name="receiver_pair_starting_hint">正在启动接收，就绪后会自动继续配对。</string>
+<string name="receiver_pair_ready_hint">连接 iPhone 时显示配对码；连接 Mac 时扫描电脑上的配对码。</string>
+<string name="receiver_pair_unavailable_hint">接收尚未就绪。请查看上方状态并检查 Wi-Fi 连接。</string>
+<string name="receiver_pair_start_failed">未能开始配对。请查看接收状态及 Wi-Fi 连接后重试。</string>
 <string name="receiver_close">关闭</string>
 <string name="receiver_idle">接收服务已停止</string>
 <string name="receiver_starting">正在启动安全接收服务…</string>
@@ -31,7 +37,8 @@
 <string name="receiver_item_failed">原件已接收 · 图库处理待重试</string>
 <string name="receiver_open_photos">打开 Google 相册</string>
 <string name="receiver_photos_missing">尚未安装 Google 相册。</string>
-    <string name="receiver_scan_desktop">扫描电脑配对码</string>
+    <string name="receiver_scan_desktop">扫描 Mac 配对码</string>
+    <string name="receiver_scan_desktop_start">启动并扫描 Mac 配对码</string>
     <string name="receiver_scan_prompt">扫描 Mac 上 PhotoBridge 显示的二维码</string>
     <string name="receiver_pairing_connecting">正在连接电脑…</string>
     <string name="receiver_desktop_paired">接收设备已连接到电脑</string>
@@ -214,7 +221,7 @@
     <string name="help_recovery_title">恢复与排查</string>
     <string name="help_recovery_summary">重试处理、导出诊断，并在更新时保留数据。</string>
     <string name="help_pair_title">选择配对方向</string>
-    <string name="help_pair_body">将两台设备连接到能互相访问的同一本地网络，并在这里开始接收。使用 iPhone 时，扫描接收端显示的二维码；使用 Mac 时，在电脑上显示配对码，再用接收端扫描。只有扫码时需要相机权限。配对后核对双方设备名称；修改名称不会改变已有身份和接收记录。</string>
+    <string name="help_pair_body">将两台设备连接到能互相访问的同一本地网络。在“接收”页选择配对方式，应用会自动启动接收，并在就绪后显示配对码或打开扫码。使用 iPhone 时，扫描接收端显示的二维码；使用 Mac 时，在电脑上显示配对码，再用接收端扫描。只有扫码时需要相机权限。配对后核对双方设备名称；修改名称不会改变已有身份和接收记录。</string>
     <string name="help_network_title">无法连接时</string>
     <string name="help_network_body">当前 Android 接收端需要带有 IPv4 地址的 Wi-Fi。访客网络、客户端隔离以及部分 VPN 路由可能阻止设备互相访问，即使它们显示相同的网络名称。请回到原来的本地网络再试。保持接收开启时，Wi-Fi 中断后会自动重试。</string>
     <string name="help_address_title">接收端地址变化时</string>

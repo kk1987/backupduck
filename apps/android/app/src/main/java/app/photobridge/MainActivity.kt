@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
 import android.widget.*
@@ -34,6 +35,8 @@ import kotlinx.coroutines.*
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
+    private enum class PairingAction { SHOW_CODE, SCAN_DESKTOP }
+
     private val history: HistoryModel by viewModels()
     private val receiverRoot get() = "$filesDir/receiver"
     private var selectedPage = 1
@@ -45,6 +48,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recoveryAction: Button
     private lateinit var pair: Button
     private lateinit var scanDesktop: Button
+    private lateinit var pairingHint: TextView
+    private var pendingPairingAction: PairingAction? = null
+    private var pendingPairingStartedAt = 0L
     private lateinit var start: Button
     private lateinit var stop: Button
     private lateinit var storagePage: StoragePage
@@ -99,6 +105,7 @@ class MainActivity : AppCompatActivity() {
             titles.forEachIndexed { index, title -> menu.add(0, index + 1, index, title).setIcon(icons[index]) }
             setOnItemSelectedListener { item ->
                 selectedPage = item.itemId
+                if (selectedPage != 1) pendingPairingAction = null
                 toolbar.setTitle(titles[selectedPage - 1])
                 pages.forEachIndexed { index, page -> page.visibility = if (index + 1 == selectedPage) View.VISIBLE else View.GONE }
                 if (selectedPage == 3) storagePage.refresh(force = true)
@@ -178,6 +185,7 @@ class MainActivity : AppCompatActivity() {
                 beginReceiving()
             }
             stop = action(body, R.string.receiver_stop) {
+                pendingPairingAction = null
                 ReceiverPreferences.setEnabled(this, false)
                 stopService(Intent(this, ReceiverService::class.java))
             }
@@ -185,12 +193,9 @@ class MainActivity : AppCompatActivity() {
         section(panel, R.string.receiver_pair_section)
         card(panel) { body ->
             label(body, getString(R.string.receiver_intro), 15, secondaryColor())
-            pair = action(body, R.string.receiver_pair, action = ::showPairing)
-            scanDesktop = action(body, R.string.receiver_scan_desktop) {
-                scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                    .setPrompt(getString(R.string.receiver_scan_prompt)).setBeepEnabled(false)
-                    .setBarcodeImageEnabled(false).setOrientationLocked(false))
-            }
+            pairingHint = label(body, getString(R.string.receiver_pair_auto_start_hint), 14, secondaryColor())
+            pair = action(body, R.string.receiver_pair_start) { requestPairing(PairingAction.SHOW_CODE) }
+            scanDesktop = action(body, R.string.receiver_scan_desktop_start) { requestPairing(PairingAction.SCAN_DESKTOP) }
         }
         label(panel, getString(R.string.receiver_cloud_note), 13, secondaryColor())
     }
@@ -336,12 +341,39 @@ class MainActivity : AppCompatActivity() {
     private fun beginReceiving() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        val wasEnabled = ReceiverPreferences.enabled(this)
         ReceiverPreferences.setEnabled(this, true)
+        if (!wasEnabled || ReceiverState.snapshot.value.phase != "ready")
+            ReceiverState.mutable.value = ReceiverState.snapshot.value.copy(phase = "starting", error = null)
         startReceiverService()
     }
     private fun startReceiverService() {
         runCatching { startForegroundService(Intent(this, ReceiverService::class.java)) }.onFailure {
             ReceiverState.mutable.value = ReceiverState.snapshot.value.copy(phase = "waiting", error = "foreground_start_blocked")
+        }
+    }
+    private fun requestPairing(action: PairingAction) {
+        val state = ReceiverState.snapshot.value
+        val enabled = ReceiverPreferences.enabled(this)
+        if (enabled && state.phase == "ready" && ReceiverState.pairing != null) {
+            performPairing(action)
+            return
+        }
+        if (enabled && state.phase == "waiting" && state.error != null) {
+            receiverProblem(state)?.let { Toast.makeText(this, it.message, Toast.LENGTH_LONG).show() }
+            return
+        }
+        pendingPairingAction = action
+        pendingPairingStartedAt = SystemClock.elapsedRealtime()
+        if (!enabled) beginReceiving()
+        renderReceiver(ReceiverState.snapshot.value)
+    }
+    private fun performPairing(action: PairingAction) {
+        when (action) {
+            PairingAction.SHOW_CODE -> showPairing()
+            PairingAction.SCAN_DESKTOP -> scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt(getString(R.string.receiver_scan_prompt)).setBeepEnabled(false)
+                .setBarcodeImageEnabled(false).setOrientationLocked(false))
         }
     }
     private fun renderReceiver(state: ReceiverSnapshot) {
@@ -367,11 +399,33 @@ class MainActivity : AppCompatActivity() {
         processing.text = state.processingName?.let { getString(R.string.receiver_processing, it) } ?: ""
         processing.visibility = if (state.processingName == null) View.GONE else View.VISIBLE
         processingProgress.visibility = processing.visibility
-        pair.isEnabled = ReceiverState.pairing != null
-        scanDesktop.isEnabled = ReceiverState.pairing != null
         val enabled = ReceiverPreferences.enabled(this)
+        val readyToPair = enabled && state.phase == "ready" && ReceiverState.pairing != null
+        if (pendingPairingAction != null && SystemClock.elapsedRealtime() - pendingPairingStartedAt > 60_000)
+            pendingPairingAction = null
+        if (pendingPairingAction != null && state.phase == "waiting" && state.error != null) {
+            pendingPairingAction = null
+            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+        }
+        val pending = pendingPairingAction
+        if (pending != null && enabled && state.phase == "idle") startReceiverService()
+        pairingHint.setText(when {
+            pending != null -> R.string.receiver_pair_starting_hint
+            readyToPair -> R.string.receiver_pair_ready_hint
+            state.phase == "waiting" || state.phase == "error" -> R.string.receiver_pair_unavailable_hint
+            else -> R.string.receiver_pair_auto_start_hint
+        })
+        pair.setText(if (readyToPair) R.string.receiver_pair else R.string.receiver_pair_start)
+        scanDesktop.setText(if (readyToPair) R.string.receiver_scan_desktop else R.string.receiver_scan_desktop_start)
+        pair.isEnabled = pending == null
+        scanDesktop.isEnabled = pending == null
         start.visibility = if (enabled) View.GONE else View.VISIBLE
         stop.visibility = if (enabled) View.VISIBLE else View.GONE
+        if (pending != null && readyToPair && selectedPage == 1
+            && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            pendingPairingAction = null
+            performPairing(pending)
+        }
     }
     internal fun openPhotos() {
         val launch = packageManager.getLaunchIntentForPackage("com.google.android.apps.photos")
@@ -382,7 +436,10 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.receiver_photos_missing, Toast.LENGTH_SHORT).show()
     }
     private fun submitDesktopPairing(contents: String) {
-        val pairing = ReceiverState.pairing ?: return
+        val pairing = ReceiverState.pairing ?: run {
+            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+            return
+        }
         lifecycleScope.launch {
             Toast.makeText(this@MainActivity, R.string.receiver_pairing_connecting, Toast.LENGTH_SHORT).show()
             val result = withContext(Dispatchers.IO) {
@@ -398,7 +455,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun showPairing() {
-        val payload = ReceiverState.pairing ?: return
+        val payload = ReceiverState.pairing ?: run {
+            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+            return
+        }
         runCatching {
             val matrix = MultiFormatWriter().encode(payload, BarcodeFormat.QR_CODE, 900, 900)
             val pixels = IntArray(900 * 900) { index -> if (matrix[index % 900, index / 900]) Color.BLACK else Color.WHITE }

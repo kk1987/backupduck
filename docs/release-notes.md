@@ -1,3 +1,8 @@
+# Beta 33
+
+- On the Pixel receiver, pairing can now start receiving automatically. Choose the iPhone code or Mac scanner even when the receiver is stopped; the requested pairing step opens once the receiver is ready.
+- Explain the pairing choices and show a useful error when the receiver cannot start, instead of leaving the pairing buttons disabled without a reason.
+
 # Beta 32
 
 - Show live Pixel battery temperature, charge level, free space, and PhotoBridge original usage in browser management, including the existing heat-pause state and threshold.

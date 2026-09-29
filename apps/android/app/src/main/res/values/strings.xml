@@ -4,7 +4,13 @@
 <string name="receiver_intro">Receive original photos and videos from your iPhone or Mac over the local network. Keep both devices on the same network.</string>
 <string name="receiver_start">Start receiving</string>
 <string name="receiver_stop">Stop receiving</string>
-<string name="receiver_pair">Show pairing code</string>
+<string name="receiver_pair">Show iPhone code</string>
+<string name="receiver_pair_start">Start &amp; show iPhone code</string>
+<string name="receiver_pair_auto_start_hint">Choose a pairing option below. Receiving will start automatically.</string>
+<string name="receiver_pair_starting_hint">Starting the receiver; pairing will open when it is ready.</string>
+<string name="receiver_pair_ready_hint">For iPhone, show a code here. For Mac, scan the code on your computer.</string>
+<string name="receiver_pair_unavailable_hint">Pairing needs an active receiver. Check the status above and your Wi-Fi connection.</string>
+<string name="receiver_pair_start_failed">Could not start pairing. Check the receiver status and Wi-Fi, then try again.</string>
 <string name="receiver_close">Close</string>
 <string name="receiver_idle">Receiver is stopped</string>
 <string name="receiver_starting">Starting secure receiver…</string>
@@ -31,7 +37,8 @@
 <string name="receiver_item_failed">Received · Processing needs retry</string>
 <string name="receiver_open_photos">Open Google Photos</string>
 <string name="receiver_photos_missing">Google Photos is not installed.</string>
-    <string name="receiver_scan_desktop">Scan desktop code</string>
+    <string name="receiver_scan_desktop">Scan Mac code</string>
+    <string name="receiver_scan_desktop_start">Start &amp; scan Mac code</string>
     <string name="receiver_scan_prompt">Scan the code shown in PhotoBridge on your Mac</string>
     <string name="receiver_pairing_connecting">Connecting to desktop…</string>
     <string name="receiver_desktop_paired">Receiver connected to desktop</string>
@@ -214,7 +221,7 @@
     <string name="help_recovery_title">Recover and get help</string>
     <string name="help_recovery_summary">Retry processing, export diagnostics and preserve data during updates.</string>
     <string name="help_pair_title">Choose the pairing direction</string>
-    <string name="help_pair_body">Connect both devices to the same reachable local network and start receiving here. On an iPhone, scan the code displayed by this receiver. On a Mac, display a computer pairing code and scan it with this receiver. Camera permission is needed only for scanning. Check the device names after pairing; renaming a device keeps its existing identity and receipts.</string>
+    <string name="help_pair_body">Connect both devices to the same reachable local network. Tap a pairing option on Receive; PhotoBridge starts receiving automatically and opens the code or scanner when ready. On an iPhone, scan the code displayed by this receiver. On a Mac, display a computer pairing code and scan it with this receiver. Camera permission is needed only for scanning. Check the device names after pairing; renaming a device keeps its existing identity and receipts.</string>
     <string name="help_network_title">When devices cannot connect</string>
     <string name="help_network_body">The current Android receiver requires Wi-Fi with an IPv4 address. Guest networks, client isolation and some VPN routes can prevent devices from reaching each other even when they show the same network name. Return to the original local network and retry. A Wi-Fi interruption is retried automatically while receiving remains enabled.</string>
     <string name="help_address_title">If the receiver address changes</string>
