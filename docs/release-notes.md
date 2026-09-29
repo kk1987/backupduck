@@ -1,6 +1,6 @@
 # Beta 29
 
-- On Mac, the “Back up selected” confirmation now includes a checkbox to back up items already received by the current Pixel again. It is off by default; pending transfers are never duplicated.
+- On Mac and iOS, the “Back up selected” confirmation now includes an off-by-default option to back up items already received by the current Pixel again. Pending transfers are never duplicated.
 - A repeat backup creates a new gallery copy. When the Pixel still has the same verified original data, the transfer reuses it instead of uploading identical bytes again.
 
 # Beta 28

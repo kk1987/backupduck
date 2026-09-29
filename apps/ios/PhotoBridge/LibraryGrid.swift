@@ -375,6 +375,7 @@ struct IOSLibraryPage: View {
   @ObservedObject var library: PhotoLibraryModel
   @ObservedObject var model: BackupModel
   @State private var confirmSelectedBackup = false
+  @State private var rebackupReceivedSelection = false
   var body: some View {
     NavigationStack {
       VStack(spacing: 10) {
@@ -420,6 +421,7 @@ struct IOSLibraryPage: View {
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
+            rebackupReceivedSelection = false
             confirmSelectedBackup = true
           } label: {
             Label(
@@ -428,22 +430,46 @@ struct IOSLibraryPage: View {
               systemImage: "arrow.up.circle")
           }
           .disabled(library.selection.isEmpty || model.pairing == nil || model.importing)
-          .confirmationDialog("backup_selected_confirm_title", isPresented: $confirmSelectedBackup) {
-            Button("backup_selected_confirm_action") { backupSelection() }
-          } message: {
-            Text("backup_selected_confirm_note")
-          }
         }
       }
       .task { await library.open() }
+      .sheet(isPresented: $confirmSelectedBackup) { selectedBackupConfirmation }
     }
   }
-  private func backupSelection() {
+  private var selectedBackupConfirmation: some View {
+    NavigationStack {
+      Form {
+        Section {
+          Text(String(format: NSLocalizedString("backup_selected", comment: ""), library.selection.count))
+          Toggle("backup_selected_rebackup_received", isOn: $rebackupReceivedSelection)
+        } footer: {
+          Text(LocalizedStringKey(rebackupReceivedSelection
+            ? "backup_selected_rebackup_note" : "backup_selected_confirm_note"))
+        }
+      }
+      .navigationTitle("backup_selected_confirm_title")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("cancel") { confirmSelectedBackup = false }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("backup_selected_confirm_action") {
+            let rebackup = rebackupReceivedSelection
+            confirmSelectedBackup = false
+            backupSelection(rebackupReceived: rebackup)
+          }
+        }
+      }
+    }
+    .presentationDetents([.medium])
+  }
+  private func backupSelection(rebackupReceived: Bool) {
     let tokens = library.selection
     Task {
       let ids = await library.selectedAssetIdentifiers(tokens)
       await model.setPaused(false)
-      await model.importAssets(ids)
+      await model.importAssets(ids, rebackupReceived: rebackupReceived)
       library.selection.subtract(tokens)
     }
   }
