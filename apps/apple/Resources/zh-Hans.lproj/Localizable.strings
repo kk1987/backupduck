@@ -68,6 +68,8 @@
 "backup_selected_confirm_title" = "备份所选项目？";
 "backup_selected_confirm_action" = "开始备份";
 "backup_selected_confirm_note" = "当前接收设备已接收的相同照片会跳过；更换接收设备后会按新设备的记录备份。";
+"backup_selected_rebackup_received" = "已备份项目也重新备份";
+"backup_selected_rebackup_note" = "会在手机相册中生成新副本。如果 Pixel 仍保留相同且已校验的原件，会直接复用，不重复传输这些字节。";
 "photos_access_title" = "你的照片图库";
 "photos_access_description" = "允许访问图库后，即可浏览缩略图并选择需要备份的原件。";
 "photos_allow" = "允许访问照片";

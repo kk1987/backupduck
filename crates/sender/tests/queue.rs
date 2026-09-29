@@ -64,6 +64,40 @@ fn status(j: &Job, received: bool) -> AssetStatus {
 }
 
 #[test]
+fn explicit_rebackup_creates_a_new_job_without_changing_source_revision() {
+    let t = Temp::new();
+    let mut sender = Sender::open(&t.0).unwrap();
+    let first = add(&mut sender);
+    let running = sender.claim("receiver-1", 0).unwrap().unwrap();
+    sender
+        .acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    assert_eq!(sender.job(first.id).unwrap().state, JobState::Received);
+
+    let mut repeat = asset();
+    repeat
+        .metadata
+        .insert("photobridge_rebackup_id".into(), "manual-request-1".into());
+    let sources = BTreeMap::from([(
+        repeat.resources[0].sha256.clone(),
+        "opaque-native-resource-reference".into(),
+    )]);
+    let second = sender.enqueue("receiver-1", repeat, sources).unwrap();
+    assert_ne!(first.id, second.id);
+    assert_ne!(first.asset.id().unwrap(), second.asset.id().unwrap());
+    assert_eq!(second.state, JobState::Queued);
+    assert_eq!(second.asset.source_id, first.asset.source_id);
+    assert_eq!(second.asset.revision, first.asset.revision);
+    assert_eq!(sender.job(first.id).unwrap().state, JobState::Received);
+    assert_eq!(
+        sender
+            .source_states("receiver-1", &[("native:42".into(), "1".into())])
+            .unwrap()["native:42"],
+        "queued"
+    );
+}
+
+#[test]
 fn gallery_failure_stays_visible_and_retry_never_requeues_original_bytes() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();

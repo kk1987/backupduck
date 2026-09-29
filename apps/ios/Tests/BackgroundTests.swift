@@ -5,6 +5,15 @@ import XCTest
 @testable import PhotoBridge
 
 @MainActor final class BackgroundTests: XCTestCase {
+  func testManualRebackupOnlyBypassesCompletedReceipt() {
+    XCTAssertFalse(BackupModel.shouldSkipSource(nil, rebackupReceived: true))
+    XCTAssertFalse(BackupModel.shouldSkipSource("failed", rebackupReceived: false))
+    XCTAssertTrue(BackupModel.shouldSkipSource("received", rebackupReceived: false))
+    XCTAssertFalse(BackupModel.shouldSkipSource("received", rebackupReceived: true))
+    for state in ["queued", "running", "waiting", "paused"] {
+      XCTAssertTrue(BackupModel.shouldSkipSource(state, rebackupReceived: true))
+    }
+  }
   func testNativeBackgroundSessionAndNewPhotoDiscovery() async throws {
     // Install the exact test host, then grant Photos before running this test.
     // Fail immediately instead of waiting forever on a permission dialog.

@@ -451,7 +451,12 @@ enum Bridge {
     if !allowed { message = NSLocalizedString("photos_permission_needed", comment: "") }
     return allowed
   }
-  @discardableResult func importAssets(_ identifiers: [String], requestAuthorization: Bool = true)
+  static func shouldSkipSource(_ state: String?, rebackupReceived: Bool) -> Bool {
+    guard let state else { return false }
+    return state != "failed" && !(rebackupReceived && state == "received")
+  }
+  @discardableResult func importAssets(_ identifiers: [String], requestAuthorization: Bool = true,
+    rebackupReceived: Bool = false)
     async -> Bool
   {
     guard let target = pairing, !importing else { return false }
@@ -527,7 +532,8 @@ enum Bridge {
         let existingData = try await Bridge.call(["op": "source_states", "receiver_id": target.receiverID,
           "sources": [[sourceID, PhotoLibraryModel.revision(asset)]]])
         let existing = try JSONDecoder().decode([String: String].self, from: existingData)
-        if let state = existing[sourceID], state != "failed" {
+        let rebackupThisSource = rebackupReceived && existing[sourceID] == "received"
+        if Self.shouldSkipSource(existing[sourceID], rebackupReceived: rebackupReceived) {
           _ = try await Bridge.call(["op": "source_result", "receiver_id": target.receiverID,
             "source": sourceID, "complete": true])
           continue
@@ -567,6 +573,9 @@ enum Bridge {
         }
         guard await canPrepareForReceiver() else { return false }
         var metadata = try await burstFields(for: asset)
+        // Keep the PhotoKit source/revision stable while creating a distinct,
+        // auditable receiver asset for an explicit repeat backup.
+        if rebackupThisSource { metadata["photobridge_rebackup_id"] = UUID().uuidString }
         metadata["favorite"] = String(asset.isFavorite)
         if let date = asset.creationDate {
           metadata["created_at_ms"] = String(Int64(date.timeIntervalSince1970 * 1000))

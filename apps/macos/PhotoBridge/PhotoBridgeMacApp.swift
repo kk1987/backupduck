@@ -66,6 +66,7 @@ struct MacWorkspace: View {
   @State private var tileSize: Double = 170
   @State private var pairSheet = false
   @State private var confirmSelectedBackup = false
+  @State private var rebackupReceivedSelection = false
   @State private var transferFilter = "all"
   @StateObject private var activeTransfers = TaskBrowserModel()
   @StateObject private var folders: FolderSources
@@ -179,6 +180,7 @@ struct MacWorkspace: View {
     .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in folders.wake() }
     .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in folders.wake() }
     .sheet(isPresented: $pairSheet) { MacPairingSheet(model: model) }
+    .sheet(isPresented: $confirmSelectedBackup) { selectedBackupConfirmation }
   }
   private func showTransfers(_ filter: String) {
     transferFilter = filter
@@ -203,6 +205,7 @@ struct MacWorkspace: View {
           ForEach(LibraryFilter.allCases) { Text(LocalizedStringKey($0.title)).tag($0) }
         }.labelsHidden().frame(width: 150).disabled(!library.authorized)
         Button {
+          rebackupReceivedSelection = false
           confirmSelectedBackup = true
         } label: {
           Text(
@@ -210,11 +213,6 @@ struct MacWorkspace: View {
               format: NSLocalizedString("backup_selected", comment: ""), library.selection.count))
         }.buttonStyle(.borderedProminent).disabled(
           library.selection.isEmpty || model.importing || model.pairing == nil)
-        .confirmationDialog("backup_selected_confirm_title", isPresented: $confirmSelectedBackup) {
-          Button("backup_selected_confirm_action") { backupSelection() }
-        } message: {
-          Text("backup_selected_confirm_note")
-        }
       }.padding(.horizontal, 28).padding(.top, 28).padding(.bottom, 14)
       if let placeholder = library.placeholder {
         LibraryPlaceholder(kind: placeholder,
@@ -228,12 +226,35 @@ struct MacWorkspace: View {
       }
     }
   }
-  private func backupSelection() {
+  private var selectedBackupConfirmation: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("backup_selected_confirm_title").font(.title3.weight(.semibold))
+      Text(String(format: NSLocalizedString("backup_selected", comment: ""), library.selection.count))
+        .foregroundStyle(.secondary)
+      Toggle("backup_selected_rebackup_received", isOn: $rebackupReceivedSelection)
+        .toggleStyle(.checkbox)
+      Text(LocalizedStringKey(rebackupReceivedSelection
+        ? "backup_selected_rebackup_note" : "backup_selected_confirm_note"))
+        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      HStack {
+        Spacer()
+        Button("cancel") { confirmSelectedBackup = false }
+        Button("backup_selected_confirm_action") {
+          let rebackup = rebackupReceivedSelection
+          confirmSelectedBackup = false
+          backupSelection(rebackupReceived: rebackup)
+        }.buttonStyle(.borderedProminent)
+      }
+    }
+    .padding(24)
+    .frame(width: 460)
+  }
+  private func backupSelection(rebackupReceived: Bool) {
     let tokens = library.selection
     Task {
       let ids = await library.selectedAssetIdentifiers(tokens)
       await model.setPaused(false)
-      await model.importAssets(ids)
+      await model.importAssets(ids, rebackupReceived: rebackupReceived)
       library.selection.subtract(tokens)
     }
   }

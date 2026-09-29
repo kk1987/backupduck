@@ -1,3 +1,8 @@
+# Beta 29
+
+- On Mac, the “Back up selected” confirmation now includes a checkbox to back up items already received by the current Pixel again. It is off by default; pending transfers are never duplicated.
+- A repeat backup creates a new gallery copy. When the Pixel still has the same verified original data, the transfer reuses it instead of uploading identical bytes again.
+
 # Beta 28
 
 - Add optional browser management to the Pixel receiver. From a computer on the same trusted Wi-Fi, view live receiver totals and transfer history, filter failures, and retry failed gallery processing.

@@ -68,6 +68,8 @@
 "backup_selected_confirm_title" = "Back up selected items?";
 "backup_selected_confirm_action" = "Start backup";
 "backup_selected_confirm_note" = "Identical photos already received by this device are skipped. A new receiver has its own backup history.";
+"backup_selected_rebackup_received" = "Back up already received items again";
+"backup_selected_rebackup_note" = "Creates a new copy in the phone gallery. If the Pixel still has the same verified originals, it reuses them instead of sending those bytes again.";
 "photos_access_title" = "Your photo library";
 "photos_access_description" = "Allow access to browse thumbnails and choose originals to back up.";
 "photos_allow" = "Allow photo access";
