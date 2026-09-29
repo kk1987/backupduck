@@ -452,6 +452,14 @@ enum Command {
     ReceiverTransferHold {
         held: bool,
     },
+    DashboardDeviceStatus {
+        temperature_deci_celsius: Option<i32>,
+        battery_percent: Option<u8>,
+        charging: Option<bool>,
+        thermal_held: bool,
+        thermal_enabled: bool,
+        thermal_threshold_celsius: u8,
+    },
     PhotosCleanupStep {
         state: photobridge_pixel::photos_cleanup::State,
         snapshot: photobridge_pixel::photos_probe::Snapshot,
@@ -788,6 +796,34 @@ fn dispatch(command: Command) -> Result<Value> {
             let h = HOSTS.lock().map_err(lock)?;
             let host = h.receiver.as_ref().ok_or(Error::NotFound)?;
             host.receiver.lock().map_err(lock)?.hold_transfers(held);
+            Ok(json!({}))
+        }
+        Command::DashboardDeviceStatus {
+            temperature_deci_celsius,
+            battery_percent,
+            charging,
+            thermal_held,
+            thermal_enabled,
+            thermal_threshold_celsius,
+        } => {
+            if temperature_deci_celsius.is_some_and(|value| !(-200..=900).contains(&value))
+                || battery_percent.is_some_and(|value| value > 100)
+                || !(35..=45).contains(&thermal_threshold_celsius)
+            {
+                return Err(Error::Invalid("dashboard device status".into()));
+            }
+            let hosts = HOSTS.lock().map_err(lock)?;
+            let host = hosts.receiver.as_ref().ok_or(Error::NotFound)?;
+            if let Some(dashboard) = &host.dashboard {
+                dashboard.update_device_status(dashboard::DeviceStatus {
+                    temperature_deci_celsius,
+                    battery_percent,
+                    charging,
+                    thermal_held,
+                    thermal_enabled,
+                    thermal_threshold_celsius,
+                })?;
+            }
             Ok(json!({}))
         }
         Command::PhotosCleanupStep {

@@ -10,11 +10,22 @@ use axum::{
     Json, Router,
 };
 use photobridge_store::catalog::Catalog;
+use serde::Serialize;
 use std::time::{Duration, Instant};
 
 const HTML: &str = include_str!("dashboard/index.html");
 const CSS: &str = include_str!("dashboard/style.css");
 const JS: &str = include_str!("dashboard/app.js");
+
+#[derive(Clone, Serialize)]
+pub(super) struct DeviceStatus {
+    pub temperature_deci_celsius: Option<i32>,
+    pub battery_percent: Option<u8>,
+    pub charging: Option<bool>,
+    pub thermal_held: bool,
+    pub thermal_enabled: bool,
+    pub thermal_threshold_celsius: u8,
+}
 
 #[derive(Clone)]
 struct WebState {
@@ -24,6 +35,7 @@ struct WebState {
     code: String,
     session: String,
     attempts: Arc<Mutex<(u8, Instant)>>,
+    device_status: Arc<Mutex<Option<DeviceStatus>>>,
 }
 
 pub(super) struct DashboardHost {
@@ -31,6 +43,7 @@ pub(super) struct DashboardHost {
     code: String,
     handle: axum_server::Handle,
     task: tokio::task::JoinHandle<()>,
+    device_status: Arc<Mutex<Option<DeviceStatus>>>,
 }
 
 fn random_hex() -> Result<String> {
@@ -141,8 +154,20 @@ async fn overview(State(state): State<WebState>, headers: HeaderMap) -> Response
         return StatusCode::UNAUTHORIZED.into_response();
     }
     let receiver = state.receiver.clone();
-    match tokio::task::spawn_blocking(move || receiver.lock().map_err(lock)?.overview()).await {
-        Ok(Ok(value)) => Json(json!({
+    let device_status = match state.device_status.lock() {
+        Ok(value) => value.clone(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let root = state.root.clone();
+    match tokio::task::spawn_blocking(move || {
+        Ok::<_, Error>((
+            receiver.lock().map_err(lock)?.overview()?,
+            fs2::total_space(root).ok(),
+        ))
+    })
+    .await
+    {
+        Ok(Ok((value, total_space))) => Json(json!({
             "total": value["total"],
             "received": value["received"],
             "published": value["published"],
@@ -151,6 +176,8 @@ async fn overview(State(state): State<WebState>, headers: HeaderMap) -> Response
             "reserved_bytes": value["reserved_bytes"],
             "free_bytes": value["free_bytes"],
             "min_free_bytes": value["min_free_bytes"],
+            "total_space_bytes": total_space,
+            "device": device_status,
         }))
         .into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -201,6 +228,7 @@ async fn history(
             "items": value.items.into_iter().map(|item| json!({
                 "filename": item.filename,
                 "kind": item.kind,
+                "burst_primary": item.burst_primary,
                 "total_bytes": item.total_bytes,
                 "confirmed_bytes": item.confirmed_bytes,
                 "receipt": item.receipt,
@@ -265,7 +293,9 @@ impl DashboardHost {
             code: code.clone(),
             session: random_hex()?,
             attempts: Arc::new(Mutex::new((0, Instant::now()))),
+            device_status: Arc::new(Mutex::new(None)),
         };
+        let device_status = state.device_status.clone();
         let handle = axum_server::Handle::new();
         let server = axum_server::from_tcp(listener).handle(handle.clone());
         let task = runtime().spawn(async move {
@@ -276,7 +306,12 @@ impl DashboardHost {
             code,
             handle,
             task,
+            device_status,
         })
+    }
+    pub(super) fn update_device_status(&self, status: DeviceStatus) -> Result<()> {
+        *self.device_status.lock().map_err(lock)? = Some(status);
+        Ok(())
     }
     pub(super) fn info(&self) -> Value {
         json!({"url":format!("http://{}",self.address),"code":self.code})
@@ -386,6 +421,16 @@ mod tests {
             .unwrap()
             .to_owned();
         assert_ne!(token, code);
+        dashboard
+            .update_device_status(DeviceStatus {
+                temperature_deci_celsius: Some(397),
+                battery_percent: Some(82),
+                charging: Some(true),
+                thermal_held: false,
+                thermal_enabled: true,
+                thermal_threshold_celsius: 40,
+            })
+            .unwrap();
         let overview = client
             .get(format!("{base}/api/overview"))
             .bearer_auth(&token)
@@ -393,7 +438,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(overview.status(), StatusCode::OK);
-        assert_eq!(overview.json::<Value>().await.unwrap()["total"], 0);
+        let overview = overview.json::<Value>().await.unwrap();
+        assert_eq!(overview["total"], 0);
+        assert_eq!(overview["device"]["temperature_deci_celsius"], 397);
+        assert_eq!(overview["device"]["battery_percent"], 82);
+        assert_eq!(overview["device"]["thermal_threshold_celsius"], 40);
         let numbered = client
             .get(format!("{base}/api/history?page=1&per_page=20"))
             .bearer_auth(&token)

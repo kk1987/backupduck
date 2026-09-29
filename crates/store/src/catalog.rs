@@ -13,6 +13,7 @@ pub struct HistoryItem {
     pub id: String,
     pub filename: String,
     pub kind: photobridge_core::AssetKind,
+    pub burst_primary: Option<bool>,
     pub total_bytes: u64,
     pub confirmed_bytes: u64,
     pub receipt: &'static str,
@@ -123,7 +124,7 @@ impl Catalog {
             "failed",
         ]
         .contains(&state)
-            || !["all", "photo", "video", "motion"].contains(&kind)
+            || !["all", "photo", "video", "motion", "burst"].contains(&kind)
             || before.is_some_and(|v| v <= 0)
         {
             return Err(Error::Invalid("history filter".into()));
@@ -141,7 +142,7 @@ impl Catalog {
         } else {
             "(?5 IS NULL OR ?5='unknown')"
         };
-        let filter = "(?1='all' OR (?1='receiving' AND received=0) OR (?1='received' AND received=1) OR (?1='published' AND processing='complete') OR (?1='failed' AND processing='failed') OR (?1='processing' AND received=1 AND processing IN ('pending','not_requested'))) AND (?2='all' OR json_extract(manifest,'$.kind')=?2)";
+        let filter = "(?1='all' OR (?1='receiving' AND received=0) OR (?1='received' AND received=1) OR (?1='published' AND processing='complete') OR (?1='failed' AND processing='failed') OR (?1='processing' AND received=1 AND processing IN ('pending','not_requested'))) AND (?2='all' OR json_extract(manifest,'$.kind')=?2 OR (?2='burst' AND json_extract(manifest,'$.metadata.burst_group_ref') IS NOT NULL))";
         let filter = format!("({filter}) AND {sender_filter}");
         let total = conn
             .query_row(
@@ -260,6 +261,8 @@ impl Catalog {
                 id,
                 filename: asset.resources[0].filename.clone(),
                 kind: asset.kind,
+                burst_primary: photobridge_core::BurstMetadata::from_fields(&asset.metadata)?
+                    .map(|burst| burst.primary),
                 total_bytes,
                 confirmed_bytes,
                 receipt: if received { "received" } else { "receiving" },

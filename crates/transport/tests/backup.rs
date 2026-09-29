@@ -516,9 +516,18 @@ fn receiver_catalog_filters_before_pagination_and_survives_stop() {
     let root = Scratch::new();
     let mut receiver = Receiver::open(&root.0, 1 << 20).unwrap();
     let mut failed_id = String::new();
+    let mut burst_id = String::new();
     for index in 0..205 {
         let (mut item, bytes) = asset(index % 2 == 0);
         item.source_id = format!("catalog-{index}");
+        if index == 1 {
+            item.metadata.extend(
+                BurstMetadata::from_identifier("catalog-burst", true)
+                    .unwrap()
+                    .fields(),
+            );
+            burst_id = item.id().unwrap();
+        }
         receiver.register(item.clone()).unwrap();
         if index == 0 {
             failed_id = receive(&mut receiver, &item, &bytes).asset_id;
@@ -561,6 +570,10 @@ fn receiver_catalog_filters_before_pagination_and_survives_stop() {
     assert_eq!(failed.total, 1);
     assert_eq!(failed.items[0].id, failed_id);
     assert_eq!(failed.items[0].confirmed_bytes, failed.items[0].total_bytes);
+    let burst = catalog.numbered_page("all", "burst", 1, 20).unwrap();
+    assert_eq!(burst.total, 1);
+    assert_eq!(burst.items[0].id, burst_id);
+    assert_eq!(burst.items[0].burst_primary, Some(true));
     assert_eq!(
         catalog
             .numbered_page("failed", "motion", 1, 20)

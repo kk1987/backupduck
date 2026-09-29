@@ -89,6 +89,7 @@ class ReceiverService : Service() {
                                 .onFailure { runCatching { NativeBridge.request(JSONObject().put("op", "record_event")
                                     .put("receiver", true).put("code", "dashboard_unavailable")) } }
                         }
+                        publishDashboardDeviceStatus(initialThermal, initialDecision.held)
                         advertisement = runCatching { ReceiverAdvertisement(this@ReceiverService, pairing.getString("receiver_id"), 8484) }.getOrNull()
                         ReceiverState.mutable.value = ReceiverSnapshot(phase = "ready", thermalHeld = initialDecision.held,
                             temperatureDeciCelsius = initialThermal.deciCelsius)
@@ -106,6 +107,7 @@ class ReceiverService : Service() {
                                     decision = next
                                     ReceiverState.mutable.update { it.copy(thermalHeld = decision.held,
                                         temperatureDeciCelsius = reading.deciCelsius) }
+                                    publishDashboardDeviceStatus(reading, decision.held)
                                     delay(2_000)
                                 }
                             } catch (cancelled: CancellationException) { throw cancelled }
@@ -226,6 +228,15 @@ class ReceiverService : Service() {
         return manager.getLinkProperties(network)?.linkAddresses?.map { it.address }
             ?.filterIsInstance<Inet4Address>()?.firstOrNull { !it.isLoopbackAddress }?.hostAddress
             ?: error("wifi_required")
+    }
+    private fun publishDashboardDeviceStatus(reading: ThermalReading, held: Boolean) {
+        runCatching { NativeBridge.request(JSONObject().put("op", "dashboard_device_status")
+            .put("temperature_deci_celsius", reading.deciCelsius ?: JSONObject.NULL)
+            .put("battery_percent", reading.batteryPercent ?: JSONObject.NULL)
+            .put("charging", reading.charging ?: JSONObject.NULL)
+            .put("thermal_held", held)
+            .put("thermal_enabled", ReceiverThermalSettings.enabled(this))
+            .put("thermal_threshold_celsius", ReceiverThermalSettings.threshold(this))) }
     }
     private fun updateThermalNotification(held: Boolean) {
         runCatching {

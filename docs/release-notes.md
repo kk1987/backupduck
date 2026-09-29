@@ -1,3 +1,8 @@
+# Beta 32
+
+- Show live Pixel battery temperature, charge level, free space, and PhotoBridge original usage in browser management, including the existing heat-pause state and threshold.
+- Keep the transfer table to file, state, capture time, and size; receive-complete time remains in item details. Use “实况” consistently in Chinese across the apps, and identify burst frames from their metadata, with a burst filter and primary-frame detail.
+
 # Beta 31
 
 - Simplify the Pixel browser transfer table and add a per-item detail view for sender, media type, three local timestamps, receive progress, retained-original state, and processing guidance.

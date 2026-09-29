@@ -21,7 +21,8 @@ internal object ReceiverThermalSettings {
 }
 
 /** Temperatures come from Android's battery sensor, in tenths of a degree Celsius. */
-internal data class ThermalReading(val deciCelsius: Int?, val systemStatus: Int)
+internal data class ThermalReading(val deciCelsius: Int?, val systemStatus: Int,
+    val batteryPercent: Int? = null, val charging: Boolean? = null)
 
 internal data class ThermalDecision(val batteryHeld: Boolean = false, val systemHeld: Boolean = false) {
     val held: Boolean get() = batteryHeld || systemHeld
@@ -60,6 +61,14 @@ internal fun readThermal(context: Context): ThermalReading {
     val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     val value = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
         ?.takeIf { it in -200..900 }
+    val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+    val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+    val percent = if (level >= 0 && scale > 0) (level * 100 / scale).coerceIn(0, 100) else null
+    val charging = when (battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)) {
+        BatteryManager.BATTERY_STATUS_CHARGING, BatteryManager.BATTERY_STATUS_FULL -> true
+        BatteryManager.BATTERY_STATUS_DISCHARGING, BatteryManager.BATTERY_STATUS_NOT_CHARGING -> false
+        else -> null
+    }
     val power = context.getSystemService(PowerManager::class.java)
-    return ThermalReading(value, power.currentThermalStatus)
+    return ThermalReading(value, power.currentThermalStatus, percent, charging)
 }

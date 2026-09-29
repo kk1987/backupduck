@@ -6,9 +6,9 @@ const w = en ? {
   loginTitle:"Connect to your Pixel", loginHelp:"Find the access code in PhotoBridge on your Pixel under Settings → Browser management. It changes each time you enable the page.", code:"10-digit access code", enter:"Open dashboard",
   eyebrow:"PIXEL RECEIVER", title:"Receiver overview", description:"Track files received, added to the phone gallery, and needing attention.", live:"Receiver online",
   received:"Received", receivedHint:"Confirmed on this Pixel", published:"In phone gallery", publishedHint:"Phone media processing complete", waiting:"Waiting", waitingHint:"Received, not yet in gallery", failed:"Failed", failedHint:"Retry from the list below",
-  storageTitle:"Receiver storage", reservedLabel:"Originals retained", storageDetail:(free,minimum)=>`${size(free)} free · ${size(minimum)} reserved minimum`, transfers:"Transfer history", tableNote:"Open a file for full details.", retry:"Retry failed",
+  deviceTitle:"Phone status", deviceNote:"Live readings from the Pixel", temperatureLabel:"Battery temperature", batteryLabel:"Battery", freeLabel:"Available space", reservedLabel:"PhotoBridge originals", spaceDetail:(total,minimum)=>`Total ${size(total)} · minimum free ${size(minimum)}`, originalsDetail:"Excludes gallery copies", threshold:value=>`Battery pause at ${value} °C`, thermalPaused:"Heat pause active", thermalOff:"Temperature pause is off", waitingReading:"Waiting for reading", charging:"Charging", notCharging:"Not charging", transfers:"Transfer history", tableNote:"Open a file for full details.", retry:"Retry failed",
   guideTitle:"Status guide", receivingState:"Receiving", waitingState:"Waiting for gallery", failedState:"Gallery processing failed", publishedState:"In phone gallery", guideReceiving:"File is still transferring", guideWaiting:"Received; waiting to join the phone gallery", guidePublished:"In the Pixel gallery; cloud backup is unknown", guideFailed:"Originals remain on the receiver; retry is available",
-  state:"Status", kind:"Type", allStates:"All statuses", receiving:"Receiving", processing:"Waiting", publishedFilter:"In gallery", failedFilter:"Failed", allKinds:"All types", photo:"Photo", video:"Video", motion:"Live photo", auto:"Auto refresh", refresh:"Refresh",
+  state:"Status", kind:"Type", allStates:"All statuses", receiving:"Receiving", processing:"Waiting", publishedFilter:"In gallery", failedFilter:"Failed", allKinds:"All types", photo:"Photo", video:"Video", motion:"Live", burst:"Burst", burstRole:"Burst role", burstPrimary:"Primary frame", burstOther:"Other frame", auto:"Auto refresh", refresh:"Refresh",
   file:"File", status:"Status", captured:"Captured", receivedTime:"Received", publishedTime:"Added to gallery", amount:"Size", perPage:"Per page", jump:"Go to", go:"Go", pagination:"Transfer pages", first:"First page", previous:"Previous page", next:"Next page", last:"Last page", page:n=>`Page ${n}`,
   count:n=>`${n} matching files`, updated:time=>`Updated ${time}`, olderPage:"This page does not auto-refresh", pageSummary:(page,pages,start,end,total)=>`Page ${page} of ${pages} · ${start}–${end} of ${total}`, unknown:"—", oldTime:"Not recorded", noCapture:"Unknown", noSender:"Unknown sender", noItems:"No transfers match these filters.",
   loginError:"Check the code on your phone and try again.", locked:"Too many attempts. Try again in five minutes.", connectionError:"Cannot reach your Pixel. Check that receiving and browser management are on.", retried:n=>`${n} failed item(s) queued for retry.`,
@@ -18,9 +18,9 @@ const w = en ? {
   loginTitle:"连接你的 Pixel", loginHelp:"在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看访问码。每次开启都会更换。", code:"10 位访问码", enter:"进入管理页",
   eyebrow:"PIXEL RECEIVER", title:"接收概览", description:"查看接收、加入手机相册和待处理的文件。", live:"接收端在线",
   received:"已接收", receivedHint:"手机已确认收到的文件", published:"已加入相册", publishedHint:"手机媒体库处理完成", waiting:"等待处理", waitingHint:"已接收，尚未加入相册", failed:"处理失败", failedHint:"可在下方重试",
-  storageTitle:"接收端存储", reservedLabel:"保留原件", storageDetail:(free,minimum)=>`剩余 ${size(free)} · 最低预留 ${size(minimum)}`, transfers:"传输记录", tableNote:"点击文件名查看完整信息。", retry:"重试失败项",
+  deviceTitle:"手机状态", deviceNote:"来自接收端的实时读数", temperatureLabel:"电池温度", batteryLabel:"电量", freeLabel:"可用空间", reservedLabel:"PhotoBridge 原件", spaceDetail:(total,minimum)=>`总容量 ${size(total)} · 最低可用 ${size(minimum)}`, originalsDetail:"不含相册副本", threshold:value=>`电池达到 ${value} °C 暂停`, thermalPaused:"高温暂停接收", thermalOff:"温控已关闭", waitingReading:"等待读数", charging:"充电中", notCharging:"未充电", transfers:"传输记录", tableNote:"点击文件名查看完整信息。", retry:"重试失败项",
   guideTitle:"状态说明", receivingState:"接收中", waitingState:"等待处理", failedState:"处理失败", publishedState:"已加入相册", guideReceiving:"文件仍在传输", guideWaiting:"已收齐，等待加入手机相册", guidePublished:"已加入 Pixel 相册，云端备份状态未知", guideFailed:"原件仍在接收端，可重试",
-  state:"状态", kind:"类型", allStates:"全部状态", receiving:"接收中", processing:"等待处理", publishedFilter:"已加入相册", failedFilter:"处理失败", allKinds:"全部类型", photo:"照片", video:"视频", motion:"实况照片", auto:"自动刷新", refresh:"刷新",
+  state:"状态", kind:"类型", allStates:"全部状态", receiving:"接收中", processing:"等待处理", publishedFilter:"已加入相册", failedFilter:"处理失败", allKinds:"全部类型", photo:"照片", video:"视频", motion:"实况", burst:"连拍", burstRole:"连拍角色", burstPrimary:"主照片", burstOther:"组内照片", auto:"自动刷新", refresh:"刷新",
   file:"文件", status:"状态", captured:"拍摄时间", receivedTime:"接收完成", publishedTime:"加入手机相册", amount:"大小", perPage:"每页", jump:"跳至", go:"前往", pagination:"传输记录分页", first:"第一页", previous:"上一页", next:"下一页", last:"最后一页", page:n=>`第 ${n} 页`,
   count:n=>`符合条件 ${n} 项`, updated:time=>`更新于 ${time}`, olderPage:"此页不自动刷新", pageSummary:(page,pages,start,end,total)=>`第 ${page} / ${pages} 页 · ${start}–${end} / ${total} 项`, unknown:"—", oldTime:"未记录", noCapture:"未知", noSender:"未知发送设备", noItems:"没有符合条件的传输记录。",
   loginError:"访问码不对，请查看手机后重试。", locked:"尝试次数过多，请五分钟后重试。", connectionError:"无法连接 Pixel，请确认接收和浏览器管理仍已开启。", retried:n=>`已将 ${n} 项失败记录重新排队。`,
@@ -28,15 +28,15 @@ const w = en ? {
 };
 const textIds = {
   "brand-subtitle":"brand","side-section":"section","nav-overview":"navOverview","nav-transfers":"navTransfers","sidebar-local":"local","breadcrumb-current":"breadcrumb","top-local":"topLocal","login-title":"loginTitle","login-help":"loginHelp","code-label":"code","login-button":"enter","eyebrow":"eyebrow","page-title":"title","page-description":"description","live-text":"live",
-  "label-received":"received","received-hint":"receivedHint","label-published":"published","published-hint":"publishedHint","label-waiting":"waiting","waiting-hint":"waitingHint","label-failed":"failed","failed-hint":"failedHint","storage-title":"storageTitle","reserved-label":"reservedLabel","transfers-title":"transfers","table-note":"tableNote","retry":"retry",
+  "label-received":"received","received-hint":"receivedHint","label-published":"published","published-hint":"publishedHint","label-waiting":"waiting","waiting-hint":"waitingHint","label-failed":"failed","failed-hint":"failedHint","device-title":"deviceTitle","device-note":"deviceNote","temperature-label":"temperatureLabel","battery-label":"batteryLabel","free-label":"freeLabel","reserved-label":"reservedLabel","transfers-title":"transfers","table-note":"tableNote","retry":"retry",
   "guide-title":"guideTitle","guide-receiving":"receivingState","guide-waiting":"waitingState","guide-published":"publishedState","guide-failed":"failedState","guide-receiving-help":"guideReceiving","guide-waiting-help":"guideWaiting","guide-published-help":"guidePublished","guide-failed-help":"guideFailed",
-  "state-label":"state","kind-label":"kind","auto-label":"auto","refresh-label":"refresh","col-file":"file","col-status":"status","col-captured":"captured","col-received":"receivedTime","col-size":"amount","per-page-label":"perPage","jump-label":"jump","jump-button":"go",
-  "details-eyebrow":"detailTitle","dt-status":"status","dt-kind":"kind","dt-senders":"senders","dt-captured":"captured","dt-received":"receivedTime","dt-published":"publishedTime","dt-progress":"progress","dt-originals":"originals","dt-error":"error","details-cloud-note":"cloud"
+  "state-label":"state","kind-label":"kind","auto-label":"auto","refresh-label":"refresh","col-file":"file","col-status":"status","col-captured":"captured","col-size":"amount","per-page-label":"perPage","jump-label":"jump","jump-button":"go",
+  "details-eyebrow":"detailTitle","dt-status":"status","dt-kind":"kind","dt-burst":"burstRole","dt-senders":"senders","dt-captured":"captured","dt-received":"receivedTime","dt-published":"publishedTime","dt-progress":"progress","dt-originals":"originals","dt-error":"error","details-cloud-note":"cloud"
 };
 for (const [id,key] of Object.entries(textIds)) $(id).textContent = w[key];
 $("pagination").setAttribute("aria-label",w.pagination);
 $("details-close").setAttribute("aria-label",w.close);
-for (const [id,options] of Object.entries({"state-filter":{all:"allStates",receiving:"receiving",processing:"processing",published:"publishedFilter",failed:"failedFilter"},"kind-filter":{all:"allKinds",photo:"photo",video:"video",motion:"motion"}})) {
+for (const [id,options] of Object.entries({"state-filter":{all:"allStates",receiving:"receiving",processing:"processing",published:"publishedFilter",failed:"failedFilter"},"kind-filter":{all:"allKinds",photo:"photo",video:"video",motion:"motion",burst:"burst"}})) {
   for (const [value,key] of Object.entries(options)) $(id).querySelector(`option[value="${value}"]`).textContent = w[key];
 }
 let token = sessionStorage.getItem("photobridge-dashboard-token") || "";
@@ -90,10 +90,14 @@ function processingNote(item) {
   if (item.processing_error === "unsupported") return w.unsupported;
   return w.retryHelp;
 }
+function kind(item) { return item.burst_primary == null || item.kind === "motion" ? item.kind : "burst"; }
 function showDetails(item) {
   $("details-title").textContent = item.filename;
   $("detail-status").textContent = status(item).label;
-  $("detail-kind").textContent = w[item.kind] || w.unknown;
+  $("detail-kind").textContent = item.kind === "motion" && item.burst_primary != null ? `${w.motion} · ${w.burst}` : w[kind(item)] || w.unknown;
+  $("dt-burst").hidden = item.burst_primary == null;
+  $("detail-burst").hidden = item.burst_primary == null;
+  $("detail-burst").textContent = item.burst_primary ? w.burstPrimary : w.burstOther;
   $("detail-senders").textContent = (item.senders || []).filter(Boolean).join(" · ") || w.noSender;
   $("detail-captured").textContent = date(item.captured_at_ms,w.noCapture);
   $("detail-received").textContent = date(item.received_at_ms,item.receipt === "received" ? w.oldTime : w.unknown);
@@ -111,7 +115,8 @@ function row(item) {
   const tr = document.createElement("tr");
   const file = document.createElement("td"); file.className = "file-cell";
   const wrap = document.createElement("div"); wrap.className = "file-wrap";
-  const icon = document.createElement("span"); icon.className = `file-icon ${item.kind}`; icon.textContent = item.kind === "video" ? "▶" : item.kind === "motion" ? "◉" : "▧";
+  const itemKind = kind(item);
+  const icon = document.createElement("span"); icon.className = `file-icon ${itemKind}`; icon.textContent = itemKind === "video" ? "▶" : itemKind === "motion" ? "◉" : itemKind === "burst" ? "▦" : "▧"; icon.title = w[itemKind];
   const detail = document.createElement("div"); detail.className = "file-detail";
   const name = document.createElement("button"); name.type = "button"; name.className = "file-name"; name.textContent = item.filename; name.title = item.filename; name.addEventListener("click",() => showDetails(item));
   detail.append(name); wrap.append(icon,detail); file.append(wrap);
@@ -120,7 +125,7 @@ function row(item) {
   const badge = document.createElement("span"); badge.className = `status-badge ${state.key}`; badge.textContent = state.label;
   statusCell.append(badge);
   const amount = item.receipt === "received" ? size(item.total_bytes) : `${size(item.confirmed_bytes)} / ${size(item.total_bytes)}`;
-  tr.append(file,statusCell,cell("date-cell",date(item.captured_at_ms,w.noCapture)),cell("date-cell",date(item.received_at_ms,item.receipt === "received" ? w.oldTime : w.unknown)),cell("size-cell",amount));
+  tr.append(file,statusCell,cell("date-cell",date(item.captured_at_ms,w.noCapture)),cell("size-cell",amount));
   return tr;
 }
 function pageButton(label,target,disabled,active,ariaLabel) {
@@ -181,7 +186,15 @@ async function overview() {
     $("waiting").textContent = String(value.waiting);
     $("failed").textContent = String(value.failed);
     $("reserved").textContent = size(value.reserved_bytes);
-    $("storage-detail").textContent = w.storageDetail(value.free_bytes,value.min_free_bytes);
+    $("reserved-detail").textContent = w.originalsDetail;
+    $("free").textContent = size(value.free_bytes);
+    $("free-detail").textContent = w.spaceDetail(value.total_space_bytes,value.min_free_bytes);
+    const device = value.device;
+    $("temperature").textContent = device?.temperature_deci_celsius == null ? w.unknown : `${(device.temperature_deci_celsius / 10).toFixed(1)} °C`;
+    $("thermal-state").textContent = !device ? w.waitingReading : device.thermal_held ? w.thermalPaused : device.thermal_enabled ? w.threshold(device.thermal_threshold_celsius) : w.thermalOff;
+    $("thermal-state").classList.toggle("held",Boolean(device?.thermal_held));
+    $("battery").textContent = device?.battery_percent == null ? w.unknown : `${device.battery_percent}%`;
+    $("battery-state").textContent = device?.charging == null ? w.waitingReading : device.charging ? w.charging : w.notCharging;
     $("live-text").textContent = w.live;
     $("live-text").parentElement.classList.remove("offline");
   } catch (error) {

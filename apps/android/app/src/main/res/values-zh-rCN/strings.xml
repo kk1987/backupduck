@@ -16,7 +16,7 @@
 <string name="receiver_error">未能完成操作：%1$s</string>
 <string name="receiver_pair_instruction">使用 iPhone 上的 PhotoBridge 扫描。此二维码授予接收端访问权限，请仅用于自己的设备。</string>
 <string name="receiver_cloud_note">“已接收”表示文件已在本机校验。请在 Google 相册中启用 PhotoBridge 文件夹备份，云端上传由 Google 相册完成。</string>
-<string name="receiver_motion_note">实况照片优先保留原始照片和视频；可在设置中决定是否允许兼容转换。</string>
+<string name="receiver_motion_note">实况优先保留原始照片和视频；可在设置中决定是否允许兼容转换。</string>
 <string name="receiver_network_missing">请先连接 Wi-Fi 网络。</string>
 <string name="receiver_notification">正在安全接收照片</string>
 <string name="receiver_retry_processing">重试处理失败的项目</string>
@@ -37,7 +37,7 @@
     <string name="receiver_desktop_paired">接收设备已连接到电脑</string>
     <string name="receiver_desktop_pair_failed">配对失败，请确认设备在同一网络，并重新生成二维码。</string>
 <string name="storage_settings">存储与诊断</string>
-<string name="storage_original_note">接收端会保留原件，包括动图的照片和视频。预算只计算原件，图库副本会额外占用空间。在 Google 相册释放空间不会删除这些应用内原件。</string>
+<string name="storage_original_note">接收端会保留原件，包括实况的照片和视频。预算只计算原件，图库副本会额外占用空间。在 Google 相册释放空间不会删除这些应用内原件。</string>
 <string name="storage_available">磁盘可用空间：%1$s</string>
 <string name="storage_budget">原件存储预算</string>
 <string name="storage_reserve">最低可用空间</string>
@@ -52,7 +52,7 @@
 <string name="logs_exported">日志已导出，不包含照片内容或配对凭据。</string>
 <string name="processing_low_space">图库处理正在等待可用空间，空间恢复后会自动重试。</string>
 <string name="originals_export">导出原件归档</string>
-<string name="originals_export_note">停止接收后也可以导出原件归档。每批导出最多 100 项已发布原件，包含动图的原始照片、视频和元数据。如需腾出设备空间，请选择外部存储。归档校验成功后还需你确认，才会回收原件。</string>
+<string name="originals_export_note">停止接收后也可以导出原件归档。每批导出最多 100 项已发布原件，包含实况的原始照片、视频和元数据。如需腾出设备空间，请选择外部存储。归档校验成功后还需你确认，才会回收原件。</string>
 <string name="originals_choose">选择保存位置</string>
 <string name="originals_exporting">正在导出并校验原件</string>
 <string name="originals_export_wait">请保持 PhotoBridge 打开。写入归档后会重新读取并逐项校验，成功后才能回收原件。</string>
@@ -72,7 +72,7 @@
 <string name="nav_settings">设置</string>
 <string name="receiver_pair_section">连接设备</string>
 <string name="receiver_behavior">接收行为</string>
-<string name="receiver_motion_settings">实况照片</string>
+<string name="receiver_motion_settings">实况</string>
 <string name="dashboard_section">浏览器管理</string>
 <string name="dashboard_switch">允许电脑浏览器管理</string>
 <string name="dashboard_note">默认关闭。可在同一可信 Wi-Fi 的电脑上查看接收进度、传输记录并重试失败项。局域网 HTTP 不加密，请勿在公共 Wi-Fi 开启。</string>
@@ -83,7 +83,7 @@
 <string name="dashboard_unavailable">浏览器管理未能启动。请检查 Wi-Fi 连接后重试。</string>
 <string name="receiver_motion_conversion_switch">允许兼容转换</string>
 <string name="receiver_motion_conversion_note">默认关闭。优先保留原始照片和视频；只有无法直接封装时，开启此项才会生成新的 JPEG 照片和 MP4 视频，可能更耗时、影响画质。已接收的原文件会保留。</string>
-<string name="receiver_motion_conversion_recovery">原始照片和视频已安全接收，但这张实况照片需要转换才能加入手机相册。请在设置中开启“允许兼容转换”，然后到传输记录点“重试处理”。</string>
+<string name="receiver_motion_conversion_recovery">原始照片和视频已安全接收，但这张实况需要转换才能加入手机相册。请在设置中开启“允许兼容转换”，然后到传输记录点“重试处理”。</string>
 <string name="receiver_item_conversion_required">原件已接收 · 需要兼容转换</string>
 <string name="receiver_thermal_switch">手机过热时暂停接收</string>
 <string name="receiver_thermal_note">默认开启。电池温度达到设定值或系统报告严重过热时暂停；降温后自动恢复。</string>
@@ -104,12 +104,12 @@
 <string name="filter_failed">需要重试</string>
 <string name="filter_photo">照片</string>
 <string name="filter_video">视频</string>
-<string name="filter_motion">动图</string>
+<string name="filter_motion">实况</string>
 <string name="history_more">加载更多</string>
 <string name="history_count">已显示 %1$d / %2$d 项</string>
 <string name="history_failed_shortcut">查看未加入相册的文件</string>
 <string name="history_failed_shortcut_count">%1$d 项未加入相册</string>
-<string name="receiver_item_failed_unsupported">原件已接收 · 实况照片处理失败</string>
+<string name="receiver_item_failed_unsupported">原件已接收 · 实况处理失败</string>
 <string name="history_empty">没有符合条件的任务。收到的新项目会显示在这里。</string>
 <string name="history_loading">正在加载任务…</string>
 <string name="history_retry">重试</string>
@@ -154,11 +154,11 @@
 <string name="storage_snapshot_note">页面打开时自动更新</string>
 <string name="storage_snapshot_failed">部分用量读取失败，请刷新重试。</string>
 <string name="storage_how_to_free">如何释放设备空间</string>
-<string name="storage_cleanup_help">相册副本\n使用 Google 相册的“释放此设备的空间”，由它判断哪些副本已安全备份。这不会删除 PhotoBridge 原件。\n\n原始文件\n将原件归档导出到外部存储，校验成功后确认回收。归档如果仍保存在这台手机上，会继续占用空间。\n\n可选的中转模式会在相册副本校验通过后回收应用内原件。这不代表 Google 相册云端备份完成，也不保留转换前动图、连拍文件的原始格式。\n\n用量说明\n文件大小不含数据库、缓存与文件系统开销。相册用量仅覆盖当前安装创建的 PhotoBridge 相册文件，不含回收站；系统索引更新可能稍有延迟。这不代表云端备份已完成。</string>
+<string name="storage_cleanup_help">相册副本\n使用 Google 相册的“释放此设备的空间”，由它判断哪些副本已安全备份。这不会删除 PhotoBridge 原件。\n\n原始文件\n将原件归档导出到外部存储，校验成功后确认回收。归档如果仍保存在这台手机上，会继续占用空间。\n\n可选的中转模式会在相册副本校验通过后回收应用内原件。这不代表 Google 相册云端备份完成，也不保留转换前实况、连拍文件的原始格式。\n\n用量说明\n文件大小不含数据库、缓存与文件系统开销。相册用量仅覆盖当前安装创建的 PhotoBridge 相册文件，不含回收站；系统索引更新可能稍有延迟。这不代表云端备份已完成。</string>
 <string name="relay_toggle">保存到系统相册后回收原件</string>
 <string name="relay_note">关闭时保留原始文件。开启后，接收运行期间会核对相册副本并回收对应的中转原件；副本缺失或校验不一致时保留原件。</string>
 <string name="relay_confirm_title">将此设备用作中转？</string>
-<string name="relay_confirm_note">PhotoBridge 会重新读取并校验已保存的相册副本，再回收应用内原件，也会检查符合条件的已有项目。传输回执会保留。\n\n这只确认文件已保存到手机相册，不代表 Google 相册云端备份完成。动图与连拍可能使用转换后的格式，回收后无法从本机取回它们的原始组件。请保留来源图库或其他原件备份。旧版转换文件缺少校验记录时，会继续保留原件。\n\n可随时关闭此选项，关闭不会恢复已回收的原件。</string>
+<string name="relay_confirm_note">PhotoBridge 会重新读取并校验已保存的相册副本，再回收应用内原件，也会检查符合条件的已有项目。传输回执会保留。\n\n这只确认文件已保存到手机相册，不代表 Google 相册云端备份完成。实况与连拍可能使用转换后的格式，回收后无法从本机取回它们的原始组件。请保留来源图库或其他原件备份。旧版转换文件缺少校验记录时，会继续保留原件。\n\n可随时关闭此选项，关闭不会恢复已回收的原件。</string>
 <string name="relay_enable">启用中转模式</string>
 <string name="relay_enabled">已启用中转模式，接收运行期间会自动检查原件。</string>
 <string name="relay_disabled">已停止新增回收，将保留剩余原件。</string>
@@ -226,9 +226,9 @@
     <string name="help_sender_background_title">发送端也需要运行机会</string>
     <string name="help_sender_background_body">接收端就绪并不能强制发送端运行。iOS 决定后台准备和请求何时继续，无法保证锁屏后持续不中断备份。首次大量导入时建议保持发送端打开；任务停滞时可回到前台。Mac 发送端需要应用运行且电脑保持唤醒。</string>
     <string name="help_receipt_title">“已接收”表示原件到达</string>
-    <string name="help_receipt_body">一个项目的全部资源到达并通过完整性校验后，PhotoBridge 才确认接收。动图可以在同一个逻辑项目中包含原始照片和配对视频。接收后的处理失败，不需要重新上传这些原件。</string>
+    <string name="help_receipt_body">一个项目的全部资源到达并通过完整性校验后，PhotoBridge 才确认接收。实况可以在同一个逻辑项目中包含原始照片和配对视频。接收后的处理失败，不需要重新上传这些原件。</string>
     <string name="help_gallery_title">“已写入相册”表示已有设备副本</string>
-    <string name="help_gallery_body">接收端会在确认接收后准备系统相册副本，包括支持的动图转换和连拍元数据。可在“传输”页查看处理状态并重试失败项。其他相册是否聚合连拍取决于该相册，原件与各帧接收记录仍独立保留。</string>
+    <string name="help_gallery_body">接收端会在确认接收后准备系统相册副本，包括支持的实况转换和连拍元数据。可在“传输”页查看处理状态并重试失败项。其他相册是否聚合连拍取决于该相册，原件与各帧接收记录仍独立保留。</string>
     <string name="help_cloud_title">云端备份是独立操作</string>
     <string name="help_cloud_body">Google 相册负责自己的上传。请选择预期账号，并按需要开启 PhotoBridge 设备文件夹的备份。PhotoBridge 的接收或相册写入状态不能证明云端备份完成。当前实验功能只检查能否识别 Google 相册页面，不会删除文件或启用自动清理。</string>
     <string name="help_space_limits_title">空间限制的含义</string>
@@ -236,7 +236,7 @@
     <string name="help_keep_originals_title">保留或归档原件</string>
     <string name="help_keep_originals_body">默认保留原件。可先将经过校验的原件归档导出到外部存储，再选择回收符合条件的原件。归档如果仍保存在这台手机上，也会占用空间。Google 相册释放的是符合条件的系统相册副本，不会清除 PhotoBridge 私有原件。</string>
     <string name="help_relay_title">可选的中转模式</string>
-    <string name="help_relay_body">在“空间”页明确开启中转模式后，PhotoBridge 会先核对已完成的相册副本，再回收符合条件的中转原件。副本缺失、变化或未经验证时会保留原件。转换后的动图不等同于原始照片与视频的逐字节归档。关闭中转模式会停止新的回收，但不能恢复已经回收的原件，也不表示云端备份已完成。</string>
+    <string name="help_relay_body">在“空间”页明确开启中转模式后，PhotoBridge 会先核对已完成的相册副本，再回收符合条件的中转原件。副本缺失、变化或未经验证时会保留原件。转换后的实况不等同于原始照片与视频的逐字节归档。关闭中转模式会停止新的回收，但不能恢复已经回收的原件，也不表示云端备份已完成。</string>
     <string name="help_retry_title">重试发生错误的阶段</string>
     <string name="help_retry_body">上传失败时，查看发送端队列及重试操作。原件已接收但写入相册失败时，在“传输”页筛选处理失败，并使用重试处理操作。因空间不足而等待的处理任务，会在接收运行时再次自动检查。反复导入不能替代对原始错误的处理。</string>
     <string name="help_report_title">导出诊断报告</string>
