@@ -352,8 +352,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
   }
   func setState(_ state: String?) {
     status.image = UIImage(systemName: taskSymbol(state))
-    status.tintColor =
-      state == "received" || state == "received_previous" ? .systemBlue : state == "failed" ? .systemOrange : .white
+    status.tintColor = state == "failed" ? .systemOrange : .white
     accessibilityValue = groupDescription + NSLocalizedString(
       state == "received" ? "state_received_detail" : state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
   }
@@ -375,6 +374,7 @@ struct IOSLibraryGrid: UIViewRepresentable {
 struct IOSLibraryPage: View {
   @ObservedObject var library: PhotoLibraryModel
   @ObservedObject var model: BackupModel
+  @State private var confirmSelectedBackup = false
   var body: some View {
     NavigationStack {
       VStack(spacing: 10) {
@@ -385,13 +385,24 @@ struct IOSLibraryPage: View {
             ).foregroundStyle(.secondary)
           }
           Spacer()
-          Picker(
-            "media_type",
-            selection: Binding(
-              get: { library.filter }, set: { value in Task { await library.changeFilter(value) } })
-          ) {
-            ForEach(LibraryFilter.allCases) { Text(LocalizedStringKey($0.title)).tag($0) }
-          }.labelsHidden().disabled(!library.authorized)
+          Menu {
+            ForEach(LibraryFilter.allCases) { option in
+              Button {
+                Task { await library.changeFilter(option) }
+              } label: {
+                if option == library.filter {
+                  Label(LocalizedStringKey(option.title), systemImage: "checkmark")
+                } else {
+                  Text(LocalizedStringKey(option.title))
+                }
+              }
+            }
+          } label: {
+            HStack(spacing: 4) {
+              Text(LocalizedStringKey(library.filter.title))
+              Image(systemName: "chevron.up.chevron.down").font(.caption2)
+            }.frame(minWidth: 72, alignment: .trailing)
+          }.disabled(!library.authorized)
         }.padding(.horizontal, 16)
         if let placeholder = library.placeholder {
           LibraryPlaceholder(kind: placeholder,
@@ -409,13 +420,7 @@ struct IOSLibraryPage: View {
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
-            let tokens = library.selection
-            Task {
-              let ids = await library.selectedAssetIdentifiers(tokens)
-              await model.setPaused(false)
-              await model.importAssets(ids)
-              library.selection.subtract(tokens)
-            }
+            confirmSelectedBackup = true
           } label: {
             Label(
               String(
@@ -423,9 +428,23 @@ struct IOSLibraryPage: View {
               systemImage: "arrow.up.circle")
           }
           .disabled(library.selection.isEmpty || model.pairing == nil || model.importing)
+          .confirmationDialog("backup_selected_confirm_title", isPresented: $confirmSelectedBackup) {
+            Button("backup_selected_confirm_action") { backupSelection() }
+          } message: {
+            Text("backup_selected_confirm_note")
+          }
         }
       }
       .task { await library.open() }
+    }
+  }
+  private func backupSelection() {
+    let tokens = library.selection
+    Task {
+      let ids = await library.selectedAssetIdentifiers(tokens)
+      await model.setPaused(false)
+      await model.importAssets(ids)
+      library.selection.subtract(tokens)
     }
   }
 }

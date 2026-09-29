@@ -65,6 +65,7 @@ struct MacWorkspace: View {
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var tileSize: Double = 170
   @State private var pairSheet = false
+  @State private var confirmSelectedBackup = false
   @State private var transferFilter = "all"
   @StateObject private var activeTransfers = TaskBrowserModel()
   @StateObject private var folders: FolderSources
@@ -202,13 +203,18 @@ struct MacWorkspace: View {
           ForEach(LibraryFilter.allCases) { Text(LocalizedStringKey($0.title)).tag($0) }
         }.labelsHidden().frame(width: 150).disabled(!library.authorized)
         Button {
-          backupSelection()
+          confirmSelectedBackup = true
         } label: {
           Text(
             String(
               format: NSLocalizedString("backup_selected", comment: ""), library.selection.count))
         }.buttonStyle(.borderedProminent).disabled(
           library.selection.isEmpty || model.importing || model.pairing == nil)
+        .confirmationDialog("backup_selected_confirm_title", isPresented: $confirmSelectedBackup) {
+          Button("backup_selected_confirm_action") { backupSelection() }
+        } message: {
+          Text("backup_selected_confirm_note")
+        }
       }.padding(.horizontal, 28).padding(.top, 28).padding(.bottom, 14)
       if let placeholder = library.placeholder {
         LibraryPlaceholder(kind: placeholder,

@@ -59,12 +59,15 @@
 "sidebar_library" = "照片";
 "library_heading" = "每一个值得留下的瞬间";
 "library_count" = "%d 张照片与视频";
-"library_filter_all" = "全部项目";
+"library_filter_all" = "全部";
 "library_filter_photo" = "照片";
 "library_filter_motion" = "动图";
 "library_filter_video" = "视频";
 "media_type" = "媒体类型";
 "backup_selected" = "备份所选（%d）";
+"backup_selected_confirm_title" = "备份所选项目？";
+"backup_selected_confirm_action" = "开始备份";
+"backup_selected_confirm_note" = "当前接收设备已接收的相同照片会跳过；更换接收设备后会按新设备的记录备份。";
 "photos_access_title" = "你的照片图库";
 "photos_access_description" = "允许访问图库后，即可浏览缩略图并选择需要备份的原件。";
 "photos_allow" = "允许访问照片";
@@ -252,7 +255,7 @@
 "event_history_scan_paused" = "已暂停扫描已有图库";
 "event_history_scan_resumed" = "已恢复扫描已有图库";
 "event_history_scan_finished" = "已有图库扫描结束，传输任务可能仍未完成";
-"library_filter_burst" = "连拍照片";
+"library_filter_burst" = "连拍";
 "help_title" = "使用与恢复";
 "help_start_title" = "连接设备";
 "help_start_body" = "在另一台设备上开启接收，并让两台设备处于能互相访问的网络中。在“接收端”页面配对，核对双方显示的设备名称。名称方便辨认设备，配对才会建立信任关系。";

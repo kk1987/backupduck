@@ -338,11 +338,11 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     let edge = min(640, max(128, (requested / 64).rounded(.up) * 64))
     return CGSize(width: edge, height: edge)
   }
-  private func options(network: Bool = false) -> PHImageRequestOptions {
+  private func options(network: Bool = false, video: Bool = false) -> PHImageRequestOptions {
     let options = PHImageRequestOptions()
     options.isNetworkAccessAllowed = network
-    options.deliveryMode = .opportunistic
-    options.resizeMode = .fast
+    options.deliveryMode = video ? .highQualityFormat : .opportunistic
+    options.resizeMode = video ? .exact : .fast
     return options
   }
   @discardableResult func request(
@@ -365,7 +365,7 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     guard let item = pending[id] else { return }
     pending[id]?.cloud = network
     let request = manager.requestImage(for: item.asset, targetSize: item.target,
-      contentMode: .aspectFill, options: options(network: network)) { [weak self] image, info in
+      contentMode: .aspectFill, options: options(network: network, video: item.asset.mediaType == .video)) { [weak self] image, info in
       let cancelled = info?[PHImageCancelledKey] as? Bool == true
       let degraded = info?[PHImageResultIsDegradedKey] as? Bool == true
       let cloud = info?[PHImageResultIsInCloudKey] as? Bool == true
@@ -417,8 +417,19 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     let next = Dictionary(assets.prefix(180).map { ($0.localIdentifier, $0) }, uniquingKeysWith: { a, _ in a })
     let removed = preheated.filter { next[$0.key] == nil }.map(\.value)
     let added = next.filter { preheated[$0.key] == nil }.map(\.value)
-    manager.stopCachingImages(for: removed, targetSize: target, contentMode: .aspectFill, options: options())
-    manager.startCachingImages(for: added, targetSize: target, contentMode: .aspectFill, options: options())
+    // Match the visible request's quality while keeping preheating batched.
+    for video in [false, true] {
+      let old = removed.filter { ($0.mediaType == .video) == video }
+      let fresh = added.filter { ($0.mediaType == .video) == video }
+      if !old.isEmpty {
+        manager.stopCachingImages(for: old, targetSize: target, contentMode: .aspectFill,
+          options: options(video: video))
+      }
+      if !fresh.isEmpty {
+        manager.startCachingImages(for: fresh, targetSize: target, contentMode: .aspectFill,
+          options: options(video: video))
+      }
+    }
     preheated = next
   }
   func clear() {
@@ -433,9 +444,9 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
 
 func taskSymbol(_ state: String?) -> String {
   switch state {
-  case "received": "arrow.down.circle.fill"
-  case "received_previous": "arrow.down.circle"
-  case "partial": "circle.lefthalf.filled"
+  case "received": "checkmark.circle"
+  case "received_previous": "checkmark.circle"
+  case "partial": "circle.dotted"
   case "scheduled", "running": "arrow.up.circle"
   case "waiting": "clock.arrow.circlepath"
   case "failed": "exclamationmark.circle"

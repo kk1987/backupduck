@@ -59,12 +59,15 @@
 "sidebar_library" = "Photos";
 "library_heading" = "Your moments, together.";
 "library_count" = "%d photos and videos";
-"library_filter_all" = "All items";
+"library_filter_all" = "All";
 "library_filter_photo" = "Photos";
 "library_filter_motion" = "Live Photos";
 "library_filter_video" = "Videos";
 "media_type" = "Media type";
 "backup_selected" = "Back up selected (%d)";
+"backup_selected_confirm_title" = "Back up selected items?";
+"backup_selected_confirm_action" = "Start backup";
+"backup_selected_confirm_note" = "Identical photos already received by this device are skipped. A new receiver has its own backup history.";
 "photos_access_title" = "Your photo library";
 "photos_access_description" = "Allow access to browse thumbnails and choose originals to back up.";
 "photos_allow" = "Allow photo access";
@@ -252,7 +255,7 @@
 "event_history_scan_paused" = "Existing-library scan paused";
 "event_history_scan_resumed" = "Existing-library scan resumed";
 "event_history_scan_finished" = "Library scan finished; transfers may still be pending";
-"library_filter_burst" = "Burst photos";
+"library_filter_burst" = "Burst";
 "help_title" = "Using PhotoBridge";
 "help_start_title" = "Connect your devices";
 "help_start_body" = "Start receiving on your other device and keep both devices on a network where they can reach each other. Pair from Receiver and check the device names on both screens. A familiar name helps you recognize a device; pairing establishes trust.";

@@ -14,7 +14,7 @@ struct MacLibraryGrid: NSViewRepresentable {
     layout.minimumInteritemSpacing = 4
     layout.minimumLineSpacing = 4
     layout.sectionInset = NSEdgeInsets(top: 12, left: 16, bottom: 20, right: 16)
-    let collection = NSCollectionView()
+    let collection = LibraryCollectionView()
     collection.collectionViewLayout = layout
     collection.autoresizingMask = [.width]
     collection.backgroundColors = [.clear]
@@ -23,6 +23,9 @@ struct MacLibraryGrid: NSViewRepresentable {
     collection.register(PhotoCell.self, forItemWithIdentifier: .init("photo"))
     collection.dataSource = context.coordinator
     collection.delegate = context.coordinator
+    collection.toggleSelection = { [weak coordinator = context.coordinator] path in
+      coordinator?.toggleSelection(at: path)
+    }
     let scroll = LibraryScrollView()
     scroll.hasVerticalScroller = true
     scroll.drawsBackground = false
@@ -184,6 +187,15 @@ struct MacLibraryGrid: NSViewRepresentable {
       else { parent.library.selection.subtract(ids) }
       appliedSelection = parent.library.selection
     }
+    func toggleSelection(at path: IndexPath) {
+      guard let collection, let id = parent.library.identifier(at: path.item) else { return }
+      if parent.library.selection.contains(id) { parent.library.selection.remove(id) }
+      else { parent.library.selection.insert(id) }
+      applyingSelection = true
+      collection.selectionIndexPaths = parent.library.selectedIndexPaths()
+      appliedSelection = parent.library.selection
+      applyingSelection = false
+    }
     func refreshVisibleImages() {
       guard let collection else { return }
       for path in collection.indexPathsForVisibleItems() {
@@ -248,6 +260,20 @@ struct MacLibraryGrid: NSViewRepresentable {
       parent.library.scrollAnchorID = id
       parent.library.scrollAnchorInset = scroll.contentView.bounds.origin.y - frame.minY
     }
+  }
+}
+
+@MainActor private final class LibraryCollectionView: NSCollectionView {
+  var toggleSelection: ((IndexPath) -> Void)?
+
+  override func mouseDown(with event: NSEvent) {
+    let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    let point = convert(event.locationInWindow, from: nil)
+    if modifiers.isEmpty, let path = indexPathForItem(at: point) {
+      toggleSelection?(path)
+      return
+    }
+    super.mouseDown(with: event)
   }
 }
 
@@ -374,8 +400,7 @@ struct MacLibraryGrid: NSViewRepresentable {
   }
   func setState(_ state: String?) {
     status.image = NSImage(systemSymbolName: taskSymbol(state), accessibilityDescription: nil)
-    status.contentTintColor =
-      state == "received" || state == "received_previous" ? .systemBlue : state == "failed" ? .systemOrange : .white
+    status.contentTintColor = state == "failed" ? .systemOrange : .white
     status.toolTip = groupDescription + NSLocalizedString(
       state == "received" ? "state_received_detail" : state.map { "state_" + $0 } ?? "state_not_queued", comment: "")
     view.setAccessibilityValue(status.toolTip)
