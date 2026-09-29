@@ -1,8 +1,7 @@
-# Beta 25
+# Beta 26
 
-- Fix cloud playback for JPG+MOV Live Photos by packaging the original JPEG with an MP4/H.264/AAC motion clip. Compatible video samples are copied into the new container; audio is converted when needed. The JPEG image is not re-encoded.
-- Correct JPEG Motion Photo metadata for MPF auxiliary images and remove trailing data after the motion clip.
-- Distinguish "sent to phone" from "added to phone gallery" on Mac and iOS. Gallery processing failures remain visible and can be retried on the receiver without retransmitting originals.
+- Preserve the original video and audio when packaging supported JPG+MOV Live Photos. Four cloud samples that were static or unable to load their animation were verified to play in Google Photos on iOS after correcting only their Motion Photo container metadata and layout, with no image, video, or audio encoding.
+- Keep the JPEG container fixes from beta.25: describe the MPF auxiliary image and put the video at the exact end of the file. Codec conversion remains a fallback for unsupported inputs instead of running for every JPG+MOV pair.
 
 Mac requires Apple Silicon and macOS 14+. Android requires arm64 and Android 10+.
 iOS 17+ is available from source. Existing gallery/cloud copies are not changed by updating the app. Receiver gallery publication and Google Photos cloud backup remain separate states.

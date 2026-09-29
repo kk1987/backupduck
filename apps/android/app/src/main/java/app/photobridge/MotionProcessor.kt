@@ -63,19 +63,13 @@ internal object MotionProcessor {
                 var dated: File? = null
                 try {
                     dated = MediaDates.prepare(context, still, "image/jpeg", asset.optJSONObject("metadata"))
-                    // Google Photos can retain a JPEG+QuickTime MOV byte-for-byte yet
-                    // publish only a static cloud image. Media3 copies compatible
-                    // H.264 samples into MP4 and converts unsupported audio to AAC.
-                    // The JPEG, including its MPF auxiliary image, stays untouched.
-                    val packagedVideo = if (directVideoMime == "video/quicktime" && resumeLocator == null) {
-                        if (mp4.exists()) check(mp4.delete()) { "storage" }
-                        try { transcode(context, video, mp4) }
-                        catch (_: TimeoutCancellationException) { throw IOException("video_conversion_timeout") }
-                        mp4
-                    } else video
+                    // Cloud-tested JPG+MOV samples play with their original video
+                    // and audio once the XMP directory and video tail are correct.
+                    // Preserve both resources; conversion below is only a fallback
+                    // for a container the direct writer cannot handle.
                     NativeBridge.request(JSONObject().put("op", "package_motion")
-                        .put("jpeg", dated.path).put("mp4", packagedVideo.path).put("output", motion.path)
-                        .put("video_mime", if (packagedVideo == mp4) "video/mp4" else directVideoMime)
+                        .put("jpeg", dated.path).put("mp4", video.path).put("output", motion.path)
+                        .put("video_mime", directVideoMime)
                         .put("metadata", asset.optJSONObject("metadata") ?: JSONObject()))
                     if (resumeLocator == null || matchesPreparedCopy(item, motion)) {
                         return MediaPublisher.publishFile(context, motion, item, "image/jpeg", asset.optJSONObject("metadata"), existingOnly, resumeLocator = resumeLocator)

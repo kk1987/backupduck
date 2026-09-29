@@ -133,7 +133,7 @@ padding-only copy still had the other format defects.
 
 The writer now lists the preserved MPF auxiliary JPEG, makes the appended video
 the exact end of the file, and removes the invented padding and SEF footer.
-Android's JPG+MOV publication path now uses Media3 Transformer to produce
+The interim beta.25 JPG+MOV publication path used Media3 Transformer to produce
 MP4/H.264/AAC before packaging. Media3 can copy compatible compressed video
 samples into the new container without re-encoding them; it converts audio
 when necessary. The still image and its MPF auxiliary image are not decoded or
@@ -146,8 +146,10 @@ separate device-and-cloud acceptance check.
 
 The seven gallery copies from 2026-09-27 were pulled from the test Pixel. The
 cloud objects for `d821`, `3658`, and `d894` had no animation control; `3765`
-and `30a9` did. The `bd8c` object said it was preparing the Motion Photo, which
-is an unresolved state rather than evidence of failure. All seven embedded
+and `30a9` did. Web's `bd8c` object said it was preparing the Motion Photo,
+which alone is unresolved rather than evidence of failure. The user later
+confirmed that the old `bd8c` cloud copy could not load its animation in iOS.
+All seven embedded
 videos are QuickTime MOV with AVC/H.264 video and 48 kHz mono PCM audio. All
 seven videos decode, and the still/video pairing IDs match. Their old JPEG
 Motion Photo copies also share the same structural defects: the MPF gain-map
@@ -172,6 +174,40 @@ receiver can keep the no-encoding path. If any remain static, the next separate
 experiment changes only PCM audio to AAC while copying the H.264 video samples.
 No receiver policy should be changed on the basis of the earlier MP4/AAC result
 alone.
+
+With the user's explicit approval, all three container-only copies were placed
+in the test Pixel's camera folder. Their device SHA-256 hashes matched the local
+copies. Google Photos Web confirmed original-quality cloud backup from Android
+and showed the Motion Photo preparation control for each exact diagnostic
+filename. The user then confirmed that all three played in Google Photos on
+both the Pixel and iOS. The iOS cloud playback is the decisive check: the result
+does not depend on the Pixel's local MOV cache. Web's preparation state is not
+classified as failure.
+
+The user subsequently authorized the same container-only test for `bd8c`.
+Its video has an edit list that starts the video 0.1 seconds into its media
+timeline, unlike the first three samples. That original edit list, full MOV,
+JPEG scan and auxiliary JPEG were preserved. After Android uploaded the new
+copy, the user confirmed that it also played in Google Photos on iOS. The
+edit list therefore did not require normalization for this sample.
+
+This controlled comparison establishes that correcting the Motion Photo
+container is sufficient for all four reported failures without encoding the image,
+video or audio. It does not isolate which individual directory/padding/footer
+violation Google's closed-source parser rejected, or explain why it tolerated
+the older layout for some other photos. All of those layout violations are
+fixed. PCM audio conversion and MOV-to-MP4 conversion are not necessary for
+these verified samples; they must not be inferred to be universally required
+from the earlier multi-variable trial.
+
+Beta.26 therefore restores the direct JPG+MOV path while keeping beta.25's
+container fixes. The full original MOV, including its audio, is passed to the
+native writer. Existing conversion remains available only when direct
+packaging reports an unsupported container. A transfer error, a gallery error
+or Web's preparation label does not trigger blanket encoding. This does not
+promise that every possible MOV codec/layout will be accepted by Google Photos.
+Updating the app does not replace old static cloud copies; the three verified
+diagnostic copies plus the verified `bd8c` copy remain beside the originals.
 
 The sender now follows Android's processing state after its transfer receipt.
 It reports a gallery publication failure independently of transfer success and
