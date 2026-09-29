@@ -393,7 +393,9 @@ mod tests {
         assert_eq!(retry.status(), StatusCode::OK);
         assert_eq!(retry.json::<Value>().await.unwrap()["count"], 0);
         drop(dashboard);
-        fs::remove_dir_all(root).unwrap();
+        // The aborted HTTP task can release its SQLite handles on the next runtime turn.
+        // Windows does not permit unlinking a still-open database file.
+        let _ = fs::remove_dir_all(root);
     }
 
     #[tokio::test]
@@ -430,6 +432,6 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         drop(dashboard);
-        fs::remove_dir_all(root).unwrap();
+        let _ = fs::remove_dir_all(root);
     }
 }
