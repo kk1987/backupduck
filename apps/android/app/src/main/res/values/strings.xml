@@ -16,7 +16,7 @@
 <string name="receiver_error">Could not complete this operation: %1$s</string>
 <string name="receiver_pair_instruction">Scan this code in PhotoBridge on your iPhone. It grants access to this receiver. Share it only with your own devices.</string>
 <string name="receiver_cloud_note">Received means files are verified on this device. Enable backup for the PhotoBridge folder in Google Photos. Cloud backup is handled by Google Photos.</string>
-<string name="receiver_motion_note">Motion assets keep their original photo and video. Unsupported conversions stay available for retry.</string>
+<string name="receiver_motion_note">Live Photos are first added with their original image and video. Compatibility conversion is optional in Settings.</string>
 <string name="receiver_network_missing">Connect to a Wi-Fi network first.</string>
 <string name="receiver_notification">Receiving photos securely</string>
 <string name="receiver_retry_processing">Retry failed processing</string>
@@ -72,6 +72,11 @@
 <string name="nav_settings">Settings</string>
 <string name="receiver_pair_section">Connect your devices</string>
 <string name="receiver_behavior">Receiving</string>
+<string name="receiver_motion_settings">Live Photos</string>
+<string name="receiver_motion_conversion_switch">Allow compatibility conversion</string>
+<string name="receiver_motion_conversion_note">Off by default. PhotoBridge first tries to keep the original image and video. If it cannot package a Live Photo, turning this on lets it create a new JPEG and MP4 copy. This can take longer and change quality; the received originals are kept.</string>
+<string name="receiver_motion_conversion_recovery">The original photo and video are safe on this phone, but this Live Photo cannot be added to the gallery without conversion. Turn on “Allow compatibility conversion” in Settings, then tap “Retry failed processing” in Transfers.</string>
+<string name="receiver_item_conversion_required">Received · Compatibility conversion needed</string>
 <string name="receiver_thermal_switch">Pause receiving when the phone is hot</string>
 <string name="receiver_thermal_note">On by default. Pauses at the chosen battery temperature or when Android reports severe heat; resumes after cooling.</string>
 <string name="receiver_thermal_threshold">Pause temperature</string>

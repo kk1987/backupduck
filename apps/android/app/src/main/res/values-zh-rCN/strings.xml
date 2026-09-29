@@ -16,7 +16,7 @@
 <string name="receiver_error">未能完成操作：%1$s</string>
 <string name="receiver_pair_instruction">使用 iPhone 上的 PhotoBridge 扫描。此二维码授予接收端访问权限，请仅用于自己的设备。</string>
 <string name="receiver_cloud_note">“已接收”表示文件已在本机校验。请在 Google 相册中启用 PhotoBridge 文件夹备份，云端上传由 Google 相册完成。</string>
-<string name="receiver_motion_note">动图保留原始照片和视频，不支持的转换可以稍后重试。</string>
+<string name="receiver_motion_note">实况照片优先保留原始照片和视频；可在设置中决定是否允许兼容转换。</string>
 <string name="receiver_network_missing">请先连接 Wi-Fi 网络。</string>
 <string name="receiver_notification">正在安全接收照片</string>
 <string name="receiver_retry_processing">重试处理失败的项目</string>
@@ -72,6 +72,11 @@
 <string name="nav_settings">设置</string>
 <string name="receiver_pair_section">连接设备</string>
 <string name="receiver_behavior">接收行为</string>
+<string name="receiver_motion_settings">实况照片</string>
+<string name="receiver_motion_conversion_switch">允许兼容转换</string>
+<string name="receiver_motion_conversion_note">默认关闭。优先保留原始照片和视频；只有无法直接封装时，开启此项才会生成新的 JPEG 照片和 MP4 视频，可能更耗时、影响画质。已接收的原文件会保留。</string>
+<string name="receiver_motion_conversion_recovery">原始照片和视频已安全接收，但这张实况照片需要转换才能加入手机相册。请在设置中开启“允许兼容转换”，然后到传输记录点“重试处理”。</string>
+<string name="receiver_item_conversion_required">原件已接收 · 需要兼容转换</string>
 <string name="receiver_thermal_switch">手机过热时暂停接收</string>
 <string name="receiver_thermal_note">默认开启。电池温度达到设定值或系统报告严重过热时暂停；降温后自动恢复。</string>
 <string name="receiver_thermal_threshold">暂停温度</string>

@@ -79,6 +79,10 @@ internal object MotionProcessor {
                     if (!isUnsupportedContainer(error)) throw error
                 } finally { if (dated != still) dated?.delete() }
             }
+            // Consent is checked for each asset after both lossless paths have
+            // had a chance. A failed direct package remains retryable from the
+            // verified originals; it must not silently enter the codec path.
+            if (!MotionConversionSettings.enabled(context)) throw IllegalStateException("conversion_required")
             prepareStill(still, jpeg)
             val keepOriginalVideo = directVideoMime == "video/mp4" && resumeLocator == null
             val packagedVideo = if (keepOriginalVideo) video else {

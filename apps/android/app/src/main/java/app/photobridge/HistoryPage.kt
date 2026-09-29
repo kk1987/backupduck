@@ -209,7 +209,7 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
         holder.cancel(); holder.itemID = item.id
         holder.name.text = item.filename
         holder.sender.text = activity.getString(R.string.history_from, item.senderNames.ifBlank { activity.getString(R.string.history_sender_unknown) })
-        holder.status.text = activity.getString(if (item.originalsReleased && item.releaseReason == "gallery") R.string.history_relay_reclaimed else if (item.originalsReleased) R.string.history_archived else if (item.processing == "complete") R.string.filter_published else if (item.kind == "motion" && item.processing == "failed" && item.processingError == "unsupported") R.string.receiver_item_failed_unsupported else item.statusLabel)
+        holder.status.text = activity.getString(if (item.originalsReleased && item.releaseReason == "gallery") R.string.history_relay_reclaimed else if (item.originalsReleased) R.string.history_archived else if (item.processing == "complete") R.string.filter_published else if (item.kind == "motion" && item.processing == "failed" && item.processingError == "conversion_required") R.string.receiver_item_conversion_required else if (item.kind == "motion" && item.processing == "failed" && item.processingError == "unsupported") R.string.receiver_item_failed_unsupported else item.statusLabel)
         holder.progress.visibility = if (item.receipt == "received") View.GONE else View.VISIBLE
         holder.size.text = if (item.receipt == "received") Formatter.formatFileSize(activity, item.totalBytes)
             else "${Formatter.formatFileSize(activity, item.confirmedBytes)} / ${Formatter.formatFileSize(activity, item.totalBytes)}"
@@ -217,7 +217,14 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
         holder.image.setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
         holder.image.setBackgroundColor(activity.themeColor(com.google.android.material.R.attr.colorSurfaceVariant))
         holder.image.setImageResource(if (item.kind == "video") R.drawable.ic_video else if (item.kind == "motion") R.drawable.ic_motion else R.drawable.ic_photo)
-        holder.row.setOnClickListener(null)
+        holder.row.setOnClickListener(if (item.kind == "motion" && item.processing == "failed" && item.processingError == "conversion_required") View.OnClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.receiver_item_conversion_required)
+                .setMessage(R.string.receiver_motion_conversion_recovery)
+                .setNegativeButton(R.string.receiver_close, null)
+                .setPositiveButton(R.string.nav_settings) { _, _ -> activity.openSettings() }
+                .show()
+        } else null)
         if (item.processing != "complete") return
         val signal = CancellationSignal()
         holder.signal = signal

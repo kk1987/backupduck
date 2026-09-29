@@ -209,6 +209,16 @@ promise that every possible MOV codec/layout will be accepted by Google Photos.
 Updating the app does not replace old static cloud copies; the three verified
 diagnostic copies plus the verified `bd8c` copy remain beside the originals.
 
+Beta.27 makes that codec fallback an explicit receiver choice, default off. The
+switch is checked separately for each received Live Photo after the direct HEIC
+and JPEG paths. When the direct writer cannot package an input and conversion is
+off, Android records `conversion_required` as a gallery-processing failure;
+the verified originals and transfer receipt remain. The Transfers screen offers
+the receiver settings and a processing retry. Turning conversion on permits
+the existing JPEG/MP4 fallback for unsupported inputs; it does not convert
+otherwise-supported HEIC+MOV or JPG+MOV samples. No setting can detect Google
+Photos cloud animation or rewrite an already-published gallery/cloud copy.
+
 The sender now follows Android's processing state after its transfer receipt.
 It reports a gallery publication failure independently of transfer success and
 keeps polling the receiver after a processing retry without retransmitting the

@@ -245,6 +245,18 @@ class MainActivity : AppCompatActivity() {
                     }.setNegativeButton(R.string.receiver_close, null).show()
             }
         }
+        section(panel, R.string.receiver_motion_settings)
+        card(panel) { body ->
+            body.addView(MaterialSwitch(this).apply {
+                setText(R.string.receiver_motion_conversion_switch)
+                isChecked = MotionConversionSettings.enabled(this@MainActivity)
+                setOnCheckedChangeListener { _, checked ->
+                    MotionConversionSettings.setEnabled(this@MainActivity, checked)
+                }
+                minimumHeight = dp(56)
+            })
+            label(body, getString(R.string.receiver_motion_conversion_note), 14, secondaryColor())
+        }
         section(panel, R.string.settings_diagnostics)
         card(panel) { body ->
             action(body, R.string.logs_retention_settings) { showStorageControls(StorageSection.LOGS) {} }
@@ -263,6 +275,7 @@ class MainActivity : AppCompatActivity() {
             label(body, getString(R.string.receiver_motion_note), 14, secondaryColor())
         }
     }
+    internal fun openSettings() { navigation.selectedItemId = 4 }
     private fun openHelp(topic: ReceiverHelpTopic? = null) {
         startActivity(Intent(this, ReceiverHelpActivity::class.java).apply { topic?.let { putExtra("topic", it.key) } })
     }
