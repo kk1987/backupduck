@@ -74,13 +74,13 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this@MainActivity, if (result.isSuccess) R.string.logs_exported else R.string.settings_failed, Toast.LENGTH_LONG).show()
         }
     }
-    private val exportCloudAudit = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    private val exportGalleryReceipts = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching {
-                val bytes = CloudAuditExport.create(this@MainActivity, receiverRoot).toString().toByteArray(Charsets.UTF_8)
+                val bytes = GalleryReceiptExport.create(this@MainActivity, receiverRoot).toString().toByteArray(Charsets.UTF_8)
                 checkNotNull(contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
             } }
-            Toast.makeText(this@MainActivity, if (result.isSuccess) R.string.cloud_audit_exported else R.string.settings_failed, Toast.LENGTH_LONG).show()
+            Toast.makeText(this@MainActivity, if (result.isSuccess) R.string.gallery_receipts_exported else R.string.settings_failed, Toast.LENGTH_LONG).show()
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -306,8 +306,8 @@ class MainActivity : AppCompatActivity() {
         card(panel) { body ->
             action(body, R.string.logs_retention_settings) { showStorageControls(StorageSection.LOGS) {} }
             action(body, R.string.logs_export) { exportLogs.launch("PhotoBridge-diagnostics.json") }
-            action(body, R.string.cloud_audit_export) { exportCloudAudit.launch("PhotoBridge-cloud-audit.json") }
-            label(body, getString(R.string.cloud_audit_export_note), 14, secondaryColor())
+            action(body, R.string.gallery_receipts_export) { exportGalleryReceipts.launch("PhotoBridge-gallery-receipts.json") }
+            label(body, getString(R.string.gallery_receipts_export_note), 14, secondaryColor())
         }
         card(panel) { body ->
             action(body, R.string.experiments_title) { startActivity(Intent(this, ExperimentsActivity::class.java)) }

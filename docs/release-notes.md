@@ -1,6 +1,6 @@
 # Beta 34
 
-- Add a Pixel settings export for a private cloud audit. It lists published gallery filenames, byte sizes, and receipt evidence without exporting photo contents or login credentials.
+- Add a Pixel settings export for gallery publication records. It lists saved filenames, byte sizes, checksums and times without exporting photo contents or login credentials, so users can reconcile backups with any destination.
 - Persist the exact published filename for new transfers so a local Chrome audit can compare Pixel receipts with the Google Photos timeline. Existing receipts are resolved from the Android media index when available.
 
 # Beta 33

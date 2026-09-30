@@ -8,8 +8,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** A private, metadata-only handoff for a user-initiated Google Photos audit. */
-internal object CloudAuditExport {
+/** User-initiated export of Pixel gallery publication receipts, without media bytes. */
+internal object GalleryReceiptExport {
     fun create(context: Context, receiverRoot: String): JSONObject {
         val database = File(receiverRoot, "store/receiver.sqlite3")
         check(database.isFile) { "receiver_store_missing" }
