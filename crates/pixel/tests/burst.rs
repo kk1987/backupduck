@@ -5,6 +5,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 static SEQ: AtomicU64 = AtomicU64::new(0);
+const XMP_FIXTURE: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 fn jpeg(xml: Option<&str>) -> Vec<u8> {
     let mut bytes = vec![0xff, 0xd8];
     // These are structural fixtures; Android instrumentation uses actual JPEGs.
@@ -87,5 +88,37 @@ fn burst_copy_preserves_original_pixels_and_xmp_and_is_idempotent() {
         matches!(write_jpeg_burst(&source, &root.join("extended.jpg"), &burst),
         Err(Error::Unsupported(reason)) if reason == "burst_jpeg_extended_xmp")
     );
+    let first = r#"<r:RDF xmlns:r="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><r:Description xmlns:dc="http://purl.org/dc/elements/1.1/" dc:description="first packet"/></r:RDF>"#;
+    let second = r#"<r:RDF xmlns:r="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><r:Description xmlns:dc="http://purl.org/dc/elements/1.1/" dc:description="second packet"/></r:RDF>"#;
+    let mut duplicate = jpeg(Some(first));
+    let mut extra = XMP_FIXTURE.to_vec();
+    extra.extend(second.as_bytes());
+    let mut segment = vec![0xff, 0xe1];
+    segment.extend(((extra.len() + 2) as u16).to_be_bytes());
+    segment.extend(extra);
+    let scan = duplicate
+        .windows(2)
+        .position(|bytes| bytes == [0xff, 0xda])
+        .unwrap();
+    duplicate.splice(scan..scan, segment);
+    fs::write(&source, &duplicate).unwrap();
+    let combined = root.join("multiple-xmp.jpg");
+    write_jpeg_burst(&source, &combined, &burst).unwrap();
+    let combined_bytes = fs::read(&combined).unwrap();
+    let combined_text = String::from_utf8_lossy(&combined_bytes);
+    assert_eq!(combined_text.matches("GCamera:BurstID=").count(), 2);
+    assert_eq!(
+        combined_text
+            .matches("http://ns.adobe.com/xap/1.0/")
+            .count(),
+        2
+    );
+    assert!(combined_text.contains("first packet"));
+    assert!(combined_text.contains("second packet"));
+    assert!(combined_bytes.ends_with(&[0xff, 0xda, 0, 2, 9, 8, 7, 0xff, 0xd9]));
+    assert_eq!(fs::read(&source).unwrap(), duplicate);
+    let again = root.join("multiple-xmp-again.jpg");
+    write_jpeg_burst(&combined, &again, &burst).unwrap();
+    assert_eq!(fs::read(again).unwrap(), combined_bytes);
     fs::remove_dir_all(root).unwrap();
 }

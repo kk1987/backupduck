@@ -127,8 +127,7 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
     if magic != [0xff, 0xd8] {
         return Err(rejected("burst_jpeg_structure"));
     }
-    let mut old = None;
-    let mut xml = None;
+    let mut xmp_packets = Vec::new();
     let mut found_scan = false;
     for _ in 0..4096 {
         let start = input.stream_position()?;
@@ -168,19 +167,35 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
             return Err(rejected("burst_jpeg_extended_xmp"));
         }
         if marker[1] == 0xe1 && segment.starts_with(XMP) {
-            if old.is_some() {
-                return Err(rejected("burst_jpeg_multiple_xmp"));
-            }
-            old = Some((start, input.stream_position()?));
-            xml = Some(segment[XMP.len()..].to_vec());
+            xmp_packets.push((
+                start,
+                input.stream_position()?,
+                segment[XMP.len()..].to_vec(),
+            ));
         }
     }
     if !found_scan {
         return Err(rejected("burst_jpeg_structure"));
     }
-    let mut packet = XMP.to_vec();
-    packet.extend(augment(xml.as_deref(), burst)?);
-    let length: u16 = (packet.len() + 2).try_into().map_err(|_| Error::Capacity)?;
+    // A few PhotoKit JPEGs contain more than one standard XMP APP1 segment.
+    // Preserve every packet and give each the same burst marker: a reader that
+    // chooses any one of them will still see the correct group, and unrelated
+    // metadata from the original remains intact.
+    let mut replacements = Vec::with_capacity(xmp_packets.len());
+    for (start, end, xml) in xmp_packets {
+        let mut packet = XMP.to_vec();
+        packet.extend(augment(Some(&xml), burst)?);
+        let length: u16 = (packet.len() + 2).try_into().map_err(|_| Error::Capacity)?;
+        replacements.push((start, end, length, packet));
+    }
+    let inserted = if replacements.is_empty() {
+        let mut packet = XMP.to_vec();
+        packet.extend(augment(None, burst)?);
+        let length: u16 = (packet.len() + 2).try_into().map_err(|_| Error::Capacity)?;
+        Some((length, packet))
+    } else {
+        None
+    };
     let partial = output.with_extension("burst.partial");
     // Never remove another operation's partial on a create_new failure.
     let mut out = OpenOptions::new()
@@ -188,16 +203,26 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
         .create_new(true)
         .open(&partial)?;
     let result = (|| -> Result<()> {
-        out.write_all(&[0xff, 0xd8, 0xff, 0xe1])?;
-        out.write_all(&length.to_be_bytes())?;
-        out.write_all(&packet)?;
-        input.seek(SeekFrom::Start(2))?;
-        if let Some((start, end)) = old {
-            let copied = std::io::copy(&mut (&mut input).take(start - 2), &mut out)?;
-            if copied != start - 2 {
-                return Err(Error::Integrity);
+        if let Some((length, packet)) = inserted {
+            out.write_all(&[0xff, 0xd8, 0xff, 0xe1])?;
+            out.write_all(&length.to_be_bytes())?;
+            out.write_all(&packet)?;
+            input.seek(SeekFrom::Start(2))?;
+        } else {
+            input.seek(SeekFrom::Start(0))?;
+            let mut cursor = 0;
+            for (start, end, length, packet) in replacements {
+                let span = start - cursor;
+                let copied = std::io::copy(&mut (&mut input).take(span), &mut out)?;
+                if copied != span {
+                    return Err(Error::Integrity);
+                }
+                out.write_all(&[0xff, 0xe1])?;
+                out.write_all(&length.to_be_bytes())?;
+                out.write_all(&packet)?;
+                input.seek(SeekFrom::Start(end))?;
+                cursor = end;
             }
-            input.seek(SeekFrom::Start(end))?;
         }
         std::io::copy(&mut input, &mut out)?;
         out.sync_all()?;
