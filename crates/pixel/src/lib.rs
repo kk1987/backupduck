@@ -92,7 +92,7 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
     use photobridge_core::{Error, Result};
     use std::{
         fs::{File, OpenOptions},
-        io::{Read, Seek, SeekFrom, Write},
+        io::{Seek, SeekFrom, Write},
     };
     const XMP: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
     let mut still = std::fs::read(jpeg)?;
@@ -172,11 +172,7 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
     };
     let mut video = File::open(mp4)?;
     let video_len = video.metadata()?.len();
-    let mut header = [0u8; 12];
-    video.read_exact(&mut header)?;
-    if &header[4..8] != b"ftyp" || video_len < 16 {
-        return Err(Error::Unsupported("motion MP4 input".into()));
-    }
+    validate_motion_video(&mut video, video_len, video_mime)?;
     video.seek(SeekFrom::Start(0))?;
     let time = timestamp_us
         .map(|v| format!(" GCamera:MotionPhotoPresentationTimestampUs=\"{v}\""))
@@ -254,4 +250,41 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
         let _ = std::fs::remove_file(&partial);
     }
     result
+}
+
+/// Older iPhone paired QuickTime movies can have no `ftyp` box at all. Their
+/// complete top-level layout is `wide` + `mdat` + `moov`; rejecting them here
+/// needlessly sends the receiver into its lossy compatibility conversion.
+fn validate_motion_video(video: &mut std::fs::File, length: u64, mime: &str) -> Result<()> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let unsupported = || Error::Unsupported("motion video container".into());
+    if length < 16 {
+        return Err(unsupported());
+    }
+    let mut header = [0u8; 8];
+    video.read_exact(&mut header)?;
+    if &header[4..8] == b"ftyp" {
+        return Ok(());
+    }
+    if mime != "video/quicktime" || header != *b"\0\0\0\x08wide" {
+        return Err(unsupported());
+    }
+    let mut offset = 8u64;
+    for expected in [b"mdat", b"moov"] {
+        video.seek(SeekFrom::Start(offset))?;
+        video.read_exact(&mut header).map_err(|_| unsupported())?;
+        let size = u64::from(u32::from_be_bytes(header[..4].try_into().unwrap()));
+        if header[4..8] != *expected || size <= 8 {
+            return Err(unsupported());
+        }
+        offset = offset.checked_add(size).ok_or_else(unsupported)?;
+        if offset > length {
+            return Err(unsupported());
+        }
+    }
+    if offset != length {
+        return Err(unsupported());
+    }
+    Ok(())
 }

@@ -62,6 +62,69 @@ fn jpeg_live_photo_keeps_original_mov() {
 }
 
 #[test]
+fn legacy_quicktime_without_ftyp_keeps_exact_video_tail() {
+    let root = workdir();
+    let image = root.join("still.jpg");
+    let movie = root.join("paired.mov");
+    let output = root.join("output.jpg");
+    let jpeg = [
+        0xff, 0xd8, 0xff, 0xe0, 0, 4, 1, 2, 0xff, 0xda, 0, 2, 0xff, 0xd9,
+    ];
+    let mov = b"\0\0\0\x08wide\0\0\0\x0cmdatDATA\0\0\0\x0cmoovMETA";
+    std::fs::write(&image, jpeg).unwrap();
+    std::fs::write(&movie, mov).unwrap();
+    write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &output,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .unwrap();
+    let result = std::fs::read(&output).unwrap();
+    assert!(result.ends_with(mov));
+    assert_eq!(std::fs::read(&image).unwrap(), jpeg);
+    assert_eq!(std::fs::read(&movie).unwrap(), mov);
+    assert!(String::from_utf8_lossy(&result).contains("Item:Mime=\"video/quicktime\""));
+    assert!(write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &root.join("wrong-mime.jpg"),
+        None,
+        None,
+        "video/mp4",
+    )
+    .is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn truncated_legacy_quicktime_is_rejected() {
+    let root = workdir();
+    let image = root.join("still.jpg");
+    let movie = root.join("paired.mov");
+    let output = root.join("output.jpg");
+    let jpeg = [
+        0xff, 0xd8, 0xff, 0xe0, 0, 4, 1, 2, 0xff, 0xda, 0, 2, 0xff, 0xd9,
+    ];
+    let mov = b"\0\0\0\x08wide\0\0\0\x0cmdatDATA\0\0\0\x20moovMETA";
+    std::fs::write(&image, jpeg).unwrap();
+    std::fs::write(&movie, mov).unwrap();
+    assert!(write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &output,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .is_err());
+    assert!(!output.exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn real_jpeg_live_photo_when_available() {
     let Ok(dir) = std::env::var("PHOTOBRIDGE_LIVE_PHOTO_FIXTURE") else {
         return;

@@ -1,3 +1,7 @@
+# Beta 35
+
+- Restore lossless packaging for older iPhone Live Photos whose paired QuickTime movie starts with `wide` instead of `ftyp`. The Pixel now accepts a complete `wide` + `mdat` + `moov` container, keeping the JPEG image data and original video/audio bytes. Previously received items can be retried without retransmission or compatibility conversion.
+
 # Beta 34
 
 - Add a Pixel settings export for gallery publication records. It lists saved filenames, byte sizes, checksums and times without exporting photo contents or login credentials, so users can reconcile backups with any destination.
