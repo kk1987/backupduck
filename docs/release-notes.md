@@ -1,3 +1,8 @@
+# Beta 36
+
+- Distinguish specific lossless burst-JPEG packaging failures, including MPF and XMP variants, while retaining every received original for retry. Receiver diagnostics and browser details now expose the failure category without exporting photo content.
+- Separate the Pixel's gallery-record export from log retention and log export in Settings.
+
 # Beta 35
 
 - Restore lossless packaging for older iPhone Live Photos whose paired QuickTime movie starts with `wide` instead of `ftyp`. The Pixel now accepts a complete `wide` + `mdat` + `moov` container, keeping the JPEG image data and original video/audio bytes. Previously received items can be retried without retransmission or compatibility conversion.

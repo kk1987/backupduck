@@ -1,4 +1,4 @@
-use photobridge_core::BurstMetadata;
+use photobridge_core::{BurstMetadata, Error};
 use photobridge_pixel::{write_jpeg_burst, write_jpeg_motion_with_burst};
 use std::{
     fs,
@@ -71,6 +71,21 @@ fn burst_copy_preserves_original_pixels_and_xmp_and_is_idempotent() {
     let mut multi = jpeg(None);
     multi.splice(2..2, [0xff, 0xe2, 0, 6, b'M', b'P', b'F', 0]);
     fs::write(&source, multi).unwrap();
-    assert!(write_jpeg_burst(&source, &root.join("multi.jpg"), &burst).is_err());
+    assert!(
+        matches!(write_jpeg_burst(&source, &root.join("multi.jpg"), &burst),
+        Err(Error::Unsupported(reason)) if reason == "burst_jpeg_mpf")
+    );
+    let mut extended = jpeg(None);
+    let identifier = b"http://ns.adobe.com/xmp/extension/\0";
+    let length = (identifier.len() + 2) as u16;
+    let mut segment = vec![0xff, 0xe1];
+    segment.extend(length.to_be_bytes());
+    segment.extend(identifier);
+    extended.splice(2..2, segment);
+    fs::write(&source, extended).unwrap();
+    assert!(
+        matches!(write_jpeg_burst(&source, &root.join("extended.jpg"), &burst),
+        Err(Error::Unsupported(reason)) if reason == "burst_jpeg_extended_xmp")
+    );
     fs::remove_dir_all(root).unwrap();
 }

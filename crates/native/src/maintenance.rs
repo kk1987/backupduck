@@ -148,6 +148,12 @@ pub struct EventContext {
 #[serde(rename_all = "snake_case")]
 pub enum PublicationError {
     Unsupported,
+    BurstJpegMpf,
+    BurstJpegExtendedXmp,
+    BurstJpegMultipleXmp,
+    BurstJpegXmpConflict,
+    BurstJpegXmp,
+    BurstJpegStructure,
     ConversionRequired,
     LowSpace,
     Storage,
@@ -163,6 +169,12 @@ impl PublicationError {
     pub fn from_code(code: Option<&str>) -> Self {
         match code {
             Some("unsupported") => Self::Unsupported,
+            Some("burst_jpeg_mpf") => Self::BurstJpegMpf,
+            Some("burst_jpeg_extended_xmp") => Self::BurstJpegExtendedXmp,
+            Some("burst_jpeg_multiple_xmp") => Self::BurstJpegMultipleXmp,
+            Some("burst_jpeg_xmp_conflict") => Self::BurstJpegXmpConflict,
+            Some("burst_jpeg_xmp") => Self::BurstJpegXmp,
+            Some("burst_jpeg_structure") => Self::BurstJpegStructure,
             Some("conversion_required") => Self::ConversionRequired,
             Some("low_space" | "processing_low_space") => Self::LowSpace,
             Some("storage") => Self::Storage,

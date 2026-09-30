@@ -12,7 +12,7 @@ const w = en ? {
   file:"File", status:"Status", captured:"Captured", receivedTime:"Received", publishedTime:"Added to gallery", amount:"Size", perPage:"Per page", jump:"Go to", go:"Go", pagination:"Transfer pages", first:"First page", previous:"Previous page", next:"Next page", last:"Last page", page:n=>`Page ${n}`,
   count:n=>`${n} matching files`, updated:time=>`Updated ${time}`, olderPage:"This page does not auto-refresh", pageSummary:(page,pages,start,end,total)=>`Page ${page} of ${pages} · ${start}–${end} of ${total}`, unknown:"—", oldTime:"Not recorded", noCapture:"Unknown", noSender:"Unknown sender", noItems:"No transfers match these filters.",
   loginError:"Check the code on your phone and try again.", locked:"Too many attempts. Try again in five minutes.", connectionError:"Cannot reach your Pixel. Check that receiving and browser management are on.", retried:n=>`${n} failed item(s) queued for retry.`,
-  detailTitle:"Transfer details", close:"Close details", senders:"Sending device", progress:"Receive progress", originals:"Originals", error:"Processing note", originalsReceiving:"Still receiving", originalsRetained:"Not cleared from the Pixel", originalsReleased:"Originals cleared from the receiver", conversion:"Enable compatibility conversion on the Pixel, then retry", unsupported:"This media format cannot be processed on the Pixel", retryHelp:"Try again on the Pixel; if it fails again, check receiver diagnostics", cloud:"Phone gallery completion does not confirm Google Photos cloud backup."
+  detailTitle:"Transfer details", close:"Close details", senders:"Sending device", progress:"Receive progress", originals:"Originals", error:"Processing note", originalsReceiving:"Still receiving", originalsRetained:"Not cleared from the Pixel", originalsReleased:"Originals cleared from the receiver", conversion:"Enable compatibility conversion on the Pixel, then retry", unsupported:"This media format cannot be processed on the Pixel", burstMpf:"Burst JPEG contains MPF multi-picture metadata", burstExtendedXmp:"Burst JPEG contains extended XMP", burstMultipleXmp:"Burst JPEG contains multiple standard XMP packets", burstXmpConflict:"Burst JPEG already has conflicting burst metadata", burstXmp:"Burst JPEG has unsupported XMP structure", burstStructure:"Burst JPEG has unsupported marker structure", retryHelp:"Try again on the Pixel; if it fails again, check receiver diagnostics", cloud:"Phone gallery completion does not confirm Google Photos cloud backup."
 } : {
   brand:"接收端管理", section:"工作台", navOverview:"概览", navTransfers:"传输记录", local:"仅在当前局域网访问", breadcrumb:"接收端", topLocal:"本地管理页",
   loginTitle:"连接你的 Pixel", loginHelp:"在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看访问码。每次开启都会更换。", code:"10 位访问码", enter:"进入管理页",
@@ -24,7 +24,7 @@ const w = en ? {
   file:"文件", status:"状态", captured:"拍摄时间", receivedTime:"接收完成", publishedTime:"加入手机相册", amount:"大小", perPage:"每页", jump:"跳至", go:"前往", pagination:"传输记录分页", first:"第一页", previous:"上一页", next:"下一页", last:"最后一页", page:n=>`第 ${n} 页`,
   count:n=>`符合条件 ${n} 项`, updated:time=>`更新于 ${time}`, olderPage:"此页不自动刷新", pageSummary:(page,pages,start,end,total)=>`第 ${page} / ${pages} 页 · ${start}–${end} / ${total} 项`, unknown:"—", oldTime:"未记录", noCapture:"未知", noSender:"未知发送设备", noItems:"没有符合条件的传输记录。",
   loginError:"访问码不对，请查看手机后重试。", locked:"尝试次数过多，请五分钟后重试。", connectionError:"无法连接 Pixel，请确认接收和浏览器管理仍已开启。", retried:n=>`已将 ${n} 项失败记录重新排队。`,
-  detailTitle:"传输详情", close:"关闭详情", senders:"发送设备", progress:"接收进度", originals:"原件状态", error:"处理提示", originalsReceiving:"仍在接收", originalsRetained:"未从 Pixel 清理", originalsReleased:"接收端原件已清理", conversion:"需在 Pixel 开启兼容转换后重试", unsupported:"Pixel 无法处理这种媒体格式", retryHelp:"请在 Pixel 重试；若再次失败，可查看接收端诊断信息", cloud:"加入手机相册不代表 Google 相册云端已备份。"
+  detailTitle:"传输详情", close:"关闭详情", senders:"发送设备", progress:"接收进度", originals:"原件状态", error:"处理提示", originalsReceiving:"仍在接收", originalsRetained:"未从 Pixel 清理", originalsReleased:"接收端原件已清理", conversion:"需在 Pixel 开启兼容转换后重试", unsupported:"Pixel 无法处理这种媒体格式", burstMpf:"连拍 JPEG 含 MPF 多图片元数据", burstExtendedXmp:"连拍 JPEG 含扩展 XMP", burstMultipleXmp:"连拍 JPEG 含多个标准 XMP 数据包", burstXmpConflict:"连拍 JPEG 已有冲突的连拍标记", burstXmp:"连拍 JPEG 的 XMP 结构不受支持", burstStructure:"连拍 JPEG 的标记结构不受支持", retryHelp:"请在 Pixel 重试；若再次失败，可查看接收端诊断信息", cloud:"加入手机相册不代表 Google 相册云端已备份。"
 };
 const textIds = {
   "brand-subtitle":"brand","side-section":"section","nav-overview":"navOverview","nav-transfers":"navTransfers","sidebar-local":"local","breadcrumb-current":"breadcrumb","top-local":"topLocal","login-title":"loginTitle","login-help":"loginHelp","code-label":"code","login-button":"enter","eyebrow":"eyebrow","page-title":"title","page-description":"description","live-text":"live",
@@ -88,6 +88,12 @@ function processingNote(item) {
   if (item.processing !== "failed") return w.unknown;
   if (item.processing_error === "conversion_required") return w.conversion;
   if (item.processing_error === "unsupported") return w.unsupported;
+  const burstReason = {
+    burst_jpeg_mpf:"burstMpf", burst_jpeg_extended_xmp:"burstExtendedXmp",
+    burst_jpeg_multiple_xmp:"burstMultipleXmp", burst_jpeg_xmp_conflict:"burstXmpConflict",
+    burst_jpeg_xmp:"burstXmp", burst_jpeg_structure:"burstStructure"
+  }[item.processing_error];
+  if (burstReason) return w[burstReason];
   return w.retryHelp;
 }
 function kind(item) { return item.burst_primary == null || item.kind === "motion" ? item.kind : "burst"; }

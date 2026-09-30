@@ -1662,7 +1662,15 @@ fn error_code(e: Error) -> &'static str {
         Error::Transport(_) => "network",
         Error::Unauthorized => "authentication",
         Error::Cancelled => "cancelled",
-        Error::Unsupported(_) => "unsupported",
+        Error::Unsupported(reason) => match reason.as_str() {
+            "burst_jpeg_mpf" => "burst_jpeg_mpf",
+            "burst_jpeg_extended_xmp" => "burst_jpeg_extended_xmp",
+            "burst_jpeg_multiple_xmp" => "burst_jpeg_multiple_xmp",
+            "burst_jpeg_xmp_conflict" => "burst_jpeg_xmp_conflict",
+            "burst_jpeg_xmp" => "burst_jpeg_xmp",
+            "burst_jpeg_structure" => "burst_jpeg_structure",
+            _ => "unsupported",
+        },
     }
 }
 
@@ -1727,3 +1735,26 @@ pub extern "system" fn Java_app_photobridge_NativeBridge_call(
 
 #[cfg(test)]
 mod receiver_identity_tests;
+
+#[cfg(test)]
+mod burst_error_tests {
+    use super::*;
+
+    #[test]
+    fn burst_rejection_reason_survives_the_ffi_boundary() {
+        for reason in [
+            "burst_jpeg_mpf",
+            "burst_jpeg_extended_xmp",
+            "burst_jpeg_multiple_xmp",
+            "burst_jpeg_xmp_conflict",
+            "burst_jpeg_xmp",
+            "burst_jpeg_structure",
+        ] {
+            assert_eq!(error_code(Error::Unsupported(reason.into())), reason);
+        }
+        assert_eq!(
+            error_code(Error::Unsupported("private filename".into())),
+            "unsupported"
+        );
+    }
+}

@@ -10,7 +10,10 @@ const XMP: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 const RDF: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 const CAMERA: &[u8] = b"http://ns.google.com/photos/1.0/camera/";
 fn invalid() -> Error {
-    Error::Unsupported("burst JPEG metadata".into())
+    Error::Unsupported("burst_jpeg_xmp".into())
+}
+fn rejected(reason: &'static str) -> Error {
+    Error::Unsupported(reason.into())
 }
 fn description(burst: &BurstMetadata) -> String {
     format!(
@@ -46,7 +49,7 @@ fn augment(xml: Option<&[u8]>, burst: &BurstMetadata) -> Result<Vec<u8>> {
                 if matches!(ns,ResolveResult::Bound(n) if n.as_ref()==CAMERA)
                     && [b"BurstID".as_slice(), b"BurstPrimary".as_slice()].contains(&name.as_ref())
                 {
-                    return Err(invalid());
+                    return Err(rejected("burst_jpeg_xmp_conflict"));
                 }
                 for attr in e.attributes() {
                     let attr = attr.map_err(|_| invalid())?;
@@ -55,13 +58,13 @@ fn augment(xml: Option<&[u8]>, burst: &BurstMetadata) -> Result<Vec<u8>> {
                         match name.as_ref() {
                             b"BurstID" => {
                                 if attr.value.as_ref() != burst.group_id.as_bytes() {
-                                    return Err(invalid());
+                                    return Err(rejected("burst_jpeg_xmp_conflict"));
                                 }
                                 existing_id = true;
                             }
                             b"BurstPrimary" => {
                                 if attr.value.as_ref() != if burst.primary { b"1" } else { b"0" } {
-                                    return Err(invalid());
+                                    return Err(rejected("burst_jpeg_xmp_conflict"));
                                 }
                                 existing_primary = true;
                             }
@@ -122,7 +125,7 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
     let mut magic = [0; 2];
     input.read_exact(&mut magic)?;
     if magic != [0xff, 0xd8] {
-        return Err(invalid());
+        return Err(rejected("burst_jpeg_structure"));
     }
     let mut old = None;
     let mut xml = None;
@@ -132,7 +135,7 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
         let mut marker = [0; 2];
         input.read_exact(&mut marker)?;
         if marker[0] != 0xff {
-            return Err(invalid());
+            return Err(rejected("burst_jpeg_structure"));
         }
         while marker[1] == 0xff {
             input.read_exact(&mut marker[1..])?;
@@ -146,34 +149,34 @@ pub fn write_jpeg_burst(source: &Path, output: &Path, burst: &BurstMetadata) -> 
             || marker[1] == 1
             || (0xd0..=0xd8).contains(&marker[1])
         {
-            return Err(invalid());
+            return Err(rejected("burst_jpeg_structure"));
         }
         let mut length = [0; 2];
         input.read_exact(&mut length)?;
         let length = u16::from_be_bytes(length) as usize;
         if length < 2 {
-            return Err(invalid());
+            return Err(rejected("burst_jpeg_structure"));
         }
         let mut segment = vec![0; length - 2];
         input.read_exact(&mut segment)?;
         // Multi-picture JPEG offsets need a dedicated rewriter; do not silently
         // invalidate an HDR gain map or a secondary image in a delivery copy.
         if marker[1] == 0xe2 && segment.starts_with(b"MPF\0") {
-            return Err(invalid());
+            return Err(rejected("burst_jpeg_mpf"));
         }
         if marker[1] == 0xe1 && segment.starts_with(b"http://ns.adobe.com/xmp/extension/\0") {
-            return Err(invalid());
+            return Err(rejected("burst_jpeg_extended_xmp"));
         }
         if marker[1] == 0xe1 && segment.starts_with(XMP) {
             if old.is_some() {
-                return Err(invalid());
+                return Err(rejected("burst_jpeg_multiple_xmp"));
             }
             old = Some((start, input.stream_position()?));
             xml = Some(segment[XMP.len()..].to_vec());
         }
     }
     if !found_scan {
-        return Err(invalid());
+        return Err(rejected("burst_jpeg_structure"));
     }
     let mut packet = XMP.to_vec();
     packet.extend(augment(xml.as_deref(), burst)?);
