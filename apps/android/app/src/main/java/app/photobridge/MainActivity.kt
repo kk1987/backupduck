@@ -302,12 +302,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        section(panel, R.string.gallery_receipts_section)
+        card(panel) { body ->
+            action(body, R.string.gallery_receipts_export) { exportGalleryReceipts.launch("PhotoBridge-gallery-receipts.json") }
+            label(body, getString(R.string.gallery_receipts_export_note), 14, secondaryColor())
+        }
         section(panel, R.string.settings_diagnostics)
         card(panel) { body ->
             action(body, R.string.logs_retention_settings) { showStorageControls(StorageSection.LOGS) {} }
             action(body, R.string.logs_export) { exportLogs.launch("PhotoBridge-diagnostics.json") }
-            action(body, R.string.gallery_receipts_export) { exportGalleryReceipts.launch("PhotoBridge-gallery-receipts.json") }
-            label(body, getString(R.string.gallery_receipts_export_note), 14, secondaryColor())
         }
         card(panel) { body ->
             action(body, R.string.experiments_title) { startActivity(Intent(this, ExperimentsActivity::class.java)) }

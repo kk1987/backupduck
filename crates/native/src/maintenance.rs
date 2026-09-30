@@ -89,6 +89,7 @@ pub struct Maintenance {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct EventContext {
+    pub publication_error: Option<PublicationError>,
     pub queued: Option<u64>,
     pub running: Option<u64>,
     pub waiting: Option<u64>,
@@ -142,6 +143,38 @@ pub struct EventContext {
     pub free_bytes: Option<u64>,
     pub min_free_bytes: Option<u64>,
     pub export_allowance: Option<u64>,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicationError {
+    Unsupported,
+    ConversionRequired,
+    LowSpace,
+    Storage,
+    Integrity,
+    InvalidInput,
+    GalleryCopyChanged,
+    GalleryCopyMissing,
+    PublicationDateFailed,
+    OperationFailed,
+    Other,
+}
+impl PublicationError {
+    pub fn from_code(code: Option<&str>) -> Self {
+        match code {
+            Some("unsupported") => Self::Unsupported,
+            Some("conversion_required") => Self::ConversionRequired,
+            Some("low_space" | "processing_low_space") => Self::LowSpace,
+            Some("storage") => Self::Storage,
+            Some("integrity") => Self::Integrity,
+            Some("invalid_input") => Self::InvalidInput,
+            Some("gallery_copy_changed") => Self::GalleryCopyChanged,
+            Some("gallery_copy_missing") => Self::GalleryCopyMissing,
+            Some("publication_date_failed") => Self::PublicationDateFailed,
+            Some("operation_failed") | None => Self::OperationFailed,
+            Some(_) => Self::Other,
+        }
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -811,11 +844,24 @@ mod tests {
         );
         assert_eq!(entries[1]["job_id"], 14);
         assert!(entries[1]["context"].is_null());
+        let failure = EventContext {
+            publication_error: Some(PublicationError::from_code(Some("unsupported"))),
+            ..Default::default()
+        };
+        let maintenance = Maintenance::open(&root.0).unwrap();
+        maintenance
+            .log_context("publication_failed", None, None, Some(&failure))
+            .unwrap();
+        assert_eq!(
+            maintenance.events().unwrap()[0]["context"]["publication_error"],
+            "unsupported"
+        );
         for invalid in [
             json!({"token":"private"}),
             json!({"phase":"private-filename.jpg"}),
             json!({"queued":-1}),
             json!({"reason":"https://private.example"}),
+            json!({"publication_error":"private-filename.jpg"}),
         ] {
             assert!(serde_json::from_value::<EventContext>(invalid).is_err());
         }

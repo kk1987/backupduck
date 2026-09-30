@@ -53,7 +53,8 @@
 <string name="logs_limit">日志最多保留条数</string>
 <string name="logs_export">导出日志</string>
 <string name="gallery_receipts_export">导出相册保存记录</string>
-<string name="gallery_receipts_export_note">包含已保存到 Pixel 系统相册的文件名、大小、校验值和时间，不含照片原件或账号凭据。可用于自行核对备份情况；文件名可能涉及隐私，请妥善保管。</string>
+<string name="gallery_receipts_section">备份核对</string>
+<string name="gallery_receipts_export_note">列出已保存到 Pixel 系统相册的文件名、大小、校验值和时间，不含照片原件或账号凭据。Google 相册云端备份需另行核对；文件名可能涉及隐私，请妥善保管。</string>
 <string name="gallery_receipts_exported">相册保存记录已导出。</string>
 <string name="settings_save">保存</string>
 <string name="settings_saved">设置已保存</string>

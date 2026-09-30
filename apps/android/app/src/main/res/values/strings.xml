@@ -53,7 +53,8 @@
 <string name="logs_limit">Maximum log entries</string>
 <string name="logs_export">Export logs</string>
 <string name="gallery_receipts_export">Export gallery records</string>
-<string name="gallery_receipts_export_note">Contains the filenames, sizes, checksums and times of items saved to the Pixel system gallery. No photo bytes or account credentials are included. Use it to check your backups; filenames may be private, so keep the file safe.</string>
+<string name="gallery_receipts_section">Backup verification</string>
+<string name="gallery_receipts_export_note">Lists filenames, sizes, checksums and times of items saved to the Pixel system gallery. It contains no photo data or account credentials. Check Google Photos cloud backup separately, and keep this file private because filenames may be sensitive.</string>
 <string name="gallery_receipts_exported">Gallery records exported.</string>
 <string name="settings_save">Save</string>
 <string name="settings_saved">Settings saved</string>

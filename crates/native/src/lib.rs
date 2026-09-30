@@ -1620,7 +1620,11 @@ fn dispatch(command: Command) -> Result<Value> {
             let host = h.receiver.as_ref().ok_or(Error::NotFound)?;
             let mut r = host.receiver.lock().map_err(lock)?;
             let status = r.status(&id)?;
-            host.maintenance.lock().map_err(lock)?.log(
+            let context = (!success).then(|| maintenance::EventContext {
+                publication_error: Some(maintenance::PublicationError::from_code(error.as_deref())),
+                ..Default::default()
+            });
+            host.maintenance.lock().map_err(lock)?.log_context(
                 if success {
                     "publication_complete"
                 } else {
@@ -1628,6 +1632,7 @@ fn dispatch(command: Command) -> Result<Value> {
                 },
                 None,
                 None,
+                context.as_ref(),
             )?;
             if status.processing != ProcessingState::Complete {
                 r.set_processing(&id, ProcessingState::Pending)?;
