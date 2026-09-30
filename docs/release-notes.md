@@ -1,3 +1,8 @@
+# Beta 34
+
+- Add a Pixel settings export for a private cloud audit. It lists published gallery filenames, byte sizes, and receipt evidence without exporting photo contents or login credentials.
+- Persist the exact published filename for new transfers so a local Chrome audit can compare Pixel receipts with the Google Photos timeline. Existing receipts are resolved from the Android media index when available.
+
 # Beta 33
 
 - On the Pixel receiver, pairing can now start receiving automatically. Choose the iPhone code or Mac scanner even when the receiver is stopped; the requested pairing step opens once the receiver is ready.

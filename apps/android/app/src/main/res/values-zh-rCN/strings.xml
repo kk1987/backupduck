@@ -52,6 +52,9 @@
 <string name="days_unit">天</string>
 <string name="logs_limit">日志最多保留条数</string>
 <string name="logs_export">导出日志</string>
+<string name="cloud_audit_export">导出云端核对清单</string>
+<string name="cloud_audit_export_note">仅导出已发布照片的文件名、大小和校验值，不含照片或账号凭据。可在本地 Chrome 核对扩展中与 Google 相册比对。</string>
+<string name="cloud_audit_exported">核对清单已导出，请妥善保管这个元数据文件。</string>
 <string name="settings_save">保存</string>
 <string name="settings_saved">设置已保存</string>
 <string name="settings_failed">操作未完成，请重试。</string>

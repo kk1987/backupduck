@@ -52,6 +52,9 @@
 <string name="days_unit">days</string>
 <string name="logs_limit">Maximum log entries</string>
 <string name="logs_export">Export logs</string>
+<string name="cloud_audit_export">Export cloud audit list</string>
+<string name="cloud_audit_export_note">Exports published filenames, sizes and checksums only. It contains no photos or account credentials. Use it to compare with your Google Photos account in the local Chrome audit extension.</string>
+<string name="cloud_audit_exported">Cloud audit list exported. Keep this metadata file private.</string>
 <string name="settings_save">Save</string>
 <string name="settings_saved">Settings saved</string>
 <string name="settings_failed">Could not complete this operation. Try again.</string>

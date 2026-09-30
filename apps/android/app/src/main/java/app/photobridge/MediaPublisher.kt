@@ -13,9 +13,11 @@ import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
 
-internal data class GalleryCopy(val locator: String, val sha256: String, val size: Long) {
-    fun json() = JSONObject().put("locator", locator).put("sha256", sha256).put("size", size)
-    companion object { fun parse(value: JSONObject) = GalleryCopy(value.getString("locator"), value.getString("sha256"), value.getLong("size")) }
+internal data class GalleryCopy(val locator: String, val sha256: String, val size: Long, val displayName: String? = null) {
+    fun json() = JSONObject().put("locator", locator).put("sha256", sha256).put("size", size).apply {
+        displayName?.let { put("display_name", it) }
+    }
+    companion object { fun parse(value: JSONObject) = GalleryCopy(value.getString("locator"), value.getString("sha256"), value.getLong("size"), value.optString("display_name").ifEmpty { null }) }
 }
 internal object MediaPublisher {
     private val publicationLock = Any()
@@ -87,6 +89,7 @@ internal object MediaPublisher {
         val columns = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.IS_PENDING, MediaStore.MediaColumns.OWNER_PACKAGE_NAME)
         val selection = "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?"
         var destination: Uri? = null; var ready = false
+        var chosenName: String? = null
         synchronized(publicationLock) {
             // Four hex digits are the common case. A name already owned by a
             // different asset gets a longer suffix; it is never overwritten.
@@ -113,16 +116,24 @@ internal object MediaPublisher {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, relative); put(MediaStore.MediaColumns.IS_PENDING, 1)
                     putAll(MediaDates.values(captured))
                 })) { "publication_failed" }
+                chosenName = candidate
                 break
             }
         }
+        if (destination != null && chosenName == null) {
+            // Existing interrupted publications still need the exact candidate selected.
+            chosenName = resolver.query(requireNotNull(destination), arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        }
+        check(!chosenName.isNullOrBlank()) { "publication_name_unavailable" }
         if (resumeLocator != null) check(destination.toString() == resumeLocator) { "gallery_copy_missing" }
         if (existingOnly) check(destination != null && ready) { "gallery_copy_missing" }
         val size = source.length(); check(size > 0) { "gallery_copy_missing" }
         val expected = originalHash ?: source.inputStream().use { hash(it, size).first }
-        if (ready) return verify(context, GalleryCopy(requireNotNull(destination).toString(), expected, size))
+        if (ready) return verify(context, GalleryCopy(requireNotNull(destination).toString(), expected, size, chosenName))
         val uri = destination ?: error("gallery_copy_ambiguous")
-        val copy = GalleryCopy(uri.toString(), expected, size)
+        val copy = GalleryCopy(uri.toString(), expected, size, chosenName)
         NativeBridge.request(JSONObject().put("op", "prepare_gallery").put("id", item.getString("id")).put("copy", copy.json()))
         val copied = source.inputStream().use { input ->
             checkNotNull(resolver.openOutputStream(uri, "wt")).use { output -> hash(input, size) { buffer, count -> output.write(buffer, 0, count) } }

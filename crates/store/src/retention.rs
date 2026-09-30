@@ -8,6 +8,9 @@ pub struct GalleryCopy {
     pub locator: String,
     pub sha256: String,
     pub size: u64,
+    /// The exact MediaStore display name chosen at publication. Older receipts omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 impl GalleryCopy {
     fn validate(&self) -> Result<()> {
@@ -17,10 +20,38 @@ impl GalleryCopy {
             || !valid_digest(&self.sha256)
             || self.size == 0
             || self.size > i64::MAX as u64
+            || self.display_name.as_ref().is_some_and(|name| {
+                name.is_empty()
+                    || name.len() > 255
+                    || name.contains(['/', '\\'])
+                    || name.chars().any(char::is_control)
+            })
         {
             return Err(Error::Invalid("gallery copy".into()));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod audit_name_tests {
+    use super::GalleryCopy;
+
+    #[test]
+    fn old_receipt_loads_and_new_display_name_is_checked() {
+        let old = format!(
+            r#"{{"locator":"content://media/1","sha256":"{}","size":2}}"#,
+            "a".repeat(64)
+        );
+        let mut copy: GalleryCopy = serde_json::from_str(&old).unwrap();
+        assert_eq!(copy.display_name, None);
+        copy.display_name = Some("PB_20260930_000000Z_abcd_MP.heic".into());
+        copy.validate().unwrap();
+        assert!(serde_json::to_string(&copy)
+            .unwrap()
+            .contains("display_name"));
+        copy.display_name = Some("../other.jpg".into());
+        assert!(copy.validate().is_err());
     }
 }
 #[derive(Serialize)]
@@ -112,7 +143,7 @@ impl Receiver {
         .map_err(db)?;
         tx.execute("DELETE FROM gallery_expected WHERE asset_id=?1", [id])
             .map_err(db)?;
-        tx.execute("UPDATE assets SET processing='complete' WHERE id=?1", [id])
+        tx.execute("UPDATE assets SET processing='complete',published_at_ms=COALESCE(published_at_ms,?2) WHERE id=?1", params![id, now_ms()?])
             .map_err(db)?;
         tx.commit().map_err(db)
     }
