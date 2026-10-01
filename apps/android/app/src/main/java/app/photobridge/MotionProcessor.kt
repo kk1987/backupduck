@@ -32,7 +32,7 @@ internal object MotionProcessor {
         val motion = File(work, "output.jpg")
         val heicMotion = File(work, "output.heic")
         try {
-            val stillName = resources.getJSONObject(0).optString("filename").lowercase()
+            val stillMime = MediaContainer.imageMime(still, resources.getJSONObject(0).getString("media_type"))
             val videoName = resources.getJSONObject(1).optString("filename").lowercase()
             val directVideoMime = when {
                 videoName.endsWith(".mov") -> "video/quicktime"
@@ -44,7 +44,7 @@ internal object MotionProcessor {
                     if (cursor.moveToFirst()) cursor.getString(0) else null
                 }
             }
-            if ((stillName.endsWith(".heic") || stillName.endsWith(".heif")) && directVideoMime != null &&
+            if (stillMime in listOf("image/heic", "image/heif") && directVideoMime != null &&
                 (resumeLocator == null || pendingMime == "image/heic")) {
                 var dated: File? = null
                 try {
@@ -58,7 +58,7 @@ internal object MotionProcessor {
                     if (pendingMime == "image/heic" || !isUnsupportedContainer(error)) throw error
                 } finally { if (dated != still) dated?.delete() }
             }
-            if ((stillName.endsWith(".jpg") || stillName.endsWith(".jpeg")) && directVideoMime != null &&
+            if (stillMime == "image/jpeg" && directVideoMime != null &&
                 (resumeLocator == null || pendingMime == "image/jpeg")) {
                 var dated: File? = null
                 try {

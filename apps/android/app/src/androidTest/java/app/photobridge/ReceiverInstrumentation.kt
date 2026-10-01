@@ -17,6 +17,13 @@ class ReceiverInstrumentation : Instrumentation() {
     private var arguments = Bundle()
     override fun onCreate(arguments: Bundle?) { this.arguments = arguments ?: Bundle(); super.onCreate(arguments); start() }
     override fun onStart() {
+        if (arguments.getString("mode") == "motion_container") {
+            val result = runCatching { checkMotionContainer(arguments) }
+            finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
+                putString("result", result.getOrElse { "FAIL: ${it.javaClass.simpleName}: ${it.message}" })
+            })
+            return
+        }
         if (arguments.getString("mode") == "app_updates_live") {
             val result = runCatching {
                 val installed = arguments.getLong("installed", 25)

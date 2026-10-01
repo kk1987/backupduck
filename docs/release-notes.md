@@ -1,3 +1,8 @@
+# Beta 38
+
+- Recognize JPEG, PNG and HEIC image data before Android date handling and gallery publication, even when a camera export has an incorrect filename extension. Supported HEIC Live Photos keep their original image, video and audio without compatibility conversion. Retained failed originals can be retried after updating.
+- Apple senders prefer the PhotoKit resource type when declaring the media format instead of relying only on the filename extension.
+
 # Beta 37
 
 - Publish burst JPEGs that contain multiple standard XMP packets without recompressing the image. Each existing packet retains its unrelated metadata and receives the same burst group marker. Previously received failures can be retried on Pixel without sending the originals again.

@@ -18,7 +18,7 @@ internal object BurstProcessor {
         try {
             // JPEG pixels, EXIF, ICC and existing standard XMP remain untouched.
             // HEIC/other supported still formats use the native image decoder.
-            val jpeg = if (resource.getString("media_type") == "image/jpeg") original
+            val jpeg = if (MediaContainer.imageMime(original, resource.getString("media_type")) == "image/jpeg") original
                 else decoded.also { MotionProcessor.prepareStill(original, it) }
             if (partial.exists()) check(partial.delete()) { "storage" }
             val dated = MediaDates.prepare(context, jpeg, "image/jpeg", asset.getJSONObject("metadata"))

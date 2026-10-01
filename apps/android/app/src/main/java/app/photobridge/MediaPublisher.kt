@@ -40,9 +40,11 @@ internal object MediaPublisher {
         if (asset.optJSONObject("metadata")?.has("burst_group_ref") == true) return BurstProcessor.publish(context, item, existingOnly, resumeLocator)
         val resource = asset.getJSONArray("resources").getJSONObject(0)
         val source = File(item.getJSONObject("resources").getString(resource.getString("sha256")))
-        val dated = MediaDates.prepare(context, source, resource.getString("media_type"), asset.optJSONObject("metadata"))
+        val declaredMime = resource.getString("media_type")
+        val mime = if (declaredMime.startsWith("image/")) MediaContainer.imageMime(source, declaredMime) else declaredMime
+        val dated = MediaDates.prepare(context, source, mime, asset.optJSONObject("metadata"))
         try {
-            return publishFile(context, dated, item, resource.getString("media_type"),
+            return publishFile(context, dated, item, mime,
                 asset.optJSONObject("metadata"), existingOnly, if (dated == source) resource.getString("sha256") else null, resumeLocator)
         } finally { if (dated != source) dated.delete() }
     }

@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import Photos
 import Security
+import UniformTypeIdentifiers
 
 #if os(iOS)
   import BackgroundTasks
@@ -565,7 +566,9 @@ enum Bridge {
             "heic": "image/heic", "heif": "image/heif", "jpg": "image/jpeg", "jpeg": "image/jpeg",
             "png": "image/png", "mov": "video/quicktime", "mp4": "video/mp4",
           ]
-          guard let type = mime[ext] else { throw Bridge.Failure(code: "unsupported") }
+          guard let type = UTType(resource.uniformTypeIdentifier)?.preferredMIMEType ?? mime[ext] else {
+            throw Bridge.Failure(code: "unsupported")
+          }
           resources.append([
             "role": role, "filename": resource.originalFilename, "media_type": type,
             "path": destination.path,
