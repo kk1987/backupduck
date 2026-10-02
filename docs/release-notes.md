@@ -1,3 +1,9 @@
+# RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)
+
+- Use a dedicated Android release certificate named BackupDuck. The old certificate is no longer used for new releases.
+- Android RC.1 cannot update in place to RC.2 because its signing certificate differs. Preserve originals and receiver records before switching to a fresh installation. Photos already saved to the gallery or cloud are not actively removed by the installer.
+- Keep the existing iOS/macOS identities and protocol 2. macOS RC.1 can update normally through Sparkle.
+
 # RC 1 — 备份鸭 / BackupDuck (0.2.0-rc.1)
 
 - Launch BackupDuck / 备份鸭 with the duck icon, a renamed repository and website, and unified app identifier `app.backupduck` on iOS, macOS and Android.

@@ -27,6 +27,12 @@ update across these identities. Keep your existing development installation unti
 you have safely exported or preserved its originals and are ready to switch; the
 public installer does not erase or migrate that data automatically.
 
+Android RC.2 uses the new BackupDuck signing certificate. If you installed
+BackupDuck RC.1, preserve any originals and receiver records before removing
+that installation and installing RC.2. The built-in updater rejects a different
+certificate; it cannot perform this one-time signing transition. Subsequent
+official releases continue using the RC.2 certificate.
+
 ## iOS sender
 
 No App Store or TestFlight distribution is available yet. Build from source using
