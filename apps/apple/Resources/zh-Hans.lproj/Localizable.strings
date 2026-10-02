@@ -74,7 +74,7 @@
 "photos_access_description" = "允许访问图库后，即可浏览缩略图并选择需要备份的原件。";
 "photos_allow" = "允许访问照片";
 "photos_open_settings" = "打开设置";
-"photos_access_denied" = "照片访问权限已关闭。请打开系统设置，允许 PhotoBridge 访问需要备份的照片。";
+"photos_access_denied" = "照片访问权限已关闭。请打开系统设置，允许 备份鸭 访问需要备份的照片。";
 "photos_access_restricted" = "此设备限制了照片访问。请检查屏幕使用时间或设备管理限制。";
 "library_empty" = "没有符合条件的照片";
 "thumbnail_size" = "缩略图大小";
@@ -82,7 +82,7 @@
 "backup_enabled" = "备份运行中";
 "receiver_heading" = "你的备份目的地";
 "receiver_direct_description" = "原件通过局域网直接传输到已配对的接收设备。";
-"mac_running_note" = "持续备份时，请保持 PhotoBridge 运行，并让 Mac 保持唤醒。";
+"mac_running_note" = "持续备份时，请保持 备份鸭 运行，并让 Mac 保持唤醒。";
 "mac_pair_description" = "导入接收设备的二维码图片或配对文件，也可以粘贴配对码。配对信息会私密保存。";
 "pairing_code_placeholder" = "粘贴配对码";
 "pairing_import" = "导入二维码或文件…";
@@ -97,7 +97,7 @@
 
 "pair_receiver_desktop" = "配对接收设备";
 
-"desktop_pair_instructions" = "在接收设备上打开 PhotoBridge，点击“扫描电脑配对码”。请让两台设备连接同一局域网。";
+"desktop_pair_instructions" = "在接收设备上打开 备份鸭，点击“扫描电脑配对码”。请让两台设备连接同一局域网。";
 "desktop_pair_qr" = "电脑配对二维码";
 "desktop_pair_expiry" = "5 分钟有效 · 一次性加密配对";
 "desktop_pair_regenerate" = "重新生成二维码";
@@ -177,7 +177,7 @@
 "nav_settings" = "设置";
 "backup_pair_first" = "先在“接收端”中配对设备，再从图库选择照片。";
 "backup_all_tasks" = "全部传输任务";
-"receiver_pair_instructions" = "在接收设备上打开 PhotoBridge，扫描它的配对码。";
+"receiver_pair_instructions" = "在接收设备上打开 备份鸭，扫描它的配对码。";
 "receiver_local_network" = "请将两台设备连接到同一局域网，并保持接收端运行。";
 "receiver_address" = "网络地址";
 "receiver_connection_details" = "连接详情";
@@ -264,20 +264,20 @@
 "help_scope_title" = "选择备份范围";
 "help_scope_body" = "可在图库中选择项目手动备份。备份设置中的“新增照片备份”和“历史导入”相互独立：前者处理启用后新增的照片，后者导入已有且允许访问的照片和视频。支持的实况会包含照片与视频两部分；可访问的连拍帧会一起加入备份。";
 "help_receipt_title" = "“已接收”代表什么";
-"help_receipt_body" = "任务已获得配对接收端的校验回执，不代表其他服务已经完成云端备份，也不代表接收端的格式转换已经完成。请先核对接收端的存储与保留规则，再决定如何保管来源原件。PhotoBridge 不会删除 Apple 照片图库中的项目。";
+"help_receipt_body" = "任务已获得配对接收端的校验回执，不代表其他服务已经完成云端备份，也不代表接收端的格式转换已经完成。请先核对接收端的存储与保留规则，再决定如何保管来源原件。备份鸭 不会删除 Apple 照片图库中的项目。";
 "help_recover_title" = "备份停止时";
-"help_recover_body" = "先确认备份未暂停、接收端正在运行、双方网络可以互通。重新打开 PhotoBridge 可继续调度任务。在“备份”中查看需要处理的任务，阅读错误原因后重试。恢复连接时保留现有配对与任务记录，不要通过清除应用数据来排查问题。";
+"help_recover_body" = "先确认备份未暂停、接收端正在运行、双方网络可以互通。重新打开 备份鸭 可继续调度任务。在“备份”中查看需要处理的任务，阅读错误原因后重试。恢复连接时保留现有配对与任务记录，不要通过清除应用数据来排查问题。";
 "help_permission_title" = "找不到照片时";
-"help_permission_body" = "PhotoBridge 只能读取你允许访问的照片。请在系统设置中检查照片权限；若为部分访问，也要检查允许的项目。仅存于 iCloud 的原件需要联网下载，并占用本地中转空间。授予权限本身不会启动历史导入。";
+"help_permission_body" = "备份鸭 只能读取你允许访问的照片。请在系统设置中检查照片权限；若为部分访问，也要检查允许的项目。仅存于 iCloud 的原件需要联网下载，并占用本地中转空间。授予权限本身不会启动历史导入。";
 "help_space_title" = "空间不足时";
 "help_space_body" = "本地缓存保存准备好、正在等待传输的文件。只有发送设备空间足够时才提高缓存预算。接收端空间不足时，先在接收设备上管理空间，再重试任务。删除中转文件或接收副本不代表完成备份；请使用应用内的空间管理功能，不要手动删除内部文件。";
 "help_support_title" = "提供排查信息";
 "help_support_body" = "在“设置 → 诊断 → 运行记录”中查看并导出事件。反馈时附上问题发生时间、任务显示的状态，以及应用当时处于前台还是后台。分享前请检查导出的报告。";
-"photos_access_denied_mac" = "照片访问权限已关闭。请在“系统设置 → 隐私与安全性 → 照片”中，允许 PhotoBridge 访问图库。";
+"photos_access_denied_mac" = "照片访问权限已关闭。请在“系统设置 → 隐私与安全性 → 照片”中，允许 备份鸭 访问图库。";
 "photos_settings_unavailable" = "未能打开设置。请手动打开系统设置，检查照片访问权限。";
 "library_loading" = "正在载入照片图库…";
 "library_empty_all" = "暂无可访问的照片";
-"library_empty_description" = "系统照片图库中可访问的照片和视频会显示在这里。如果仅授予了部分访问权限，请检查已向 PhotoBridge 开放的照片。";
+"library_empty_description" = "系统照片图库中可访问的照片和视频会显示在这里。如果仅授予了部分访问权限，请检查已向 备份鸭 开放的照片。";
 "library_empty_filter_description" = "可以切换照片类型，或显示所有可访问的照片和视频。";
 "library_show_all" = "显示所有照片";
 "photos_waiting_permission" = "等待你在系统授权弹窗中完成选择…";
@@ -323,8 +323,8 @@
 "task_explanation_failed" = "这些任务需要处理错误后重试，请查看各项的失败原因。";
 "task_explanation_received" = "接收端已经收到文件并完成校验；后续的云端备份是独立步骤。";
 "task_explanation_scanned" = "已检查照片信息，判断是否需要导入历史照片。扫描完成不代表文件已经传输。";
-"menu_open" = "打开 PhotoBridge";
-"menu_quit" = "退出 PhotoBridge";
+"menu_open" = "打开 备份鸭";
+"menu_quit" = "退出 备份鸭";
 "menu_backup_ready" = "备份已就绪";
 
 "task_status_count" = "共 %d 项";
@@ -359,7 +359,7 @@
 
 "storage_cache_description" = "照片发送前，会先在这台 iPhone、iPad 或 Mac 上准备原件和上传文件。这些临时副本占用本地缓存；此处设置不影响接收设备的空间。";
 
-"storage_cache_budget_help" = "限制 PhotoBridge 临时文件的总占用。达到上限时暂停准备更多照片，空间释放后继续；不会预先占满这些空间。";
+"storage_cache_budget_help" = "限制 备份鸭 临时文件的总占用。达到上限时暂停准备更多照片，空间释放后继续；不会预先占满这些空间。";
 
 "storage_min_free_help" = "给这台设备的其他应用保留可用空间。低于此值时暂停准备照片，不会删除你的其他文件。";
 
@@ -553,7 +553,7 @@
 "mac_help_library" = "可手动选择照片，或开启新增照片的自动备份。已有图库需要单独扫描；实况和可访问的连拍帧由系统图库识别。";
 "mac_help_folders" = "在“文件夹”中添加本地或外置硬盘目录，包含子文件夹。自动备份负责新增和修改；“备份现有文件”执行手动备份。不会修改或删除原文件。导出的实况需有匹配的配对信息；文件夹中的连拍按独立文件备份。";
 "mac_help_permissions" = "系统图库需要照片访问权限，仅处理允许访问的项目；iCloud 原件可能需要下载。文件夹通过选择目录授予读取权限，外置硬盘必须保持连接。";
-"mac_help_receipt" = "“已接收”表示接收设备已校验文件，不代表云端备份已完成。PhotoBridge 不会删除系统图库或文件夹中的原件。";
+"mac_help_receipt" = "“已接收”表示接收设备已校验文件，不代表云端备份已完成。备份鸭 不会删除系统图库或文件夹中的原件。";
 
 "folder_auto_enabled" = "自动备份已开启";
 "folder_manual_queued" = "本次备份已安排";
@@ -594,3 +594,7 @@
 
 "folder_modified_time" = "修改时间";
 "backup_waiting" = "备份等待中";
+
+"brand_name" = "备份鸭";
+
+"brand_name" = "备份鸭";

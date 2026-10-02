@@ -1,6 +1,6 @@
-use photobridge_core::*;
-use photobridge_native::ReceiverHost;
-use photobridge_store::devices::DeviceDirectory;
+use backupduck_core::*;
+use backupduck_native::ReceiverHost;
+use backupduck_store::devices::DeviceDirectory;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -11,7 +11,7 @@ struct Temp(PathBuf);
 impl Temp {
     fn new() -> Self {
         Self(std::env::temp_dir().join(format!(
-            "photobridge-device-{}-{}",
+            "backupduck-device-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         )))
@@ -98,7 +98,7 @@ async fn authenticated_profile_exchange_keeps_multiple_peers_and_media_identity(
     assert_eq!(receiver_devices.peers().unwrap().len(), 2);
     let bytes = b"unchanged original";
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "fixture".into(),
         revision: "1".into(),
         kind: AssetKind::Photo,
@@ -166,7 +166,7 @@ async fn older_receiver_without_profile_endpoint_is_compatible() {
     let server = tokio::spawn(async move {
         axum::serve(listener, axum::Router::new()).await.unwrap();
     });
-    let client = photobridge_transport::Client::new(
+    let client = backupduck_transport::Client::new(
         &format!("http://{address}"),
         &digest(b"test credential"),
     )

@@ -1,10 +1,10 @@
-use photobridge_pixel::{write_jpeg_motion, write_jpeg_motion_with_burst_and_video_mime};
+use backupduck_pixel::{write_jpeg_motion, write_jpeg_motion_with_burst_and_video_mime};
 use std::sync::atomic::{AtomicU64, Ordering};
 static SEQ: AtomicU64 = AtomicU64::new(0);
 #[test]
 fn jpeg_container_has_exact_video_tail_and_no_invented_presentation_time() {
     let root = std::env::temp_dir().join(format!(
-        "photobridge-motion-{}-{}",
+        "backupduck-motion-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
@@ -126,7 +126,7 @@ fn truncated_legacy_quicktime_is_rejected() {
 
 #[test]
 fn real_jpeg_live_photo_when_available() {
-    let Ok(dir) = std::env::var("PHOTOBRIDGE_LIVE_PHOTO_FIXTURE") else {
+    let Ok(dir) = std::env::var("BACKUPDUCK_LIVE_PHOTO_FIXTURE") else {
         return;
     };
     let root = std::path::PathBuf::from(dir);
@@ -181,7 +181,7 @@ const GAIN_MAP: [u8; 14] = [
 
 fn workdir() -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "photobridge-motion-{}-{}",
+        "backupduck-motion-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));

@@ -172,7 +172,7 @@ final class SettingsTests: XCTestCase {
   @MainActor func testHelpNavigationAndScrollingInBothLanguages() {
     continueAfterFailure = false
     for (language, title, finalSection, finalBody) in [
-      ("en", "Using PhotoBridge", "Collect useful diagnostics", "Open Settings → Diagnostics → Activity log"),
+      ("en", "Using BackupDuck", "Collect useful diagnostics", "Open Settings → Diagnostics → Activity log"),
       ("zh-Hans", "使用与恢复", "提供排查信息", "在“设置 → 诊断 → 运行记录”中"),
     ] {
       let app = XCUIApplication()
@@ -251,7 +251,7 @@ final class SettingsTests: XCTestCase {
       "Export must present the native sharing sheet")
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
-        NSPredicate(format: "label CONTAINS %@", "PhotoBridge-diagnostics")
+        NSPredicate(format: "label CONTAINS %@", "BackupDuck-diagnostics")
       ).firstMatch.exists, "The shared item must be the diagnostic file")
     let shared = XCTAttachment(screenshot: app.screenshot())
     shared.name = "Diagnostic file sharing sheet"

@@ -8,37 +8,37 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 python3 - <<'PY'
 from pathlib import Path
 import plistlib
-source = Path('apps/macos/PhotoBridge/PhotoBridgeMacApp.swift').read_text()
-assert source.count('@main struct PhotoBridgeMacApp') == 1
+source = Path('apps/macos/BackupDuck/BackupDuckMacApp.swift').read_text()
+assert source.count('@main struct BackupDuckMacApp') == 1
 # Replace only the process entry point in a generated copy. Production views
 # remain unchanged, including native controls and their asynchronous queries.
-Path('build/mac-layout-check/PhotoBridgeMacApp.swift').write_text(
-    source.replace('@main struct PhotoBridgeMacApp', 'struct PhotoBridgeMacApp', 1))
+Path('build/mac-layout-check/BackupDuckMacApp.swift').write_text(
+    source.replace('@main struct BackupDuckMacApp', 'struct BackupDuckMacApp', 1))
 Path('build/mac-layout-check/LayoutCheck.app/Contents/Info.plist').write_bytes(plistlib.dumps({
-    'CFBundleIdentifier': 'app.photobridge.layout-tests',
-    'CFBundleExecutable': 'LayoutCheck', 'CFBundleName': 'PhotoBridge Layout Check',
+    'CFBundleIdentifier': 'app.backupduck.layout-tests',
+    'CFBundleExecutable': 'LayoutCheck', 'CFBundleName': 'BackupDuck Layout Check',
     'CFBundlePackageType': 'APPL', 'CFBundleDevelopmentRegion': 'en',
     'CFBundleLocalizations': ['en', 'zh-Hans'], 'CFBundleShortVersionString': '0.1.0',
     'LSUIElement': True,
 }))
 PY
-native_library="${PHOTOBRIDGE_LAYOUT_NATIVE_LIBRARY:-target/aarch64-apple-darwin/release/libphotobridge_native.a}"
-if [[ -z "${PHOTOBRIDGE_LAYOUT_NATIVE_LIBRARY:-}" ]]; then
-  MACOSX_DEPLOYMENT_TARGET=14.0 cargo build --locked --release --target aarch64-apple-darwin -p photobridge-native --features folder-source -j 2
+native_library="${BACKUPDUCK_LAYOUT_NATIVE_LIBRARY:-target/aarch64-apple-darwin/release/libbackupduck_native.a}"
+if [[ -z "${BACKUPDUCK_LAYOUT_NATIVE_LIBRARY:-}" ]]; then
+  MACOSX_DEPLOYMENT_TARGET=14.0 cargo build --locked --release --target aarch64-apple-darwin -p backupduck-native --features folder-source -j 2
 fi
 if [[ ! -d build/dependencies/sparkle/Sparkle.framework ]]; then ./scripts/fetch-sparkle.sh; fi
 mkdir -p "$app/Contents/Frameworks"
 ditto build/dependencies/sparkle/Sparkle.framework "$app/Contents/Frameworks/Sparkle.framework"
 cp -R apps/apple/Resources/*.lproj "$app/Contents/Resources/"
 sources=(apps/apple/Shared/*.swift)
-for file in apps/macos/PhotoBridge/*.swift; do
-  if [[ "$file" != */PhotoBridgeMacApp.swift ]]; then sources+=("$file"); fi
+for file in apps/macos/BackupDuck/*.swift; do
+  if [[ "$file" != */BackupDuckMacApp.swift ]]; then sources+=("$file"); fi
 done
 xcrun --sdk macosx swiftc -swift-version 5 -Onone -module-cache-path build/SwiftModuleCache-mac \
   -sdk "$(xcrun --sdk macosx --show-sdk-path)" -target arm64-apple-macos14.0 -parse-as-library \
   -F build/dependencies/sparkle -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
-  -import-objc-header crates/native/include/photobridge.h \
-  "${sources[@]}" "$work/PhotoBridgeMacApp.swift" tests/render_macos.swift \
+  -import-objc-header crates/native/include/backupduck.h \
+  "${sources[@]}" "$work/BackupDuckMacApp.swift" tests/render_macos.swift \
   "$native_library" \
   -framework Security -framework SystemConfiguration -framework AppKit -framework SwiftUI \
   -framework Photos -framework Vision -framework AVFoundation -framework QuickLookThumbnailing -framework ImageIO -framework CoreServices -lsqlite3 -lz -liconv -o "$app/Contents/MacOS/LayoutCheck"

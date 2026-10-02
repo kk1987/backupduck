@@ -8,19 +8,19 @@ import SwiftUI
   @MainActor static func main() throws {
     let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    let store = FileManager.default.temporaryDirectory.appendingPathComponent("photobridge-layout-" + UUID().uuidString)
+    let store = FileManager.default.temporaryDirectory.appendingPathComponent("backupduck-layout-" + UUID().uuidString)
     let command = try JSONSerialization.data(withJSONObject: ["op": "open_sender", "root": store.path])
-    let pointer = String(decoding: command, as: UTF8.self).withCString { photobridge_call($0) }!
+    let pointer = String(decoding: command, as: UTF8.self).withCString { backupduck_call($0) }!
     let response = Data(String(cString: pointer).utf8)
-    photobridge_free(pointer)
+    backupduck_free(pointer)
     guard (try JSONSerialization.jsonObject(with: response) as? [String: Any])?["ok"] as? Bool == true else {
       fatalError("Unable to open isolated layout fixture store")
     }
     let event = try JSONSerialization.data(withJSONObject: ["op": "record_event", "receiver": false,
       "code": "dispatch_waiting", "context": ["queued": 20, "running": 0, "waiting": 5,
         "failed": 2, "paused": true, "active_requests": 0, "execution": "desktop", "reason": "paused"]])
-    if let result = String(decoding: event, as: UTF8.self).withCString({ photobridge_call($0) }) {
-      photobridge_free(result)
+    if let result = String(decoding: event, as: UTF8.self).withCString({ backupduck_call($0) }) {
+      backupduck_free(result)
     }
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
@@ -80,7 +80,7 @@ import SwiftUI
         model.ready = true
         model.paused = true
         // This identity is display-only; the renderer never starts a sender.
-        let paired = Pairing(version: 1, receiverID: "layout-fixture", endpoint: "https://receiver.invalid", certificate: "", token: "")
+        let paired = Pairing(version: 2, receiverID: "layout-fixture", endpoint: "https://receiver.invalid", certificate: "", token: "")
         model.deviceSnapshot = DeviceSnapshot(device: model.deviceSnapshot!.device,
           peers: [DeviceSnapshot.Peer(key: paired.receiverID,
             profile: DeviceProfile(id: String(repeating: "a", count: 64), name: "Amber Otter"),
@@ -248,7 +248,7 @@ import SwiftUI
           if CommandLine.arguments.contains("--interactive-folder") {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1080, height: 740),
               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-            window.title = "PhotoBridge Folder Layout — Synthetic Data"
+            window.title = "BackupDuck Folder Layout — Synthetic Data"
             window.contentView = NSHostingView(rootView: MacWorkspace(model: model,
               library: PhotoLibraryModel(), initialDestination: .sources, folderSources: folders))
             interactiveWindow = window
@@ -328,7 +328,7 @@ import SwiftUI
           model.summary.failed = 2
           let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1080, height: 740),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-          window.title = "PhotoBridge Layout Check — Synthetic Data"
+          window.title = "BackupDuck Layout Check — Synthetic Data"
           window.contentView = NSHostingView(rootView:
             MacWorkspace(model: model, library: PhotoLibraryModel(), initialDestination: .backup))
           interactiveWindow = window

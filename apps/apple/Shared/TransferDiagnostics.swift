@@ -24,7 +24,7 @@ import UIKit
       ]
       Task { @MainActor in self?.network = flags }
     }
-    monitor.start(queue: DispatchQueue(label: "app.photobridge.diagnostics.network"))
+    monitor.start(queue: DispatchQueue(label: "app.backupduck.diagnostics.network"))
   }
   static func milliseconds(_ date: Date) -> UInt64 {
     UInt64(max(0, (date.timeIntervalSince1970 * 1000).rounded()))

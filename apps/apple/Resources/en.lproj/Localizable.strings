@@ -74,7 +74,7 @@
 "photos_access_description" = "Allow access to browse thumbnails and choose originals to back up.";
 "photos_allow" = "Allow photo access";
 "photos_open_settings" = "Open Settings";
-"photos_access_denied" = "Photo access is off. Open Settings and allow PhotoBridge to access the photos you want to back up.";
+"photos_access_denied" = "Photo access is off. Open Settings and allow BackupDuck to access the photos you want to back up.";
 "photos_access_restricted" = "Photo access is restricted by this device. Check Screen Time or device management restrictions.";
 "library_empty" = "No photos in this view";
 "thumbnail_size" = "Thumbnail size";
@@ -82,7 +82,7 @@
 "backup_enabled" = "Ready to back up";
 "receiver_heading" = "Your backup destination";
 "receiver_direct_description" = "Originals travel directly to your paired receiver.";
-"mac_running_note" = "Keep PhotoBridge running and the Mac awake for continued backup.";
+"mac_running_note" = "Keep BackupDuck running and the Mac awake for continued backup.";
 "mac_pair_description" = "Import the receiver’s QR code image or pairing file, or paste its pairing code. Pairing information is kept private.";
 "pairing_code_placeholder" = "Paste pairing code";
 "pairing_import" = "Import QR code or file…";
@@ -97,7 +97,7 @@
 
 "pair_receiver_desktop" = "Pair receiver";
 
-"desktop_pair_instructions" = "On the receiving device, open PhotoBridge and tap “Scan desktop code”. Keep both devices on the same local network.";
+"desktop_pair_instructions" = "On the receiving device, open BackupDuck and tap “Scan desktop code”. Keep both devices on the same local network.";
 "desktop_pair_qr" = "Desktop pairing QR code";
 "desktop_pair_expiry" = "Valid for 5 minutes · Single-use encrypted pairing";
 "desktop_pair_regenerate" = "Generate new code";
@@ -177,7 +177,7 @@
 "nav_settings" = "Settings";
 "backup_pair_first" = "Pair a receiver in the Receiver tab, then choose photos from your library.";
 "backup_all_tasks" = "All transfers";
-"receiver_pair_instructions" = "Open PhotoBridge on your receiving device and scan its pairing code.";
+"receiver_pair_instructions" = "Open BackupDuck on your receiving device and scan its pairing code.";
 "receiver_local_network" = "Keep both devices on the same local network. The receiver must be running to accept transfers.";
 "receiver_address" = "Network address";
 "receiver_connection_details" = "Connection details";
@@ -258,26 +258,26 @@
 "event_history_scan_resumed" = "Existing-library scan resumed";
 "event_history_scan_finished" = "Library scan finished; transfers may still be pending";
 "library_filter_burst" = "Burst";
-"help_title" = "Using PhotoBridge";
+"help_title" = "Using BackupDuck";
 "help_start_title" = "Connect your devices";
 "help_start_body" = "Start receiving on your other device and keep both devices on a network where they can reach each other. Pair from Receiver and check the device names on both screens. A familiar name helps you recognize a device; pairing establishes trust.";
 "help_scope_title" = "Choose what to back up";
 "help_scope_body" = "Select items in Library for a manual backup. In backup settings, new-photo backup and historical import are separate controls: enable new-photo backup for future additions, and start historical import to include existing accessible photos and videos. Supported motion photos include their photo and video components; accessible burst frames are included together.";
 "help_receipt_title" = "What received means";
-"help_receipt_body" = "A received task has a verification receipt from the paired receiver. It does not confirm that another service has backed it up or that a receiver-side conversion has finished. Keep your source originals until you have checked the receiver’s storage and retention rules. PhotoBridge does not delete items from your Apple photo library.";
+"help_receipt_body" = "A received task has a verification receipt from the paired receiver. It does not confirm that another service has backed it up or that a receiver-side conversion has finished. Keep your source originals until you have checked the receiver’s storage and retention rules. BackupDuck does not delete items from your Apple photo library.";
 "help_recover_title" = "When backup stops";
-"help_recover_body" = "Check that backup is not paused, the receiver is running, and both devices can reach each other. Reopen PhotoBridge to continue scheduling work. In Backup, open tasks needing attention and read the error before retrying. Keep the existing pairing and task history when recovering a connection; deleting app data is not a recovery step.";
+"help_recover_body" = "Check that backup is not paused, the receiver is running, and both devices can reach each other. Reopen BackupDuck to continue scheduling work. In Backup, open tasks needing attention and read the error before retrying. Keep the existing pairing and task history when recovering a connection; deleting app data is not a recovery step.";
 "help_permission_title" = "Missing photos";
-"help_permission_body" = "PhotoBridge can only read photos you allow. Check Photos access in system settings, including the selected items if access is limited. Originals stored only in iCloud need a network connection and local staging space before upload. Granting access does not itself start a historical import.";
+"help_permission_body" = "BackupDuck can only read photos you allow. Check Photos access in system settings, including the selected items if access is limited. Originals stored only in iCloud need a network connection and local staging space before upload. Granting access does not itself start a historical import.";
 "help_space_title" = "When storage is low";
 "help_space_body" = "Local cache holds prepared files while they are being transferred. Increase its budget only if the sending device has room. If the receiver is full, manage space on that device and then retry. Removing a staged file or a receiver copy is not proof of backup; use the app’s storage controls rather than deleting its internal files.";
 "help_support_title" = "Collect useful diagnostics";
 "help_support_body" = "Open Settings → Diagnostics → Activity log to inspect and export events. Include the time of the problem, the task’s displayed state, and whether the app was in the foreground or background. Review the exported report before sharing it.";
-"photos_access_denied_mac" = "Photo access is off. In System Settings → Privacy & Security → Photos, allow PhotoBridge to access your library.";
+"photos_access_denied_mac" = "Photo access is off. In System Settings → Privacy & Security → Photos, allow BackupDuck to access your library.";
 "photos_settings_unavailable" = "Settings could not be opened. Open the system settings manually to review photo access.";
 "library_loading" = "Loading your photo library…";
 "library_empty_all" = "No photos available";
-"library_empty_description" = "Photos and videos available in your system photo library will appear here. If access is limited, check which photos are shared with PhotoBridge.";
+"library_empty_description" = "Photos and videos available in your system photo library will appear here. If access is limited, check which photos are shared with BackupDuck.";
 "library_empty_filter_description" = "Try another media type, or show all your available photos and videos.";
 "library_show_all" = "Show all photos";
 "photos_waiting_permission" = "Waiting for your choice in the system permission dialog…";
@@ -323,8 +323,8 @@
 "task_explanation_failed" = "These tasks need attention. Review the error and retry after resolving it.";
 "task_explanation_received" = "The receiver has received and verified these files. Any subsequent cloud backup is a separate step.";
 "task_explanation_scanned" = "Photo information already checked for existing-library import. Scanning does not mean the files have been transferred.";
-"menu_open" = "Open PhotoBridge";
-"menu_quit" = "Quit PhotoBridge";
+"menu_open" = "Open BackupDuck";
+"menu_quit" = "Quit BackupDuck";
 "menu_backup_ready" = "Ready to back up";
 
 "task_status_count" = "%d items";
@@ -357,9 +357,9 @@
 "receiver_indicator_explanation" = "Pairing information is saved. Reachability is checked when preparing backups; paired does not mean the receiver is currently online.";
 "backup_status_failed_count" = "%d tasks need attention. Review their status in Transfers.";
 
-"storage_cache_description" = "Before sending, PhotoBridge prepares originals and upload files on this iPhone, iPad or Mac. These temporary copies use local storage. These settings do not control receiver storage.";
+"storage_cache_description" = "Before sending, BackupDuck prepares originals and upload files on this iPhone, iPad or Mac. These temporary copies use local storage. These settings do not control receiver storage.";
 
-"storage_cache_budget_help" = "Limits temporary files used by PhotoBridge. Preparation pauses at the limit and resumes when space is available. This space is not reserved in advance.";
+"storage_cache_budget_help" = "Limits temporary files used by BackupDuck. Preparation pauses at the limit and resumes when space is available. This space is not reserved in advance.";
 
 "storage_min_free_help" = "Keeps room for other apps on this device. Preparation pauses below this amount; your other files are not deleted.";
 
@@ -553,7 +553,7 @@
 "mac_help_library" = "Select photos manually or enable automatic backup for new photos. Scan existing photos separately. System Library identifies Live Photos and accessible burst frames.";
 "mac_help_folders" = "Add local or external-drive folders, including subfolders. Automatic backup handles additions and changes; Back Up Existing Files starts a manual backup. Originals are kept unchanged. Exported Live Photos need matching pairing metadata; folder burst photos are backed up as separate files.";
 "mac_help_permissions" = "System Library needs Photos access and only processes allowed items; iCloud originals may need downloading. Selecting a folder grants read access. External drives must remain connected.";
-"mac_help_receipt" = "Received means the receiver verified the files; it does not confirm cloud backup. PhotoBridge keeps originals in System Library and folders.";
+"mac_help_receipt" = "Received means the receiver verified the files; it does not confirm cloud backup. BackupDuck keeps originals in System Library and folders.";
 
 "folder_auto_enabled" = "Automatic backup is on";
 "folder_manual_queued" = "This backup is scheduled";
@@ -594,3 +594,7 @@
 
 "folder_modified_time" = "Modified time";
 "backup_waiting" = "Backup waiting";
+
+"brand_name" = "BackupDuck";
+
+"brand_name" = "BackupDuck";

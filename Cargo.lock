@@ -178,6 +178,116 @@ dependencies = [
 ]
 
 [[package]]
+name = "backupduck"
+version = "0.2.0-rc.1"
+dependencies = [
+ "axum",
+ "backupduck-core",
+ "backupduck-store",
+ "backupduck-transport",
+ "clap",
+ "getrandom 0.4.3",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "backupduck-core"
+version = "0.2.0-rc.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "backupduck-folder-source"
+version = "0.2.0-rc.1"
+dependencies = [
+ "backupduck-core",
+ "globset",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "backupduck-native"
+version = "0.2.0-rc.1"
+dependencies = [
+ "axum",
+ "axum-server",
+ "backupduck-core",
+ "backupduck-folder-source",
+ "backupduck-pixel",
+ "backupduck-sender",
+ "backupduck-store",
+ "backupduck-transport",
+ "base64",
+ "fs2",
+ "getrandom 0.4.3",
+ "jni",
+ "rcgen",
+ "reqwest",
+ "rusqlite",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "backupduck-pixel"
+version = "0.2.0-rc.1"
+dependencies = [
+ "backupduck-core",
+ "little_exif",
+ "quick-xml 0.38.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "backupduck-sender"
+version = "0.2.0-rc.1"
+dependencies = [
+ "backupduck-core",
+ "fs2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "backupduck-store"
+version = "0.2.0-rc.1"
+dependencies = [
+ "backupduck-core",
+ "fs2",
+ "getrandom 0.4.3",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "backupduck-transport"
+version = "0.2.0-rc.1"
+dependencies = [
+ "axum",
+ "backupduck-core",
+ "backupduck-pixel",
+ "backupduck-store",
+ "futures-util",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1061,116 +1171,6 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
-
-[[package]]
-name = "photobridge"
-version = "0.1.0"
-dependencies = [
- "axum",
- "clap",
- "getrandom 0.4.3",
- "photobridge-core",
- "photobridge-store",
- "photobridge-transport",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "photobridge-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "photobridge-folder-source"
-version = "0.1.0"
-dependencies = [
- "globset",
- "photobridge-core",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "photobridge-native"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-server",
- "base64",
- "fs2",
- "getrandom 0.4.3",
- "jni",
- "photobridge-core",
- "photobridge-folder-source",
- "photobridge-pixel",
- "photobridge-sender",
- "photobridge-store",
- "photobridge-transport",
- "rcgen",
- "reqwest",
- "rusqlite",
- "rustls",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "photobridge-pixel"
-version = "0.1.0"
-dependencies = [
- "little_exif",
- "photobridge-core",
- "quick-xml 0.38.4",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "photobridge-sender"
-version = "0.1.0"
-dependencies = [
- "fs2",
- "photobridge-core",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "photobridge-store"
-version = "0.1.0"
-dependencies = [
- "fs2",
- "getrandom 0.4.3",
- "photobridge-core",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "photobridge-transport"
-version = "0.1.0"
-dependencies = [
- "axum",
- "futures-util",
- "photobridge-core",
- "photobridge-pixel",
- "photobridge-store",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "tokio",
-]
 
 [[package]]
 name = "pin-project-lite"

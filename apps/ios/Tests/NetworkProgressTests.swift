@@ -1,11 +1,11 @@
 import XCTest
 import SwiftUI
 import Network
-@testable import PhotoBridge
+@testable import BackupDuck
 
 @MainActor final class NetworkProgressTests: XCTestCase {
   private var pairing: Pairing {
-    Pairing(version: 1, receiverID: "test", endpoint: "https://127.0.0.1:8443",
+    Pairing(version: 2, receiverID: "test", endpoint: "https://127.0.0.1:8443",
       certificate: "test", token: "test")
   }
 

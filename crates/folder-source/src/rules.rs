@@ -1,5 +1,5 @@
+use backupduck_core::{Error, Result};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
-use photobridge_core::{Error, Result};
 
 pub(crate) struct Rules {
     include: GlobSet,

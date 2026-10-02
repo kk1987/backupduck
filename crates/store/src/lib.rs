@@ -5,8 +5,8 @@ pub mod devices;
 pub mod retention;
 pub mod usage;
 
+use backupduck_core::*;
 use fs2::FileExt;
-use photobridge_core::*;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::{
     fs::{self, File, OpenOptions},
@@ -329,7 +329,7 @@ impl Receiver {
     pub fn register(&mut self, asset: Asset) -> Result<AssetStatus> {
         let id = asset.id()?;
         if let Ok(status) = self.status(&id) {
-            if status.receipt == photobridge_core::ReceiptState::Received {
+            if status.receipt == backupduck_core::ReceiptState::Received {
                 return Ok(status);
             }
         }

@@ -31,25 +31,25 @@ def main():
         run_file.write_text(str(uuid.uuid4()))
     run_id = run_file.read_text().strip()
     raw = subprocess.run(
-        [args.adb, "-s", args.serial, "exec-out", "run-as", "app.photobridge",
+        [args.adb, "-s", args.serial, "exec-out", "run-as", "app.backupduck",
          "cat", "files/receiver/identity.json"],
         check=True, capture_output=True,
     ).stdout
     pairing = json.loads(raw)["pairing"]
     lib = ctypes.CDLL(str(Path(args.library).resolve()))
-    lib.photobridge_call.argtypes = [ctypes.c_char_p]
-    lib.photobridge_call.restype = ctypes.c_void_p
-    lib.photobridge_free.argtypes = [ctypes.c_void_p]
-    lib.photobridge_free.restype = None
+    lib.backupduck_call.argtypes = [ctypes.c_char_p]
+    lib.backupduck_call.restype = ctypes.c_void_p
+    lib.backupduck_free.argtypes = [ctypes.c_void_p]
+    lib.backupduck_free.restype = None
 
     def call(op, **values):
-        pointer = lib.photobridge_call(json.dumps(dict(op=op, **values)).encode())
+        pointer = lib.backupduck_call(json.dumps(dict(op=op, **values)).encode())
         if not pointer:
             raise RuntimeError("native_response_missing")
         try:
             result = json.loads(ctypes.string_at(pointer))
         finally:
-            lib.photobridge_free(pointer)
+            lib.backupduck_free(pointer)
         if not result["ok"]:
             raise RuntimeError(result["error"])
         return result["value"]
@@ -86,7 +86,7 @@ def main():
     while True:
         statuses = []
         for asset_id in ids:
-            request = urllib.request.Request(pairing["endpoint"] + "/v1/assets/" + asset_id,
+            request = urllib.request.Request(pairing["endpoint"] + "/v2/assets/" + asset_id,
                                              headers={"Authorization": "Bearer " + pairing["token"]})
             with http.open(request, timeout=10) as response:
                 statuses.append(json.load(response))

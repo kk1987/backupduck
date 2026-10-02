@@ -2,9 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/appcast.js';
 function release() {
-  const tag = 'v0.1.0-beta.15', prefix = `https://github.com/qhhonx/photobridge/releases/download/${tag}/`;
+  const tag = 'v0.1.0-beta.15', prefix = `https://github.com/qhhonx/backupduck/releases/download/${tag}/`;
   return {tag_name: tag, published_at: '2026-09-26', draft: false,
-    assets: ['PhotoBridge-0.1.0-beta.15-arm64.zip', 'PhotoBridge-0.1.0-beta.15-arm64.apk',
+    assets: ['BackupDuck-0.1.0-beta.15-arm64.zip', 'BackupDuck-0.1.0-beta.15-arm64.apk',
       'appcast.xml', 'android-update.json', 'SHA256SUMS'].map(name => ({name, size: 1, browser_download_url: prefix + name}))};
 }
 function response() {

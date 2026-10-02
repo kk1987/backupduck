@@ -45,7 +45,7 @@ mod audit_name_tests {
         );
         let mut copy: GalleryCopy = serde_json::from_str(&old).unwrap();
         assert_eq!(copy.display_name, None);
-        copy.display_name = Some("PB_20260930_000000Z_abcd_MP.heic".into());
+        copy.display_name = Some("BD_20260930_000000Z_abcd_MP.heic".into());
         copy.validate().unwrap();
         assert!(serde_json::to_string(&copy)
             .unwrap()

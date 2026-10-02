@@ -132,7 +132,7 @@ mod tests {
     use super::*;
     #[test]
     fn history_is_resumable_idempotent_and_receiver_scoped() {
-        let root = std::env::temp_dir().join(format!("photobridge-history-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("backupduck-history-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let m = Maintenance::open(&root).unwrap();
         m.schedule_sources("a", &["new-photo".into()]).unwrap();

@@ -10,7 +10,7 @@ mod ordering_tests {
 
     #[test]
     fn legacy_pending_queue_is_backfilled_without_losing_retries_or_membership() {
-        let root = std::env::temp_dir().join(format!("photobridge-order-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("backupduck-order-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let conn = Connection::open(root.join("maintenance.sqlite3")).unwrap();
@@ -650,7 +650,7 @@ impl SenderHost {
         )
     }
     fn reclaim_job(&self, job: &Job) -> Result<u64> {
-        if job.state != photobridge_sender::JobState::Received {
+        if job.state != backupduck_sender::JobState::Received {
             return Ok(0);
         }
         self.reclaim_owned_sources(job)
@@ -740,8 +740,8 @@ impl SenderHost {
     }
     pub fn record_result(&self, job: &Job) {
         let code = match job.state {
-            photobridge_sender::JobState::Received => Some("transfer_received"),
-            photobridge_sender::JobState::Waiting | photobridge_sender::JobState::Failed => {
+            backupduck_sender::JobState::Received => Some("transfer_received"),
+            backupduck_sender::JobState::Waiting | backupduck_sender::JobState::Failed => {
                 job.error_code.as_deref()
             }
             _ => None,
@@ -769,7 +769,7 @@ impl SenderHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photobridge_sender::JobState;
+    use backupduck_sender::JobState;
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
     #[test]
@@ -882,7 +882,7 @@ mod tests {
     impl Temp {
         fn new() -> Self {
             let p = std::env::temp_dir().join(format!(
-                "photobridge-maintenance-{}-{}",
+                "backupduck-maintenance-{}-{}",
                 std::process::id(),
                 SEQ.fetch_add(1, Ordering::Relaxed)
             ));
@@ -899,7 +899,7 @@ mod tests {
         let bytes = fs::read(path).unwrap();
         let hash = digest(&bytes);
         let asset = Asset {
-            version: 1,
+            version: PROTOCOL_VERSION,
             source_id: source.into(),
             revision: "1".into(),
             kind: AssetKind::Photo,
@@ -1022,7 +1022,7 @@ mod tests {
     #[test]
     fn relocated_exports_recover_verified_failures_without_resuming_pause() {
         let t = Temp::new();
-        let suffix = "Library/Application Support/PhotoBridge";
+        let suffix = "Library/Application Support/BackupDuck";
         let old = t.0.join("old").join(suffix);
         let host = SenderHost::open(&old.join("queue")).unwrap();
         let folder = old.join("exports/owned");
@@ -1074,7 +1074,7 @@ mod tests {
     #[test]
     fn relocated_exports_reject_changed_and_linked_replacements() {
         let t = Temp::new();
-        let suffix = "Library/Application Support/PhotoBridge";
+        let suffix = "Library/Application Support/BackupDuck";
         let old = t.0.join("old").join(suffix);
         let host = SenderHost::open(&old.join("queue")).unwrap();
         let folder = old.join("exports/owned");
@@ -1119,7 +1119,7 @@ mod tests {
     #[test]
     fn relocated_motion_requires_both_original_components() {
         let t = Temp::new();
-        let suffix = "Library/Application Support/PhotoBridge";
+        let suffix = "Library/Application Support/BackupDuck";
         let old = t.0.join("old").join(suffix);
         let host = SenderHost::open(&old.join("queue")).unwrap();
         let folder = old.join("exports/owned");

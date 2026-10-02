@@ -7,8 +7,8 @@ export function updateDemoLanguage(video, language) {
   video.pause();
   video.poster = `/media/demo-${locale}-v1.jpg`;
   video.setAttribute("aria-label", locale === "zh"
-    ? "PhotoBridge：iPhone 通过 Wi-Fi 备份到 Pixel，42 秒示例演示"
-    : "PhotoBridge: iPhone to Pixel over Wi-Fi, a 42-second illustrated demo");
+    ? "BackupDuck：iPhone 通过 Wi-Fi 备份到 Pixel，42 秒示例演示"
+    : "BackupDuck: iPhone to Pixel over Wi-Fi, a 42-second illustrated demo");
   video.src = source;
   // A language change starts the new version paused. Never autoplay audio.
   video.load();

@@ -1,6 +1,6 @@
 //! Date metadata belongs to the delivery copy, never to the received original.
+use backupduck_core::{Error, Result};
 use little_exif::{exif_tag::ExifTag, metadata::Metadata};
-use photobridge_core::{Error, Result};
 use std::{fs, path::Path};
 
 pub fn write_photo_date(source: &Path, output: &Path, date: &str, subsecond: u16) -> Result<()> {

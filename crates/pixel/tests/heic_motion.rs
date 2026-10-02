@@ -1,6 +1,4 @@
-use photobridge_pixel::{
-    write_heic_motion_with_burst, write_heic_motion_with_burst_and_video_mime,
-};
+use backupduck_pixel::{write_heic_motion_with_burst, write_heic_motion_with_burst_and_video_mime};
 use std::{fs, path::PathBuf};
 
 fn atom(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
@@ -12,7 +10,7 @@ fn atom(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
 
 #[test]
 fn heic_and_mov_payloads_are_preserved() {
-    let root = std::env::temp_dir().join(format!("photobridge-motion-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("backupduck-motion-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let still = root.join("still.heic");
     let video = root.join("paired.mov");
@@ -64,7 +62,7 @@ fn heic_and_mov_payloads_are_preserved() {
 #[test]
 fn real_heic_fixture_when_available() {
     // Run locally with an exported Live Photo pair; never commit personal media.
-    let Ok(dir) = std::env::var("PHOTOBRIDGE_LIVE_PHOTO_FIXTURE") else {
+    let Ok(dir) = std::env::var("BACKUPDUCK_LIVE_PHOTO_FIXTURE") else {
         return;
     };
     let root = PathBuf::from(dir);
@@ -139,7 +137,7 @@ fn primary_xmp(data: &[u8]) -> (Vec<u8>, usize) {
 
 #[test]
 fn existing_primary_and_auxiliary_xmp_remain_readable() {
-    let root = std::env::temp_dir().join(format!("photobridge-motion-xmp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("backupduck-motion-xmp-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     let ftyp = atom(b"ftyp", b"heic\0\0\0\0mif1heic");
     let primary = br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><r:RDF xmlns:r="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><r:Description xmlns:apple="urn:apple:fixture" apple:Color="HDR"/></r:RDF></x:xmpmeta>"#;

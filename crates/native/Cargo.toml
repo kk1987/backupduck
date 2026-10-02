@@ -1,5 +1,5 @@
 [package]
-name = "photobridge-native"
+name = "backupduck-native"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,15 +10,15 @@ crate-type = ["lib", "staticlib", "cdylib"]
 
 [features]
 default = []
-folder-source = ["dep:photobridge-folder-source"]
+folder-source = ["dep:backupduck-folder-source"]
 
 [dependencies]
-photobridge-folder-source = { workspace = true, optional = true }
-photobridge-core.workspace = true
-photobridge-store.workspace = true
-photobridge-sender.workspace = true
-photobridge-transport.workspace = true
-photobridge-pixel.workspace = true
+backupduck-folder-source = { workspace = true, optional = true }
+backupduck-core.workspace = true
+backupduck-store.workspace = true
+backupduck-sender.workspace = true
+backupduck-transport.workspace = true
+backupduck-pixel.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

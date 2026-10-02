@@ -224,7 +224,7 @@ It reports a gallery publication failure independently of transfer success and
 keeps polling the receiver after a processing retry without retransmitting the
 originals. "Added to phone gallery" is still distinct from a Google Photos
 cloud backup or playable animation; there is no Google cloud success signal in
-the PhotoBridge protocol.
+the BackupDuck protocol.
 
 ## Future investigation checklist
 

@@ -70,10 +70,10 @@ enum Bridge {
     return try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .utility).async {
         do {
-          let pointer = text.withCString { photobridge_call($0) }
+          let pointer = text.withCString { backupduck_call($0) }
           guard let pointer else { throw Failure(code: "internal") }
           let output = Data(String(cString: pointer).utf8)
-          photobridge_free(pointer)
+          backupduck_free(pointer)
           let envelope = try JSONSerialization.jsonObject(with: output) as! [String: Any]
           guard envelope["ok"] as? Bool == true else {
             throw Failure(code: envelope["error"] as? String ?? "internal")
@@ -170,7 +170,7 @@ enum Bridge {
   init(root: URL? = nil) {
     self.root = root ?? FileManager.default.urls(
       for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent(
-        "PhotoBridge", isDirectory: true)
+        "BackupDuck", isDirectory: true)
   }
 
   func open() async {
@@ -578,7 +578,7 @@ enum Bridge {
         var metadata = try await burstFields(for: asset)
         // Keep the PhotoKit source/revision stable while creating a distinct,
         // auditable receiver asset for an explicit repeat backup.
-        if rebackupThisSource { metadata["photobridge_rebackup_id"] = UUID().uuidString }
+        if rebackupThisSource { metadata["backupduck_rebackup_id"] = UUID().uuidString }
         metadata["favorite"] = String(asset.isFavorite)
         if let date = asset.creationDate {
           metadata["created_at_ms"] = String(Int64(date.timeIntervalSince1970 * 1000))
@@ -787,7 +787,7 @@ enum Bridge {
 enum Keychain {
   private static let query: [String: Any] = [
     kSecClass as String: kSecClassGenericPassword,
-    kSecAttrService as String: "app.photobridge.pairing", kSecAttrAccount as String: "receiver",
+    kSecAttrService as String: "app.backupduck.pairing", kSecAttrAccount as String: "receiver",
   ]
   // Security framework calls can wait for system authorization after an ad-hoc
   // build changes. Never make that wait block AppKit or SwiftUI's main thread.

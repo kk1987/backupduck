@@ -6,7 +6,7 @@ audit=importlib.util.module_from_spec(spec);spec.loader.exec_module(audit)
 class CaptureAuditTests(unittest.TestCase):
     def test_same_instant_in_different_timezones_is_not_repaired(self):
         aid='a'*64
-        item={'filename':'PB_'+aid+'.jpg','label':'Photo - Portrait - Sep 12, 2026, 8:08:05 PM','detail_date':'Sep 12 Time taken: Yesterday, 8:08 PM GMT-07:00'}
+        item={'filename':'BD_'+aid+'.jpg','label':'Photo - Portrait - Sep 12, 2026, 8:08:05 PM','detail_date':'Sep 12 Time taken: Yesterday, 8:08 PM GMT-07:00'}
         # Derive the independent UTC reference, not the function under test.
         import datetime as dt
         expected=int(dt.datetime(2026,9,13,3,8,5,tzinfo=dt.timezone.utc).timestamp()*1000)
@@ -21,5 +21,5 @@ class CaptureAuditTests(unittest.TestCase):
     def test_unrecognized_file_and_missing_source_date_are_never_repaired(self):
         self.assertEqual(audit.classify_cloud({'filename':'IMG_0001.JPG'}, {})['status'],'unmatched')
         aid='b'*64
-        self.assertEqual(audit.classify_cloud({'filename':'PB_'+aid+'.heic'},{aid:{'capture_ms':None}})['status'],'unknown')
+        self.assertEqual(audit.classify_cloud({'filename':'BD_'+aid+'.heic'},{aid:{'capture_ms':None}})['status'],'unknown')
 if __name__=='__main__': unittest.main()

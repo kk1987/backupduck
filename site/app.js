@@ -27,8 +27,8 @@ function render() {
     language === "zh" ? "English" : "中文";
   document.title =
     language === "zh"
-      ? "PhotoBridge — 把照片备份到自己的设备"
-      : "PhotoBridge — Your photos. Beyond one device.";
+      ? "备份鸭 — 照片备份到 Pixel"
+      : "BackupDuck — Photo backup to Pixel";
   const status = document.querySelector("#release-status");
   if (release) {
     status.textContent = `${release.version} · ${language === "zh" ? "最新发布版本" : "Latest release"}`;
@@ -72,7 +72,7 @@ try {
       (key) =>
         typeof release[key] === "string" &&
         release[key].startsWith(
-          "https://github.com/qhhonx/photobridge/releases/download/",
+          "https://github.com/qhhonx/backupduck/releases/download/",
         ),
     )
   )

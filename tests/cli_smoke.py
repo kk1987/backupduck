@@ -10,7 +10,7 @@ import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = ROOT / 'target' / 'debug' / ('photobridge.exe' if os.name == 'nt' else 'photobridge')
+BINARY = ROOT / 'target' / 'debug' / ('backupduck.exe' if os.name == 'nt' else 'backupduck')
 
 def run(*args):
     return subprocess.run([str(BINARY), *map(str, args)], check=True, capture_output=True, text=True, timeout=45)
@@ -32,7 +32,7 @@ def start(root, token_file, token):
         if process.poll() is not None:
             raise AssertionError('receiver did not start: ' + process.stderr.read().decode())
         try:
-            request(base, token, '/v1/capabilities')
+            request(base, token, '/v2/capabilities')
             return process, base
         except OSError:
             time.sleep(0.05)
@@ -47,7 +47,7 @@ def stop(process):
         process.kill(); process.wait(timeout=5)
     process.stderr.close()
 
-with tempfile.TemporaryDirectory(prefix='photobridge-cli-') as directory:
+with tempfile.TemporaryDirectory(prefix='backupduck-cli-') as directory:
     root = Path(directory)
     source = root / 'source'; source.mkdir()
     photo = b'original resource metadata\x00' * 170000
@@ -62,10 +62,10 @@ with tempfile.TemporaryDirectory(prefix='photobridge-cli-') as directory:
     asset = json.loads(manifest.read_text())
     process, base = start(root / 'receiver', token_file, token)
     try:
-        state = request(base, token, '/v1/assets', manifest.read_bytes(), 'POST')
+        state = request(base, token, '/v2/assets', manifest.read_bytes(), 'POST')
         asset_id = state['asset_id']; resource = asset['resources'][0]
         prefix = photo[:39317]; chunk_hash = hashlib.sha256(prefix).hexdigest()
-        route = f'/v1/assets/{asset_id}/resources/{resource["sha256"]}?offset=0&sha256={chunk_hash}'
+        route = f'/v2/assets/{asset_id}/resources/{resource["sha256"]}?offset=0&sha256={chunk_hash}'
         state = request(base, token, route, prefix, 'PUT')
         assert state['resources'][0]['offset'] == len(prefix)
         assert state['receipt'] == 'receiving'
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='photobridge-cli-') as directory:
         stop(process)
     process, base = start(root / 'receiver', token_file, token)
     try:
-        before = request(base, token, f'/v1/assets/{asset_id}')
+        before = request(base, token, f'/v2/assets/{asset_id}')
         assert before['resources'][0]['offset'] == len(prefix)
         result = run('send', '--server', base, '--token-file', token_file, '--manifest', manifest, '--files', source)
         assert json.loads(result.stdout)['receipt'] == 'received'

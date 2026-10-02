@@ -7,7 +7,7 @@ import AVFoundation
 
 @main struct FolderNativeTests {
   @MainActor static func main() async throws {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("photobridge-folder-native-" + UUID().uuidString).resolvingSymlinksInPath()
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("backupduck-folder-native-" + UUID().uuidString).resolvingSymlinksInPath()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let photo = root.appendingPathComponent("sample.jpg")

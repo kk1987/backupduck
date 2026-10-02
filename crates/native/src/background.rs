@@ -1,7 +1,7 @@
 //! Request planning for file-backed native background transfers. No networking
 //! or platform scheduling here: each OS operation is fenced by a queue attempt.
 use super::*;
-use photobridge_sender::Attempt;
+use backupduck_sender::Attempt;
 use std::{
     collections::BTreeSet,
     io::{Read, Seek, SeekFrom},
@@ -62,7 +62,7 @@ impl SenderHost {
                     return Ok(NativeRequest {
                         attempt: attempt.clone(),
                         method: "POST".into(),
-                        path: "/v1/bundles".into(),
+                        path: "/v2/bundles".into(),
                         content_type: BUNDLE_CONTENT_TYPE.into(),
                         body_file,
                         transfer_mode: "bundle",
@@ -79,7 +79,7 @@ impl SenderHost {
             let (method, path, content_type, body) = match checkpoint {
                 None => (
                     "POST",
-                    "/v1/assets".into(),
+                    "/v2/assets".into(),
                     "application/json",
                     serde_json::to_vec(&job.asset)?,
                 ),
@@ -105,11 +105,11 @@ impl SenderHost {
                             let mut bytes = vec![0; length as usize];
                             file.read_exact(&mut bytes)?;
                             let hash = digest(&bytes);
-                            ("PUT", format!("/v1/assets/{id}/resources/{sha256}?offset={offset}&sha256={hash}"), "application/octet-stream", bytes)
+                            ("PUT", format!("/v2/assets/{id}/resources/{sha256}?offset={offset}&sha256={hash}"), "application/octet-stream", bytes)
                         }
                         TransferAction::Commit => (
                             "POST",
-                            format!("/v1/assets/{id}/commit"),
+                            format!("/v2/assets/{id}/commit"),
                             "application/json",
                             b"{}".to_vec(),
                         ),
@@ -230,13 +230,13 @@ mod tests {
     #[test]
     fn bundle_window_pause_budget_and_source_integrity() {
         let root =
-            std::env::temp_dir().join(format!("photobridge-bundle-planner-{}", std::process::id()));
+            std::env::temp_dir().join(format!("backupduck-bundle-planner-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let host = SenderHost::open(&root.join("queue")).unwrap();
         let photo = root.join("photo.jpg");
         fs::write(&photo, b"0123456789").unwrap();
         let asset = Asset {
-            version: 1,
+            version: PROTOCOL_VERSION,
             source_id: "bundle".into(),
             revision: "1".into(),
             kind: AssetKind::Photo,
@@ -262,7 +262,7 @@ mod tests {
         let mut planned = Vec::new();
         for _ in 0..4 {
             let request = host.prepare_native("peer").unwrap().unwrap();
-            assert_eq!(request.path, "/v1/bundles");
+            assert_eq!(request.path, "/v2/bundles");
             assert!(fs::read(&request.body_file)
                 .unwrap()
                 .starts_with(BUNDLE_MAGIC));
@@ -290,7 +290,7 @@ mod tests {
         host.pause(false).unwrap();
         host.maintenance.lock().unwrap().settings.cache_budget_bytes = 1;
         let legacy = host.prepare_native("peer").unwrap().unwrap();
-        assert_eq!(legacy.path, "/v1/assets");
+        assert_eq!(legacy.path, "/v2/assets");
         host.abandon_native(&legacy.attempt).unwrap();
         host.maintenance.lock().unwrap().settings.cache_budget_bytes = 5 << 30;
         fs::write(&photo, b"corrupted!").unwrap();

@@ -15,7 +15,7 @@ import re
 import sqlite3
 from zoneinfo import ZoneInfo
 
-ASSET = re.compile(r'^PB_([0-9a-f]{64})(?:[_.]|$)', re.I)
+ASSET = re.compile(r'^BD_([0-9a-f]{64})(?:[_.]|$)', re.I)
 UTC = dt.timezone.utc
 
 def iso(milliseconds, zone):
@@ -56,7 +56,7 @@ def classify_cloud(item, assets):
         return {**item, 'status': 'unreadable', 'reason': 'Cloud information panel did not load'}
     match = ASSET.match(item.get('filename') or '')
     if not match or match[1].lower() not in assets:
-        return {**item, 'status': 'unmatched', 'reason': 'No unique PhotoBridge asset ID in the visible filename'}
+        return {**item, 'status': 'unmatched', 'reason': 'No unique BackupDuck asset ID in the visible filename'}
     aid = match[1].lower()
     expected = assets[aid]['capture_ms']
     actual = cloud_instant(item)

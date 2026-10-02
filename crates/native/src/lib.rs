@@ -15,11 +15,11 @@ mod receiver_storage;
 mod source_locations;
 pub use background::NativeRequest;
 
+use backupduck_core::*;
+use backupduck_sender::{Attempt, Failure, Job, JobQuery, Sender};
+use backupduck_store::Receiver;
+use backupduck_transport::Client;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use photobridge_core::*;
-use photobridge_sender::{Attempt, Failure, Job, JobQuery, Sender};
-use photobridge_store::Receiver;
-use photobridge_transport::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -142,7 +142,7 @@ fn identity(root: &Path, addr: SocketAddr) -> Result<Identity> {
     let der = cert.der();
     let i = Identity {
         pairing: Pairing {
-            version: 1,
+            version: PROTOCOL_VERSION,
             receiver_id: digest(der),
             endpoint,
             certificate: STANDARD.encode(der),
@@ -195,7 +195,7 @@ impl ReceiverHost {
         .await?;
         let maintenance = Arc::new(Mutex::new(maintenance));
         let diagnostic_log = maintenance.clone();
-        let observer: photobridge_transport::Observer = Arc::new(move |event| {
+        let observer: backupduck_transport::Observer = Arc::new(move |event| {
             if let Ok(log) = diagnostic_log.lock() {
                 let context = maintenance::EventContext {
                     request_id: Some(event.request_id),
@@ -210,7 +210,7 @@ impl ReceiverHost {
                 let _ = log.log_context(event.event, None, None, Some(&context));
             }
         });
-        let router = photobridge_transport::shared_router_observed(
+        let router = backupduck_transport::shared_router_observed(
             receiver.clone(),
             &ident.pairing.token,
             Some(observer),
@@ -429,7 +429,7 @@ fn manifest(
         });
     }
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id,
         revision,
         kind,
@@ -461,12 +461,12 @@ enum Command {
         thermal_threshold_celsius: u8,
     },
     PhotosCleanupStep {
-        state: photobridge_pixel::photos_cleanup::State,
-        snapshot: photobridge_pixel::photos_probe::Snapshot,
+        state: backupduck_pixel::photos_cleanup::State,
+        snapshot: backupduck_pixel::photos_probe::Snapshot,
         expected: String,
     },
     PhotosProbe {
-        snapshot: photobridge_pixel::photos_probe::Snapshot,
+        snapshot: backupduck_pixel::photos_probe::Snapshot,
     },
     BurstMetadata {
         identifier: String,
@@ -716,7 +716,7 @@ enum Command {
     },
     PrepareGallery {
         id: String,
-        copy: photobridge_store::retention::GalleryCopy,
+        copy: backupduck_store::retention::GalleryCopy,
     },
     GalleryCandidates {
         root: Option<PathBuf>,
@@ -726,12 +726,12 @@ enum Command {
     GalleryPublication {
         root: Option<PathBuf>,
         id: String,
-        copy: photobridge_store::retention::GalleryCopy,
+        copy: backupduck_store::retention::GalleryCopy,
     },
     ReleaseGallery {
         root: Option<PathBuf>,
         id: String,
-        copy: photobridge_store::retention::GalleryCopy,
+        copy: backupduck_store::retention::GalleryCopy,
     },
     ReceiverStorageUsage {
         root: PathBuf,
@@ -831,10 +831,10 @@ fn dispatch(command: Command) -> Result<Value> {
             snapshot,
             expected,
         } => Ok(serde_json::to_value(
-            photobridge_pixel::photos_cleanup::step(state, &snapshot, &expected),
+            backupduck_pixel::photos_cleanup::step(state, &snapshot, &expected),
         )?),
         Command::PhotosProbe { snapshot } => Ok(serde_json::to_value(
-            photobridge_pixel::photos_probe::classify(&snapshot),
+            backupduck_pixel::photos_probe::classify(&snapshot),
         )?),
         Command::BurstMetadata {
             identifier,
@@ -848,7 +848,7 @@ fn dispatch(command: Command) -> Result<Value> {
             date,
             subsecond,
         } => {
-            photobridge_pixel::write_photo_date(&source, &output, &date, subsecond)?;
+            backupduck_pixel::write_photo_date(&source, &output, &date, subsecond)?;
             Ok(json!({}))
         }
         Command::PackageBurst {
@@ -858,7 +858,7 @@ fn dispatch(command: Command) -> Result<Value> {
         } => {
             let burst = BurstMetadata::from_fields(&metadata)?
                 .ok_or_else(|| Error::Invalid("missing burst metadata".into()))?;
-            photobridge_pixel::write_jpeg_burst(&jpeg, &output, &burst)?;
+            backupduck_pixel::write_jpeg_burst(&jpeg, &output, &burst)?;
             Ok(json!({}))
         }
         Command::DeviceStatus {
@@ -866,14 +866,14 @@ fn dispatch(command: Command) -> Result<Value> {
             language,
             name,
         } => {
-            let devices = photobridge_store::devices::DeviceDirectory::open(&root, &language)?;
+            let devices = backupduck_store::devices::DeviceDirectory::open(&root, &language)?;
             if let Some(name) = name {
                 devices.rename(&name)?;
             }
             Ok(json!({"device":devices.profile()?,"peers":devices.peers()?}))
         }
         Command::SetSenderEnabled { root, id, enabled } => {
-            photobridge_store::devices::DeviceDirectory::open(&root, "en")?
+            backupduck_store::devices::DeviceDirectory::open(&root, "en")?
                 .set_enabled(&id, enabled)?;
             Ok(json!({}))
         }
@@ -883,7 +883,7 @@ fn dispatch(command: Command) -> Result<Value> {
         } => {
             let sender = sender()?;
             let root = sender.request_root.parent().ok_or(Error::NotFound)?;
-            let devices = photobridge_store::devices::DeviceDirectory::open(root, "en")?;
+            let devices = backupduck_store::devices::DeviceDirectory::open(root, "en")?;
             let profile = devices.profile()?;
             let (peer, caps) = runtime().block_on(async {
                 let client = pairing.client()?;
@@ -1437,7 +1437,7 @@ fn dispatch(command: Command) -> Result<Value> {
             metadata,
             video_mime,
         } => {
-            photobridge_pixel::write_jpeg_motion_with_burst_and_video_mime(
+            backupduck_pixel::write_jpeg_motion_with_burst_and_video_mime(
                 &jpeg,
                 &mp4,
                 &output,
@@ -1454,7 +1454,7 @@ fn dispatch(command: Command) -> Result<Value> {
             metadata,
             video_mime,
         } => {
-            photobridge_pixel::write_heic_motion_with_burst_and_video_mime(
+            backupduck_pixel::write_heic_motion_with_burst_and_video_mime(
                 &heic,
                 &mov,
                 &output,
@@ -1546,7 +1546,7 @@ fn dispatch(command: Command) -> Result<Value> {
             })
         }
         Command::ReceiverStorageUsage { root } => Ok(serde_json::to_value(
-            photobridge_store::usage::original_usage(&root.join("store"))?,
+            backupduck_store::usage::original_usage(&root.join("store"))?,
         )?),
         Command::ReceiverSettings { root, settings } => {
             let was_saved = settings.is_some();
@@ -1571,7 +1571,7 @@ fn dispatch(command: Command) -> Result<Value> {
             if was_saved && !root.join("maintenance.initialized").exists() {
                 private_write(&root.join("maintenance.initialized"), b"1")?;
             }
-            let catalog = photobridge_store::catalog::Catalog::open(&root.join("store"))?;
+            let catalog = backupduck_store::catalog::Catalog::open(&root.join("store"))?;
             Ok(
                 json!({"settings":current,"used_bytes":catalog.reserved_bytes()?,"counts":catalog.counts()?,"free_bytes":fs2::available_space(root)?}),
             )
@@ -1583,7 +1583,7 @@ fn dispatch(command: Command) -> Result<Value> {
             state,
             kind,
         } => {
-            let catalog = photobridge_store::catalog::Catalog::open(&root.join("store"))?;
+            let catalog = backupduck_store::catalog::Catalog::open(&root.join("store"))?;
             Ok(serde_json::to_value(catalog.page_for_sender(
                 before,
                 &state,
@@ -1694,9 +1694,9 @@ pub fn call(request: &str) -> String {
 }
 /// # Safety
 /// `request` must point to a valid, NUL-terminated UTF-8 string for this call.
-/// Free the returned allocation exactly once with `photobridge_free`.
+/// Free the returned allocation exactly once with `backupduck_free`.
 #[no_mangle]
-pub unsafe extern "C" fn photobridge_call(request: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn backupduck_call(request: *const c_char) -> *mut c_char {
     let response = if request.is_null() {
         json!({"ok":false,"error":"invalid_input"}).to_string()
     } else {
@@ -1710,16 +1710,16 @@ pub unsafe extern "C" fn photobridge_call(request: *const c_char) -> *mut c_char
         .into_raw()
 }
 /// # Safety
-/// Pass only a non-null allocation returned by `photobridge_call`, once.
+/// Pass only a non-null allocation returned by `backupduck_call`, once.
 #[no_mangle]
-pub unsafe extern "C" fn photobridge_free(value: *mut c_char) {
+pub unsafe extern "C" fn backupduck_free(value: *mut c_char) {
     if !value.is_null() {
         drop(unsafe { CString::from_raw(value) });
     }
 }
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_app_photobridge_NativeBridge_call(
+pub extern "system" fn Java_app_backupduck_NativeBridge_call(
     mut env: jni::JNIEnv,
     _class: jni::objects::JClass,
     request: jni::objects::JString,

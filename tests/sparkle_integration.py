@@ -4,7 +4,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 SPARKLE=ROOT/'build/dependencies/sparkle'
 def run(*args, **kwargs):
     return subprocess.run([str(a) for a in args],check=True,timeout=120,**kwargs)
-with tempfile.TemporaryDirectory(prefix='photobridge-update-test-') as temp:
+with tempfile.TemporaryDirectory(prefix='backupduck-update-test-') as temp:
     root=pathlib.Path(temp); serve=root/'serve';serve.mkdir()
     class Handler(http.server.SimpleHTTPRequestHandler):
         def log_message(self, *args): pass
@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory(prefix='photobridge-update-test-') as temp:
     try:
         origin=f'http://127.0.0.1:{server.server_port}'
         key=root/'key'; public=run('xcrun','swift','-module-cache-path',ROOT/'build/test-modules',ROOT/'tests/GenerateTestUpdateKey.swift',key,capture_output=True,text=True).stdout.strip()
-        ident='org.photobridge.update-fixture.'+uuid.uuid4().hex
+        ident='org.backupduck.update-fixture.'+uuid.uuid4().hex
         (root/'stub.c').write_text('int main(void) { return 0; }\n')
         run('xcrun','clang',root/'stub.c','-o',root/'stub')
         apps=[]

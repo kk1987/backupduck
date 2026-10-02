@@ -1,22 +1,22 @@
-# Install PhotoBridge
+# Install BackupDuck
 
 ## macOS sender
 
 Download the Apple Silicon ZIP from the official website or GitHub Releases.
-Extract it and move PhotoBridge to Applications before opening it.
-The free beta uses an ad hoc integrity signature and signed Sparkle updates, but
+Extract it and move BackupDuck to Applications before opening it.
+The free release candidate uses an ad hoc integrity signature and signed Sparkle updates, but
 is not notarized by Apple. If macOS blocks opening it, review the source and release,
 then use System Settings → Privacy & Security → Open Anyway.
 Do not disable Gatekeeper globally. Grant Photos and local network access.
 
-Use PhotoBridge → Check for Updates, or enable automatic checks in Settings.
+Use BackupDuck → Check for Updates, or enable automatic checks in Settings.
 Updates pause and persist transfer work before replacing the application.
 
 ## Android receiver
 
 Download the arm64 APK on Android 10 or later. Allow your browser to install it
 when Android asks. Start reception and pair your sender. If you use Google Photos,
-enable backup for the PhotoBridge device folder separately.
+enable backup for the BackupDuck device folder separately.
 Settings → App updates checks new releases. The app verifies the downloaded file,
 package ID, increasing build number and signing certificate before opening the
 system installer. Installation requires your confirmation. Automatic checks run
@@ -34,7 +34,7 @@ Xcode, XcodeGen, Rust and the `aarch64-apple-ios` target:
 
 ```sh
 xcodegen generate --spec apps/ios/project.yml
-open apps/ios/PhotoBridge.xcodeproj
+open apps/ios/BackupDuck.xcodeproj
 ```
 
 Select your own signing team in Xcode and run on your iPhone or iPad (iOS 17+).

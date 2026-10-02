@@ -44,7 +44,7 @@ import Sparkle
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
         let bundle = Bundle(path: CommandLine.arguments[1])!
-        precondition(bundle.bundleIdentifier?.hasPrefix("org.photobridge.update-fixture.") == true)
+        precondition(bundle.bundleIdentifier?.hasPrefix("org.backupduck.update-fixture.") == true)
         let driver = Driver(expectRejection: CommandLine.arguments.contains("--expect-rejection"))
         let updater = SPUUpdater(hostBundle: bundle, applicationBundle: Bundle.main, userDriver: driver, delegate: nil)
         try updater.start()

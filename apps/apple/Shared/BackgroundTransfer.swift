@@ -44,7 +44,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
   @preconcurrency URLSessionTaskDelegate
 {
   static let shared = BackgroundTransfer()
-  static let identifier = "app.photobridge.uploads.v1"
+  static let identifier = "app.backupduck.uploads.v1"
   var eventsCompletion: (() -> Void)?
   var waitingForNetwork = false
   private var requestMetrics: [Int: [String: Any]] = [:]
@@ -101,7 +101,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
   // Metadata-only diagnostics: no paths, photo names, endpoints or credentials.
   func record(_ code: String, jobID: Int64? = nil, bytes: Int64? = nil,
     context: [String: Any] = [:]) async {
-    Logger(subsystem: "app.photobridge", category: "background").info("\(code, privacy: .public) job=\(jobID ?? -1) bytes=\(bytes ?? -1)")
+    Logger(subsystem: "app.backupduck", category: "background").info("\(code, privacy: .public) job=\(jobID ?? -1) bytes=\(bytes ?? -1)")
     guard BackupModel.shared.ready else { return }
     var command: [String: Any] = ["op": "record_event", "receiver": false, "code": code]
     if let jobID { command["job_id"] = jobID }
@@ -122,7 +122,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
   }
   private func phase(_ request: URLRequest?) -> String? {
     guard let request else { return nil }
-    if request.url?.path == "/v1/bundles" { return "bundle" }
+    if request.url?.path == "/v2/bundles" { return "bundle" }
     return request.httpMethod == "PUT" ? "upload" : request.url?.path.hasSuffix("/commit") == true ? "commit" : "manifest"
   }
   /// Query whole-queue counts, not the UI's first page. This is observational and
@@ -174,7 +174,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
     private var handoff: UIBackgroundTaskIdentifier = .invalid
     func enteredBackground() {
       guard handoff == .invalid else { return }
-      handoff = UIApplication.shared.beginBackgroundTask(withName: "PhotoBridge request handoff") { [weak self] in
+      handoff = UIApplication.shared.beginBackgroundTask(withName: "BackupDuck request handoff") { [weak self] in
         guard let self else { return }
         self.endHandoff()
         Task { await self.recordSnapshot("background_time_expired", execution: "background") }
@@ -307,12 +307,12 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
           native.httpMethod = request.method
           native.setValue("Bearer " + pairing.token, forHTTPHeaderField: "Authorization")
           if let device = model.deviceSnapshot?.device {
-            native.setValue(device.id, forHTTPHeaderField: "X-PhotoBridge-Sender")
-            native.setValue(senderDeviceType, forHTTPHeaderField: "X-PhotoBridge-Device-Type")
+            native.setValue(device.id, forHTTPHeaderField: "X-BackupDuck-Sender")
+            native.setValue(senderDeviceType, forHTTPHeaderField: "X-BackupDuck-Device-Type")
           }
           native.setValue(request.contentType, forHTTPHeaderField: "Content-Type")
           let requestID = UInt64.random(in: 1...(1 << 52))
-          native.setValue(String(requestID), forHTTPHeaderField: "X-PhotoBridge-Request")
+          native.setValue(String(requestID), forHTTPHeaderField: "X-BackupDuck-Request")
           let task = session.uploadTask(with: native, fromFile: file)
           var descriptor = request.attempt
           descriptor.receiverID = pairing.receiverID
@@ -326,7 +326,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
               "op": "bind_native", "attempt": request.attempt.object,
               "task_id": String(task.taskIdentifier),
             ])
-            let stage = request.path == "/v1/bundles" ? "bundle_submitted" : request.method == "PUT" ? "upload_submitted" : request.path.hasSuffix("/commit") ? "commit_submitted" : "manifest_submitted"
+            let stage = request.path == "/v2/bundles" ? "bundle_submitted" : request.method == "PUT" ? "upload_submitted" : request.path.hasSuffix("/commit") ? "commit_submitted" : "manifest_submitted"
             var submissionContext = taskContext(task, attempt: descriptor)
             submissionContext["transfer_mode"] = request.transferMode
             await record(stage, jobID: request.attempt.jobID,
@@ -539,7 +539,7 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
   private var identifier: UIBackgroundTaskIdentifier = .invalid
   init() {
     guard UIApplication.shared.applicationState != .active else { return }
-    identifier = UIApplication.shared.beginBackgroundTask(withName: "PhotoBridge receipt") { [weak self] in
+    identifier = UIApplication.shared.beginBackgroundTask(withName: "BackupDuck receipt") { [weak self] in
       self?.end()
     }
   }

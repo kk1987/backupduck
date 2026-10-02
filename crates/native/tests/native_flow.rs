@@ -1,7 +1,7 @@
-use photobridge_core::*;
-use photobridge_native::{ReceiverHost, SenderHost};
-use photobridge_sender::JobState;
-use photobridge_store::catalog::Catalog;
+use backupduck_core::*;
+use backupduck_native::{ReceiverHost, SenderHost};
+use backupduck_sender::JobState;
+use backupduck_store::catalog::Catalog;
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -12,7 +12,7 @@ struct Temp(PathBuf);
 impl Temp {
     fn new() -> Self {
         let p = std::env::temp_dir().join(format!(
-            "photobridge-native-{}-{}",
+            "backupduck-native-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));
@@ -67,7 +67,7 @@ async fn native_queue_transfers_over_paired_tls_and_preserves_originals() {
         });
     }
     let a = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "ios-resource".into(),
         revision: "1".into(),
         kind: AssetKind::Motion,
@@ -185,8 +185,8 @@ async fn tls_rejects_a_different_receiver_certificate_and_bad_credentials() {
 /// Lost responses and restarts must query the receiver, never infer receipt.
 #[tokio::test]
 async fn external_executor_recovers_lost_chunk_and_commit_receipts() {
+    use backupduck_native::NativeRequest;
     use base64::{engine::general_purpose::STANDARD, Engine};
-    use photobridge_native::NativeRequest;
     use std::collections::BTreeSet;
     let t = Temp::new();
     let r = ReceiverHost::start(&t.0.join("receiver"), address(), 16 * 1024 * 1024)
@@ -245,7 +245,7 @@ async fn external_executor_recovers_lost_chunk_and_commit_receipts() {
         });
     }
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "external-live".into(),
         revision: "1".into(),
         kind: AssetKind::Motion,
@@ -323,14 +323,14 @@ async fn external_executor_recovers_lost_chunk_and_commit_receipts() {
 
 #[test]
 fn external_executor_classifies_retries_and_rejects_bad_acknowledgements() {
-    use photobridge_sender::Failure;
+    use backupduck_sender::Failure;
     let t = Temp::new();
     let s = SenderHost::open(&t.0.join("sender")).unwrap();
     let path = t.0.join("photo.jpg");
     std::fs::write(&path, b"photo").unwrap();
     let hash = digest(b"photo");
     let a = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "retry-test".into(),
         revision: "1".into(),
         kind: AssetKind::Photo,
@@ -387,7 +387,7 @@ fn external_executor_classifies_retries_and_rejects_bad_acknowledgements() {
     assert!(s.prepare_native("receiver").unwrap().is_none());
     s.pause(false).unwrap();
     let next = s.prepare_native("receiver").unwrap().unwrap();
-    assert_eq!(next.path, "/v1/assets");
+    assert_eq!(next.path, "/v2/assets");
     assert!(s
         .finish_native(&request.attempt, "cancelled", 200, "{}", None, false)
         .is_err());
@@ -451,7 +451,7 @@ async fn bulk_mixed_queue_survives_pause_restart_and_replay() {
             .enqueue(
                 &receiver.pairing.receiver_id,
                 Asset {
-                    version: 1,
+                    version: PROTOCOL_VERSION,
                     source_id: format!("bulk-{index}"),
                     revision: "1".into(),
                     kind,
@@ -513,7 +513,7 @@ async fn local_receiver_settings_work_before_network_and_survive_first_start() {
     let root = t.0.join("offline-receiver");
     let request = |value: serde_json::Value| -> serde_json::Value {
         let output: serde_json::Value =
-            serde_json::from_str(&photobridge_native::call(&value.to_string())).unwrap();
+            serde_json::from_str(&backupduck_native::call(&value.to_string())).unwrap();
         assert_eq!(output["ok"], true, "{output}");
         output["value"].clone()
     };
@@ -545,7 +545,7 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
     let t = Temp::new();
     let root = t.0.join("offline-archive");
     let call = |value: serde_json::Value| -> serde_json::Value {
-        serde_json::from_str(&photobridge_native::call(&value.to_string())).unwrap()
+        serde_json::from_str(&backupduck_native::call(&value.to_string())).unwrap()
     };
     let batch = || call(serde_json::json!({"op":"archive_batch","root":root}));
     assert_eq!(batch()["ok"], false);
@@ -553,13 +553,13 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
         !root.exists(),
         "Archive inspection must not create an empty receiver"
     );
-    let mut receiver = photobridge_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    let mut receiver = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
     let originals = [
         b"original still".as_slice(),
         b"original motion video".as_slice(),
     ];
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "offline-motion".into(),
         revision: "1".into(),
         kind: AssetKind::Motion,
@@ -604,7 +604,7 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
         serde_json::json!([]),
         "Unpublished items cannot be archived"
     );
-    let mut receiver = photobridge_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    let mut receiver = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
     receiver
         .set_processing(&id, ProcessingState::Pending)
         .unwrap();
@@ -655,7 +655,7 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
         originals.iter().map(|b| b.len() as u64).sum::<u64>()
     );
     assert_eq!(batch()["value"], serde_json::json!([]));
-    let mut receiver = photobridge_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    let mut receiver = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
     assert_eq!(
         receiver.status(&id).unwrap().receipt,
         ReceiptState::Received

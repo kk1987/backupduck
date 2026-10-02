@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PhotoBridge · 接收端</title>
+  <title>BackupDuck · 接收端</title>
   <link rel="stylesheet" href="/style.css">
   <script defer src="/app.js"></script>
 </head>
 <body>
   <div class="shell">
-    <aside class="sidebar" aria-label="PhotoBridge">
-      <div class="brand"><span class="brand-mark">PB</span><div><strong>PhotoBridge</strong><small id="brand-subtitle">接收端管理</small></div></div>
+    <aside class="sidebar" aria-label="BackupDuck">
+      <div class="brand"><span class="brand-mark">PB</span><div><strong>BackupDuck</strong><small id="brand-subtitle">接收端管理</small></div></div>
       <div class="side-section" id="side-section">工作台</div>
       <a class="side-link active" href="#overview-section"><span class="side-icon">◫</span><span id="nav-overview">概览</span></a>
       <a class="side-link" href="#transfers-section"><span class="side-icon">⇅</span><span id="nav-transfers">传输记录</span></a>
       <div class="sidebar-bottom"><span class="online-dot"></span><span id="sidebar-local">仅在当前局域网访问</span></div>
     </aside>
     <main>
-      <header class="topbar"><div class="breadcrumb"><span>PhotoBridge</span><span class="slash">/</span><strong id="breadcrumb-current">接收端</strong></div><span class="top-local" id="top-local">本地管理页</span></header>
+      <header class="topbar"><div class="breadcrumb"><span>BackupDuck</span><span class="slash">/</span><strong id="breadcrumb-current">接收端</strong></div><span class="top-local" id="top-local">本地管理页</span></header>
       <div class="content">
         <section id="login-panel" class="login-card card">
           <div class="login-symbol">↗</div>
           <h1 id="login-title">连接你的 Pixel</h1>
-          <p id="login-help">在 Pixel 的 PhotoBridge「设置 → 浏览器管理」中查看访问码。每次开启都会更换。</p>
+          <p id="login-help">在 Pixel 的 BackupDuck「设置 → 浏览器管理」中查看访问码。每次开启都会更换。</p>
           <form id="login-form"><label id="code-label" for="code">10 位访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><button id="login-button" class="primary" type="submit">进入管理页</button></form>
         </section>
         <div id="dashboard" hidden>
@@ -37,7 +37,7 @@
             <div><span id="temperature-label">电池温度</span><strong id="temperature">—</strong><small id="thermal-state">等待读数</small></div>
             <div><span id="battery-label">电量</span><strong id="battery">—</strong><small id="battery-state">等待读数</small></div>
             <div><span id="free-label">可用空间</span><strong id="free">—</strong><small id="free-detail">总容量 — · 最低可用 —</small></div>
-            <div><span id="reserved-label">PhotoBridge 原件</span><strong id="reserved">—</strong><small id="reserved-detail">不含相册副本</small></div>
+            <div><span id="reserved-label">BackupDuck 原件</span><strong id="reserved">—</strong><small id="reserved-detail">不含相册副本</small></div>
           </div></section>
           <section id="transfers-section" class="card transfers">
             <div class="section-heading"><div><h2 id="transfers-title">传输记录</h2><p id="table-note">点击文件名查看完整信息。</p></div><button id="retry" type="button">重试失败项</button></div>

@@ -31,7 +31,7 @@ import Network
         self?.networkChanged(satisfied: path.status == .satisfied, interfaces: interfaces)
       }
     }
-    monitor?.start(queue: DispatchQueue(label: "app.photobridge.network"))
+    monitor?.start(queue: DispatchQueue(label: "app.backupduck.network"))
   }
   deinit { monitor?.cancel() }
 

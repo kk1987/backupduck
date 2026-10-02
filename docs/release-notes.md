@@ -1,3 +1,11 @@
+# RC 1 — 备份鸭 / BackupDuck (0.2.0-rc.1)
+
+- Launch BackupDuck / 备份鸭 with the duck icon, a renamed repository and website, and unified app identifier `app.backupduck` on iOS, macOS and Android.
+- Install the new app on every sender and Pixel receiver, grant permissions and pair again. The old app database is not migrated. Existing apps, original photos and already saved gallery/cloud copies are not removed or modified.
+- Rename Rust crates, native libraries, C ABI, discovery, headers, metadata and export identifiers. Protocol 2 uses `/v2/` routes and a new bundle signature; old apps cannot communicate with the new receiver.
+- Keep the existing lossless photo/video processing. Fallback delivery filenames now start with `BD_`; preserved original filenames still follow the current naming rules.
+- Downloads and update checks use https://backupduck.vercel.app. iOS TestFlight uses version 0.2.0 (build 44).
+
 # Beta 38
 
 - Recognize JPEG, PNG and HEIC image data before Android date handling and gallery publication, even when a camera export has an incorrect filename extension. Supported HEIC Live Photos keep their original image, video and audio without compatibility conversion. Retained failed originals can be retried after updating.
@@ -28,7 +36,7 @@
 
 # Beta 32
 
-- Show live Pixel battery temperature, charge level, free space, and PhotoBridge original usage in browser management, including the existing heat-pause state and threshold.
+- Show live Pixel battery temperature, charge level, free space, and BackupDuck original usage in browser management, including the existing heat-pause state and threshold.
 - Keep the transfer table to file, state, capture time, and size; receive-complete time remains in item details. Use “实况” consistently in Chinese across the apps, and identify burst frames from their metadata, with a burst filter and primary-frame detail.
 
 # Beta 31

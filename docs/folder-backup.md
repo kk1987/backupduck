@@ -59,7 +59,7 @@ Folder hierarchy is not mapped to Google Photos albums.
 
 ## Storage and identity
 
-`photobridge-folder-source` owns a SQLite inventory, bounded directory work queue,
+`backupduck-folder-source` owns a SQLite inventory, bounded directory work queue,
 stability window, source identity and per-receiver submission records. Scans do
 not hash or copy the full library. Only current eligible assets are copied into
 owned staging, checked against their indexed revision and identity, then hashed
@@ -82,7 +82,7 @@ Existing PhotoKit source IDs, revisions and receipts are unchanged.
 
 ## Build boundary and validation
 
-Mac enables `photobridge-native/folder-source`; it is disabled by default. iOS and
+Mac enables `backupduck-native/folder-source`; it is disabled by default. iOS and
 Android builds explicitly disable default features, and enabling this feature for
 mobile targets is a compile error. `scripts/check-folder-isolation.py` verifies
 mobile dependency trees. Platform-independent transfer and queue crates do not

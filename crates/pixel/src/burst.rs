@@ -1,5 +1,5 @@
 //! Lossless JPEG annotation for derived burst delivery copies.
-use photobridge_core::{BurstMetadata, Error, Result};
+use backupduck_core::{BurstMetadata, Error, Result};
 use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 use std::{
     fs::{File, OpenOptions},

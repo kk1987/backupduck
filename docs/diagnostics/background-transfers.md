@@ -7,7 +7,7 @@ midway through a measurement window.
 ## Correlating an attempt
 
 Apple senders persist a random, non-identifying `request_id` in the URLSession task
-descriptor and send it as `X-PhotoBridge-Request`. Each HTTP attempt gets its own
+descriptor and send it as `X-BackupDuck-Request`. Each HTTP attempt gets its own
 ID; job ID, queue generation and URLSession task ID provide local correlation.
 Legacy task descriptors remain readable but lack this correlation information.
 

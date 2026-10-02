@@ -1,6 +1,6 @@
-use photobridge_core::*;
-use photobridge_store::Receiver;
-use photobridge_transport::{router, Client};
+use backupduck_core::*;
+use backupduck_store::Receiver;
+use backupduck_transport::{router, Client};
 use std::{
     collections::BTreeMap,
     io::Cursor,
@@ -12,7 +12,7 @@ struct Fixture(std::path::PathBuf);
 impl Fixture {
     fn new() -> Self {
         Self(std::env::temp_dir().join(format!(
-            "photobridge-bundle-{}-{}",
+            "backupduck-bundle-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         )))
@@ -47,7 +47,7 @@ fn sample_sized(motion: bool, length: usize) -> (Asset, Vec<Vec<u8>>, Vec<u8>) {
         })
         .collect();
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "bundle-fixture".into(),
         revision: "1".into(),
         kind: if motion {
@@ -85,7 +85,7 @@ async fn serve(root: &Fixture, capacity: u64) -> (String, tokio::task::JoinHandl
 }
 fn request(base: &str, bytes: Vec<u8>, chunked: bool) -> reqwest::RequestBuilder {
     let builder = reqwest::Client::new()
-        .post(format!("{base}/v1/bundles"))
+        .post(format!("{base}/v2/bundles"))
         .bearer_auth(TOKEN)
         .header("content-type", BUNDLE_CONTENT_TYPE);
     if chunked {
@@ -177,7 +177,7 @@ async fn malformed_oversized_corrupt_and_unauthorized_bundles_never_get_receipts
         400
     );
     let unauthorized = reqwest::Client::new()
-        .post(format!("{base}/v1/bundles"))
+        .post(format!("{base}/v2/bundles"))
         .header("content-type", BUNDLE_CONTENT_TYPE)
         .body(body.clone())
         .send()
@@ -222,7 +222,7 @@ async fn malformed_oversized_corrupt_and_unauthorized_bundles_never_get_receipts
 #[test]
 fn old_capability_payload_does_not_opt_into_bundle_transport() {
     let old: Capabilities = serde_json::from_str(
-        r#"{"version":1,"max_chunk_bytes":4194304,"motion_assets":true,"target_processing":[]}"#,
+        r#"{"version":2,"max_chunk_bytes":4194304,"motion_assets":true,"target_processing":[]}"#,
     )
     .unwrap();
     assert!(!old.bundle_upload);

@@ -13,7 +13,7 @@ use std::{
     io::Read,
 };
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 pub const MAX_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 

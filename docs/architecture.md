@@ -69,7 +69,7 @@ new assets and subsequent upload chunks. It resumes after cooling below the
 threshold by 2°C and after the system status falls below moderate. The hold is
 combined with Google Photos cleanup holds, so one guard cannot clear the other.
 Sender busy responses retry from receiver-confirmed offsets; the original bytes
-and receipts are retained. The setting controls PhotoBridge's receiver, not
+and receipts are retained. The setting controls BackupDuck's receiver, not
 Android's own thermal management.
 
 ## Receipt and target processing
@@ -166,7 +166,7 @@ recorded test snapshot does not prove sustained lock-screen execution.
 
 ## Desktop folder-source capability
 
-The optional `photobridge-folder-source` crate produces generic assets from a
+The optional `backupduck-folder-source` crate produces generic assets from a
 read-only, persistent folder index. Mac owns folder authorization, filesystem
 notifications and media metadata APIs; the existing Rust sender owns snapshots,
 checksums, durable tasks and transfer. Mobile native builds never link the folder

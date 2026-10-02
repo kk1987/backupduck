@@ -1,5 +1,5 @@
 import XCTest
-@testable import PhotoBridge
+@testable import BackupDuck
 
 @MainActor final class TransferDiagnosticsTests: XCTestCase {
   func testOldPersistedTasksRemainReadableAndNewCorrelationSurvivesRelaunch() throws {
@@ -39,7 +39,7 @@ import XCTest
     let previousPending = model.pendingImports
     let previousReason = model.preparationReason
     let receiver = "preparation-test-" + UUID().uuidString
-    model.pairing = Pairing(version: 1, receiverID: receiver,
+    model.pairing = Pairing(version: 2, receiverID: receiver,
       endpoint: "https://127.0.0.1:1", certificate: "fixture", token: "fixture")
     defer {
       model.pairing = previous; model.storage = previousStorage

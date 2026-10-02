@@ -1,6 +1,6 @@
 # Licensing and commercial use
 
-PhotoBridge is source-available software. The current checkout is offered under
+BackupDuck is source-available software. The current checkout is offered under
 the unmodified [PolyForm Noncommercial License 1.0.0](../LICENSE), with a required
 copyright notice. The license text governs; this page explains the project policy
 and does not add restrictions to permissions granted by that license.
@@ -27,7 +27,7 @@ a separate written commercial license. Examples include:
 Renaming the app or removing attribution does not remove licensing obligations.
 Public access to the repository does not grant an unrestricted commercial license.
 For a commercial licensing request, open an
-[issue](https://github.com/qhhonx/photobridge/issues) describing the intended use;
+[issue](https://github.com/qhhonx/backupduck/issues) describing the intended use;
 do not include private credentials or confidential business information.
 A discussion or an unanswered request is not permission. Any separate grant must
 come from the copyright holders with authority over the relevant code.

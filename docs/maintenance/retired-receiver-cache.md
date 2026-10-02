@@ -22,6 +22,6 @@ Receipt records, the source photo library and receiver files are unchanged.
 Interrupted cleanup can be retried; archive records remain available for recovery
 and audit. This does not provide a complete receiver-management interface.
 
-The application writes `cache-retirement-result.json` to its private PhotoBridge
+The application writes `cache-retirement-result.json` to its private BackupDuck
 application-support directory, containing archived-job and reclaimed-byte counts.
 Read this result and independently inspect the sender database after maintenance.

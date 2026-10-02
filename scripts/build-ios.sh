@@ -8,10 +8,10 @@ case "$platform" in
  *) echo 'Usage: build-ios.sh [simulator|device]' >&2; exit 1;;
 esac
 export IPHONEOS_DEPLOYMENT_TARGET=17.0
-CARGO_PROFILE_RELEASE_STRIP=none cargo build --locked --release -p photobridge-native --no-default-features --target "$target"
-app="build/ios/$platform/PhotoBridge.app"
+CARGO_PROFILE_RELEASE_STRIP=none cargo build --locked --release -p backupduck-native --no-default-features --target "$target"
+app="build/ios/$platform/BackupDuck.app"
 mkdir -p "$app"
-cp apps/ios/PhotoBridge/Info.plist "$app/Info.plist"
+cp apps/ios/BackupDuck/Info.plist "$app/Info.plist"
 cp -R apps/apple/Resources/*.lproj "$app/"
 set --
 if [ "$platform" = simulator ]; then
@@ -19,9 +19,9 @@ if [ "$platform" = simulator ]; then
 fi
 xcrun --sdk "$sdk" swiftc -swift-version 5 -O -module-cache-path "build/SwiftModuleCache-ios/$platform" \
  -sdk "$(xcrun --sdk "$sdk" --show-sdk-path)" -target "$swift_target" -parse-as-library \
- "$@" -import-objc-header crates/native/include/photobridge.h \
- apps/ios/PhotoBridge/*.swift apps/apple/Shared/*.swift "target/$target/release/libphotobridge_native.a" \
+ "$@" -import-objc-header crates/native/include/backupduck.h \
+ apps/ios/BackupDuck/*.swift apps/apple/Shared/*.swift "target/$target/release/libbackupduck_native.a" \
  -framework Security -framework SystemConfiguration -framework UIKit -framework SwiftUI -framework Photos -framework PhotosUI -framework AVFoundation -lsqlite3 -lz -liconv \
- -o "$app/PhotoBridge"
+ -o "$app/BackupDuck"
 if [ "$platform" = simulator ]; then codesign --force --sign - "$app"; fi
 printf 'Built %s\n' "$app"

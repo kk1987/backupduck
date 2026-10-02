@@ -1,7 +1,7 @@
 //! Persistent sender decisions shared by Rust and native background executors.
 //! References are opaque to this crate; hosts resolve them to exported resources.
+use backupduck_core::*;
 use fs2::FileExt;
-use photobridge_core::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{

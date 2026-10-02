@@ -1,5 +1,5 @@
 //! Read-only, host-local history. Browsing never verifies, renames or deletes blobs.
-use photobridge_core::{Asset, Error, Result};
+use backupduck_core::{Asset, Error, Result};
 use rusqlite::{params, Connection, OpenFlags};
 use serde::Serialize;
 use std::{
@@ -12,7 +12,7 @@ pub struct HistoryItem {
     pub cursor: i64,
     pub id: String,
     pub filename: String,
-    pub kind: photobridge_core::AssetKind,
+    pub kind: backupduck_core::AssetKind,
     pub burst_primary: Option<bool>,
     pub total_bytes: u64,
     pub confirmed_bytes: u64,
@@ -112,7 +112,7 @@ impl Catalog {
         sender: Option<&str>,
         numbered_offset: Option<i64>,
     ) -> Result<HistoryPage> {
-        if sender.is_some_and(|id| id != "unknown" && !photobridge_core::valid_digest(id)) {
+        if sender.is_some_and(|id| id != "unknown" && !backupduck_core::valid_digest(id)) {
             return Err(Error::Invalid("sender filter".into()));
         }
         if ![
@@ -261,7 +261,7 @@ impl Catalog {
                 id,
                 filename: asset.resources[0].filename.clone(),
                 kind: asset.kind,
-                burst_primary: photobridge_core::BurstMetadata::from_fields(&asset.metadata)?
+                burst_primary: backupduck_core::BurstMetadata::from_fields(&asset.metadata)?
                     .map(|burst| burst.primary),
                 total_bytes,
                 confirmed_bytes,

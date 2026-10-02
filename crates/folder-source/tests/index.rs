@@ -1,4 +1,4 @@
-use photobridge_folder_source::*;
+use backupduck_folder_source::*;
 use std::{
     fs,
     path::{Path, PathBuf},

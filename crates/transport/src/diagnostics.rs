@@ -49,7 +49,7 @@ impl Observation {
 pub(super) async fn observe(request: Request, next: Next, observer: Option<Observer>) -> Response {
     let id = request
         .headers()
-        .get("x-photobridge-request")
+        .get("x-backupduck-request")
         .and_then(|h| h.to_str().ok())
         .filter(|s| s.len() <= 16 && s.bytes().all(|b| b.is_ascii_digit()))
         .and_then(|s| s.parse::<u64>().ok())
@@ -102,7 +102,7 @@ pub(super) async fn observe(request: Request, next: Next, observer: Option<Obser
 }
 
 async fn run(request: Request, next: Next) -> Response {
-    if request.uri().path() == "/v1/bundles" {
+    if request.uri().path() == "/v2/bundles" {
         return next.run(request).await;
     }
     match tokio::time::timeout(Duration::from_secs(60), next.run(request)).await {

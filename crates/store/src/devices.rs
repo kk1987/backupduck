@@ -1,5 +1,5 @@
 //! Installation-local names and peer display profiles, separate from media IDs.
-use photobridge_core::*;
+use backupduck_core::*;
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::path::Path;

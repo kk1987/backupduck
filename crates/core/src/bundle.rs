@@ -2,8 +2,8 @@
 //! asset identity; it is not an image conversion or an archive retention format.
 use super::*;
 use std::io::{Read, Write};
-pub const BUNDLE_MAGIC: &[u8; 8] = b"PBRG0001";
-pub const BUNDLE_CONTENT_TYPE: &str = "application/x-photobridge-bundle";
+pub const BUNDLE_MAGIC: &[u8; 8] = b"BDCK0002";
+pub const BUNDLE_CONTENT_TYPE: &str = "application/x-backupduck-bundle";
 pub fn bundle_size(asset: &Asset) -> Result<u64> {
     asset.validate()?;
     let manifest = serde_json::to_vec(asset)?;

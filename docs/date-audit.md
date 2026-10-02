@@ -29,7 +29,7 @@ photo's `GMT+08:00` or other explicit offset. A collector may instead supply
 `observed_iso`, an ISO 8601 timestamp retaining that explicit offset. Without the offset the result is
 unknown; a cloud photo may use a different timezone from the auditing computer.
 
-`PB_<asset-id>` filenames allow an exact match to a receiver manifest. Unknown
+`BD_<asset-id>` filenames allow an exact match to a receiver manifest. Unknown
 filenames or missing source dates are not guessed. The report distinguishes
 correct dates, mismatches, unmatched photos and unreadable metadata. MediaStore
 suspects are only leads, not proof of cloud-date errors. Only supplied cloud

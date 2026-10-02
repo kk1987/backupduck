@@ -22,7 +22,7 @@ import Darwin
       let browser = NetServiceBrowser()
       self.browser = browser
       browser.delegate = self
-      browser.searchForServices(ofType: "_photobridge._tcp.", inDomain: "local.")
+      browser.searchForServices(ofType: "_backupduck._tcp.", inDomain: "local.")
     }
     if Date().timeIntervalSince(lastResolve) > 30 {
       lastResolve = Date()
@@ -49,7 +49,7 @@ import Darwin
   }
   func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
     guard let receiverID, services.count < 8,
-      service.name.hasPrefix("PhotoBridge-" + receiverID.prefix(20)),
+      service.name.hasPrefix("BackupDuck-" + receiverID.prefix(20)),
       !services.contains(where: { $0.name == service.name && $0.domain == service.domain }) else { return }
     services.append(service); service.delegate = self; service.resolve(withTimeout: 5)
   }

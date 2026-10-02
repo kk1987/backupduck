@@ -1,5 +1,5 @@
-use photobridge_core::{BurstMetadata, Error};
-use photobridge_pixel::{write_jpeg_burst, write_jpeg_motion_with_burst};
+use backupduck_core::{BurstMetadata, Error};
+use backupduck_pixel::{write_jpeg_burst, write_jpeg_motion_with_burst};
 use std::{
     fs,
     sync::atomic::{AtomicU64, Ordering},
@@ -25,7 +25,7 @@ fn jpeg(xml: Option<&str>) -> Vec<u8> {
 #[test]
 fn burst_copy_preserves_original_pixels_and_xmp_and_is_idempotent() {
     let root = std::env::temp_dir().join(format!(
-        "photobridge-burst-{}-{}",
+        "backupduck-burst-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));

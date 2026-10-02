@@ -1,26 +1,26 @@
 plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 def releaseInfo = new groovy.json.JsonSlurper().parse(file("../../../release.json"))
 android {
-    namespace 'app.photobridge'
+    namespace 'app.backupduck'
     compileSdk 36
     ndkVersion "27.1.12297006"
     defaultConfig {
-        applicationId 'app.photobridge'
+        applicationId 'app.backupduck'
         minSdk 29
         targetSdk 34
-        testInstrumentationRunner "app.photobridge.ReceiverInstrumentation"
+        testInstrumentationRunner "app.backupduck.ReceiverInstrumentation"
         versionCode releaseInfo.build as int
         versionName releaseInfo.version
         // Install native acceptance tests beside the user's real receiver.
-        if (project.hasProperty('validationApp')) applicationId 'app.photobridge.validation'
+        if (project.hasProperty('validationApp')) applicationId 'app.backupduck.validation'
         // Isolated update-verification host; never changes the production package.
         if (project.hasProperty('updateFixture')) {
-            applicationId 'app.photobridge.updatefixture'
+            applicationId 'app.backupduck.updatefixture'
             versionCode = Integer.parseInt(project.findProperty('fixtureBuild')?.toString() ?: '1')
         }
         manifestPlaceholders = [
-            appLabel: project.hasProperty('validationApp') ? 'PhotoBridge Validation' : '@string/app_name',
-            photosProbeLabel: project.hasProperty('validationApp') ? 'PhotoBridge Validation — Photos space management' : '@string/photos_probe_title'
+            appLabel: project.hasProperty('validationApp') ? 'BackupDuck Validation' : '@string/app_name',
+            photosProbeLabel: project.hasProperty('validationApp') ? 'BackupDuck Validation — Photos space management' : '@string/photos_probe_title'
         ]
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -29,7 +29,14 @@ android {
             if (System.getenv('ANDROID_KEYSTORE_FILE')) {
                 storeFile file(System.getenv('ANDROID_KEYSTORE_FILE'))
                 storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
-                keyAlias 'photobridge'
+                // Preserve the release certificate without binding branding to an entry name.
+                def signingStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+                storeFile.withInputStream { signingStore.load(it, storePassword.toCharArray()) }
+                def signingAliases = signingStore.aliases().toList().findAll { signingStore.isKeyEntry(it) }
+                if (signingAliases.size() != 1 && !System.getenv('ANDROID_KEY_ALIAS')) {
+                    throw new GradleException('Set ANDROID_KEY_ALIAS when the signing store has multiple key entries')
+                }
+                keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: signingAliases.first()
                 keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
             }
         }

@@ -1,7 +1,7 @@
 //! Read-only file-size snapshot, separate from reserved transfer capacity.
 //! Concurrent writes may change the snapshot. Never acquire the receiver writer
 //! or hash originals merely to render a storage page.
-use photobridge_core::{Error, Result};
+use backupduck_core::{Error, Result};
 use serde::Serialize;
 use std::{collections::HashMap, fs, io, path::Path};
 
@@ -80,7 +80,7 @@ mod tests {
     use super::*;
     #[test]
     fn file_sizes_are_not_reservations_and_reclamation_updates_the_snapshot() {
-        let root = std::env::temp_dir().join(format!("photobridge-usage-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("backupduck-usage-{}", std::process::id()));
         fs::create_dir_all(root.join("blobs/nested")).unwrap();
         fs::create_dir_all(root.join("partial")).unwrap();
         fs::write(root.join("blobs/a"), [0; 7]).unwrap();

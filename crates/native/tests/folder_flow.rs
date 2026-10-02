@@ -1,6 +1,6 @@
 #![cfg(feature = "folder-source")]
-use photobridge_folder_source::{millis, Index};
-use photobridge_native::{photobridge_call, photobridge_free};
+use backupduck_folder_source::{millis, Index};
+use backupduck_native::{backupduck_call, backupduck_free};
 use serde_json::{json, Value};
 use std::{
     ffi::{CStr, CString},
@@ -10,10 +10,10 @@ use std::{
 fn call(v: Value) -> Value {
     let input = CString::new(v.to_string()).unwrap();
     unsafe {
-        let p = photobridge_call(input.as_ptr());
+        let p = backupduck_call(input.as_ptr());
         assert!(!p.is_null());
         let result: Value = serde_json::from_str(CStr::from_ptr(p).to_str().unwrap()).unwrap();
-        photobridge_free(p);
+        backupduck_free(p);
         result
     }
 }

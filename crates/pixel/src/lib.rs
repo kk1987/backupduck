@@ -8,12 +8,12 @@ mod photo_date;
 pub use photo_date::write_photo_date;
 pub mod photos_cleanup;
 pub mod photos_probe;
+use backupduck_core::{
+    Asset, AssetKind, BurstMetadata, Error, Result, TargetPlan, TargetProcessor,
+};
 pub use burst::write_jpeg_burst;
 pub use heic_motion::write_heic_motion_with_burst;
 pub use heic_motion::write_heic_motion_with_burst_and_video_mime;
-use photobridge_core::{
-    Asset, AssetKind, BurstMetadata, Error, Result, TargetPlan, TargetProcessor,
-};
 
 #[derive(Default)]
 pub struct PixelTarget {
@@ -43,7 +43,7 @@ pub fn write_jpeg_motion(
     mp4: &std::path::Path,
     output: &std::path::Path,
     timestamp_us: Option<u64>,
-) -> photobridge_core::Result<()> {
+) -> backupduck_core::Result<()> {
     write_jpeg_motion_with_burst(jpeg, mp4, output, timestamp_us, None)
 }
 pub fn write_jpeg_motion_with_burst(
@@ -89,7 +89,7 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
             )
         })
         .unwrap_or_default();
-    use photobridge_core::{Error, Result};
+    use backupduck_core::{Error, Result};
     use std::{
         fs::{File, OpenOptions},
         io::{Seek, SeekFrom, Write},

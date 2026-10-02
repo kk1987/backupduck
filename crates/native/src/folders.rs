@@ -1,6 +1,6 @@
 //! Optional desktop boundary. Source files are never owned caches.
 use super::*;
-use photobridge_folder_source::{resolve, revision, Index, PageSort};
+use backupduck_folder_source::{resolve, revision, Index, PageSort};
 static INDEX: Mutex<Option<Index>> = Mutex::new(None);
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -133,7 +133,7 @@ pub fn call(command: Command) -> Result<Value> {
     let index = guard.as_mut().unwrap();
     match command {
         Command::ValidateRules { include, exclude } => {
-            match photobridge_folder_source::validate_rules(&include, &exclude) {
+            match backupduck_folder_source::validate_rules(&include, &exclude) {
                 Ok(()) => Ok(json!({"error":null})),
                 Err(Error::Invalid(message)) => Ok(json!({"error":message})),
                 Err(error) => Err(error),
@@ -168,7 +168,7 @@ pub fn call(command: Command) -> Result<Value> {
                 &source,
                 &relative,
                 &revision,
-                photobridge_folder_source::millis(SystemTime::now()) + 60_000,
+                backupduck_folder_source::millis(SystemTime::now()) + 60_000,
             )?;
             Ok(json!({}))
         }
@@ -240,7 +240,7 @@ pub fn call(command: Command) -> Result<Value> {
             index.begin_scoped(
                 &source,
                 &root,
-                photobridge_folder_source::millis(SystemTime::now()),
+                backupduck_folder_source::millis(SystemTime::now()),
                 &directories,
             )?;
             Ok(json!({}))
@@ -259,7 +259,7 @@ pub fn call(command: Command) -> Result<Value> {
             )?))
         }
         Command::Step => Ok(serde_json::to_value(
-            index.step(photobridge_folder_source::millis(SystemTime::now()), 500)?,
+            index.step(backupduck_folder_source::millis(SystemTime::now()), 500)?,
         )?),
         Command::Cancel => {
             index.cancel();
@@ -274,7 +274,7 @@ pub fn call(command: Command) -> Result<Value> {
         } => Ok(serde_json::to_value(index.candidates_for_cutoff(
             &source,
             &receiver,
-            photobridge_folder_source::millis(SystemTime::now()),
+            backupduck_folder_source::millis(SystemTime::now()),
             8,
             relative.as_deref(),
             max_created_ms,
@@ -359,7 +359,7 @@ pub fn call(command: Command) -> Result<Value> {
                     || !index.stable(
                         &source,
                         p,
-                        photobridge_folder_source::millis(SystemTime::now()),
+                        backupduck_folder_source::millis(SystemTime::now()),
                     )?
                 {
                     return Err(Error::Conflict("folder source settling".into()));
@@ -371,7 +371,7 @@ pub fn call(command: Command) -> Result<Value> {
                 .collect::<Result<_>>()?;
             for (i, path) in paths.iter().enumerate() {
                 if revision(path)? != originals[i].1
-                    || photobridge_folder_source::current_source_id(&source, path, &originals[i].0)?
+                    || backupduck_folder_source::current_source_id(&source, path, &originals[i].0)?
                         != index.entry(&source, &originals[i].0)?.source_id
                 {
                     return Err(Error::Conflict("folder source replaced".into()));
@@ -415,7 +415,7 @@ pub fn call(command: Command) -> Result<Value> {
                         let output = folder.join(format!("{i}-{filename}"));
                         fs::copy(path, &output)?;
                         if revision(path)? != originals[i].1
-                            || photobridge_folder_source::current_source_id(
+                            || backupduck_folder_source::current_source_id(
                                 &source,
                                 path,
                                 &originals[i].0,
@@ -435,7 +435,7 @@ pub fn call(command: Command) -> Result<Value> {
                                 ResourceRole::Photo
                             },
                             filename,
-                            media_type: photobridge_folder_source::media_type(path)
+                            media_type: backupduck_folder_source::media_type(path)
                                 .ok_or(Error::Unsupported("folder media".into()))?
                                 .into(),
                             path: output,

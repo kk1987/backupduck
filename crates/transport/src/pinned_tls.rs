@@ -1,7 +1,7 @@
 //! Preserve standard certificate/time/signature verification against the saved
 //! certificate name while allowing its network address to change. Discovery is
 //! never an authority for TLS trust. Reject even a different leaf signed by the pin.
-use photobridge_core::{Error, Result};
+use backupduck_core::{Error, Result};
 use rustls::{
     client::{
         danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},

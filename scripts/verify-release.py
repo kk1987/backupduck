@@ -7,7 +7,7 @@ feed=ET.parse(folder/'appcast.xml');ns={'s':'http://www.andymatuschak.org/xml-na
 item=feed.find('./channel/item');assert item is not None
 assert item.findtext('s:version',namespaces=ns)==str(info['build'])
 enc=item.find('enclosure');assert enc is not None
-archive=folder/f'PhotoBridge-{version}-arm64.zip'
+archive=folder/f'BackupDuck-{version}-arm64.zip'
 assert enc.attrib['url']==f'https://github.com/{info["distribution_repository"]}/releases/download/v{version}/{archive.name}'
 assert int(enc.attrib['length'])==archive.stat().st_size
 key=os.environ['SPARKLE_KEY_FILE']; tool=str(r/'build/dependencies/sparkle/bin/sign_update')
@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as d:
  tampered=Path(d)/'changed.zip';tampered.write_bytes(archive.read_bytes()+b'changed')
  result=subprocess.run([tool,'--verify','--ed-key-file',key,str(tampered),enc.attrib['{'+ns['s']+'}edSignature']],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  assert result.returncode != 0
-manifest=json.loads((folder/'android-update.json').read_text());apk=folder/f'PhotoBridge-{version}-arm64.apk'
+manifest=json.loads((folder/'android-update.json').read_text());apk=folder/f'BackupDuck-{version}-arm64.apk'
 assert manifest['version']==version and manifest['build']==info['build']
 assert manifest['size']==apk.stat().st_size and manifest['sha256']==hashlib.sha256(apk.read_bytes()).hexdigest()
 sdk=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'Library/Android/sdk')))
@@ -29,7 +29,7 @@ certificates=re.findall(r'-----BEGIN CERTIFICATE-----\s*(.*?)\s*-----END CERTIFI
 fingerprints={hashlib.sha256(base64.b64decode(pem)).hexdigest() for pem in certificates}
 assert fingerprints == {expected}, f'Unexpected Android release certificates: {fingerprints}'
 badging=subprocess.check_output([str(toolset.parent/'aapt'),'dump','badging',str(apk)],text=True)
-assert re.search(r"package: name='app\.photobridge' versionCode='"+str(info['build'])+"'",badging)
+assert re.search(r"package: name='app\.backupduck' versionCode='"+str(info['build'])+"'",badging)
 print('Android package, version and dedicated release certificate verified')
 for line in (folder/'SHA256SUMS').read_text().splitlines():
  digest,name=line.split('  ');assert hashlib.sha256((folder/name).read_bytes()).hexdigest()==digest

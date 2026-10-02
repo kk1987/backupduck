@@ -1,7 +1,7 @@
 //! Bounded, metadata-only folder indexing. No PhotoKit, UI or receiver knowledge.
 //! Sources are read-only; missing files never imply remote deletion.
 mod rules;
-use photobridge_core::{digest, Error, Result};
+use backupduck_core::{digest, Error, Result};
 use rules::Rules;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;

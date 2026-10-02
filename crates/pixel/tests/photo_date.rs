@@ -1,5 +1,5 @@
+use backupduck_pixel::write_photo_date;
 use little_exif::{exif_tag::ExifTag, metadata::Metadata};
-use photobridge_pixel::write_photo_date;
 use std::{
     fs,
     sync::atomic::{AtomicU64, Ordering},
@@ -8,7 +8,7 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 #[test]
 fn heic_capture_date_roundtrips_without_touching_original_or_overwriting_output() {
     let root = std::env::temp_dir().join(format!(
-        "photobridge-date-{}-{}",
+        "backupduck-date-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));

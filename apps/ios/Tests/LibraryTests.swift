@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import XCTest
 
-@testable import PhotoBridge
+@testable import BackupDuck
 
 /// Run only on a disposable simulator; fixtures remain available for UI checks.
 @MainActor final class LibraryTests: XCTestCase {

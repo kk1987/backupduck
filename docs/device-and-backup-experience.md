@@ -4,7 +4,7 @@ This specification records the product requirements from the September 12 review
 It describes intended behavior, not a claim that every feature is implemented.
 The reference PixelBridge checkout was fast-forwarded to `b424f81`
 (`0.1.0-beta.16`). Its burst implementation enumerates all burst members and
-annotates delivery copies with GCamera BurstID/BurstPrimary. PhotoBridge retains
+annotates delivery copies with GCamera BurstID/BurstPrimary. BackupDuck retains
 its own transport and original-preservation model instead of copying that pipeline.
 
 ## Device names
@@ -45,7 +45,7 @@ Settings on Apple and Android expose the same persisted name. Android shows
 known senders with last-contact time and an ID suffix in the full device list;
 this is not a live-connection indicator or per-photo sender attribution.
 
-After pairing, `/v1/device-profile` exchanges bounded optional profiles through
+After pairing, `/v2/device-profile` exchanges bounded optional profiles through
 the existing authenticated, certificate-pinned channel. Pairing JSON remains
 unchanged; a 404 from older receivers disables only the optional profile result.
 Apple refreshes at most once a minute while active and attempts refresh after
@@ -262,7 +262,7 @@ The receiver storage page must separately report:
 - **Gallery copies:** derived/public MediaStore items, potentially backed up by
   Google Photos. Its Free up space action can remove eligible copies here.
 
-Google Photos cleanup does not free PhotoBridge's private originals. The default
+Google Photos cleanup does not free BackupDuck's private originals. The default
 retention policy requires a separately verified original archive before reclaiming
 those files. The user can instead explicitly enable receiver relay mode, described
 below. A converted Motion Photo is not a byte-for-byte archive of its HEIC/MOV pair.
@@ -277,7 +277,7 @@ are counted once, including completion renames observed during enumeration.
 The snapshot is read-only, does not hash resources or acquire the receiver writer,
 and does not include database, cache or filesystem overhead.
 
-The Android adapter queries indexed sizes of this installation's PhotoBridge
+The Android adapter queries indexed sizes of this installation's BackupDuck
 images/videos, restricts by album path, owning package and delivery filename,
 and separates pending publication from visible copies. Unknown indexed sizes and
 query failures are visible instead of being presented as a zero-byte success.

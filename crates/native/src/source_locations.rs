@@ -1,6 +1,6 @@
 //! Recover managed Apple exports when an app update relocates its data container.
 use super::*;
-use photobridge_sender::JobState;
+use backupduck_sender::JobState;
 use std::path::Component;
 
 impl SenderHost {
@@ -32,7 +32,7 @@ impl SenderHost {
                         continue;
                     }
                     let tail = &parts[parts.len() - 6..];
-                    let marker = ["Library", "Application Support", "PhotoBridge", "exports"];
+                    let marker = ["Library", "Application Support", "BackupDuck", "exports"];
                     if !tail[..4].iter().zip(marker).all(|(part, name)| {
                         matches!(part, Component::Normal(value) if *value == std::ffi::OsStr::new(name))
                     }) || !tail[4..].iter().all(|part| matches!(part, Component::Normal(_))) {

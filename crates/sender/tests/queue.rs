@@ -1,5 +1,5 @@
-use photobridge_core::*;
-use photobridge_sender::*;
+use backupduck_core::*;
+use backupduck_sender::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -10,7 +10,7 @@ struct Temp(PathBuf);
 impl Temp {
     fn new() -> Self {
         Self(std::env::temp_dir().join(format!(
-            "photobridge-queue-{}-{}",
+            "backupduck-queue-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         )))
@@ -23,7 +23,7 @@ impl Drop for Temp {
 }
 fn asset() -> Asset {
     Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "native:42".into(),
         revision: "1".into(),
         kind: AssetKind::Photo,
@@ -77,7 +77,7 @@ fn explicit_rebackup_creates_a_new_job_without_changing_source_revision() {
     let mut repeat = asset();
     repeat
         .metadata
-        .insert("photobridge_rebackup_id".into(), "manual-request-1".into());
+        .insert("backupduck_rebackup_id".into(), "manual-request-1".into());
     let sources = BTreeMap::from([(
         repeat.resources[0].sha256.clone(),
         "opaque-native-resource-reference".into(),

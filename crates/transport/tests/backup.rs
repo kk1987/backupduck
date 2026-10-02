@@ -1,7 +1,7 @@
-use photobridge_core::*;
-use photobridge_pixel::PixelTarget;
-use photobridge_store::Receiver;
-use photobridge_transport::{router, Client};
+use backupduck_core::*;
+use backupduck_pixel::PixelTarget;
+use backupduck_store::Receiver;
+use backupduck_transport::{router, Client};
 use std::{
     collections::BTreeMap,
     fs,
@@ -15,7 +15,7 @@ struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "photobridge-test-{}-{}-{}",
+            "backupduck-test-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -103,7 +103,9 @@ fn validates_asset_shapes_paths_versions_and_stable_ids() {
         assert!(changed.validate().is_err());
     }
     let mut changed = a.clone();
-    changed.version = 2;
+    changed.version = PROTOCOL_VERSION + 1;
+    assert!(matches!(changed.validate(), Err(Error::Unsupported(_))));
+    changed.version = 1;
     assert!(matches!(changed.validate(), Err(Error::Unsupported(_))));
     let mut changed = a.clone();
     changed.revision = "2".into();
@@ -302,7 +304,7 @@ async fn http_end_to_end_authentication_resume_and_repeat() {
         .unwrap()
         .target_processing
         .is_empty());
-    let denied = reqwest::get(format!("{url}/v1/capabilities"))
+    let denied = reqwest::get(format!("{url}/v2/capabilities"))
         .await
         .unwrap();
     assert_eq!(denied.status(), 401);
@@ -364,7 +366,7 @@ async fn cancelled_and_oversized_requests_never_commit() {
     );
     let response = reqwest::Client::new()
         .put(format!(
-            "{url}/v1/assets/{id}/resources/{}?offset=0&sha256={}",
+            "{url}/v2/assets/{id}/resources/{}?offset=0&sha256={}",
             a.resources[0].sha256,
             digest(b"")
         ))
@@ -512,7 +514,7 @@ fn archived_reclamation_recovers_after_file_removal_is_interrupted() {
 
 #[test]
 fn receiver_catalog_filters_before_pagination_and_survives_stop() {
-    use photobridge_store::catalog::Catalog;
+    use backupduck_store::catalog::Catalog;
     let root = Scratch::new();
     let mut receiver = Receiver::open(&root.0, 1 << 20).unwrap();
     let mut failed_id = String::new();
@@ -601,7 +603,7 @@ fn receiver_catalog_filters_before_pagination_and_survives_stop() {
 
 #[test]
 fn receiver_catalog_never_repairs_or_removes_partial_files() {
-    use photobridge_store::catalog::Catalog;
+    use backupduck_store::catalog::Catalog;
     let root = Scratch::new();
     let mut receiver = Receiver::open(&root.0, 1 << 20).unwrap();
     let (item, _) = asset(false);
@@ -628,7 +630,7 @@ fn receiver_catalog_never_repairs_or_removes_partial_files() {
 
 #[test]
 fn relay_requires_opt_in_and_matching_delivery_evidence_and_keeps_receipts() {
-    use photobridge_store::{catalog::Catalog, retention::GalleryCopy};
+    use backupduck_store::{catalog::Catalog, retention::GalleryCopy};
     let t = Scratch::new();
     let mut receiver = Receiver::open(&t.0, 100000).unwrap();
     let (first, bytes) = asset(true);
@@ -734,7 +736,7 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     let receiver = Arc::new(Mutex::new(Receiver::open(&scratch.0, 1024 * 1024).unwrap()));
     let events = Arc::new(Mutex::new(Vec::new()));
     let recorded = events.clone();
-    let app = photobridge_transport::shared_router_observed(
+    let app = backupduck_transport::shared_router_observed(
         receiver.clone(),
         TOKEN,
         Some(Arc::new(move |event| recorded.lock().unwrap().push(event))),
@@ -749,9 +751,9 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     let (asset, resources) = asset(false);
     let manifest = serde_json::to_vec(&asset).unwrap();
     let response = client
-        .post(format!("{url}/v1/assets"))
+        .post(format!("{url}/v2/assets"))
         .bearer_auth(TOKEN)
-        .header("x-photobridge-request", "123")
+        .header("x-backupduck-request", "123")
         .body(manifest.clone())
         .send()
         .await
@@ -762,20 +764,20 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     let hash = &asset.resources[0].sha256;
     let response = client
         .put(format!(
-            "{url}/v1/assets/{}/resources/{hash}?offset=0&sha256={hash}",
+            "{url}/v2/assets/{}/resources/{hash}?offset=0&sha256={hash}",
             status.asset_id
         ))
         .bearer_auth(TOKEN)
-        .header("x-photobridge-request", "124")
+        .header("x-backupduck-request", "124")
         .body(b.clone())
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
     let response = client
-        .post(format!("{url}/v1/assets/{}/commit", status.asset_id))
+        .post(format!("{url}/v2/assets/{}/commit", status.asset_id))
         .bearer_auth(TOKEN)
-        .header("x-photobridge-request", "private-name@example.com")
+        .header("x-backupduck-request", "private-name@example.com")
         .body("{}")
         .send()
         .await
@@ -794,8 +796,8 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     let before = events.lock().unwrap().len();
     assert_eq!(
         client
-            .post(format!("{url}/v1/assets"))
-            .header("x-photobridge-request", "125")
+            .post(format!("{url}/v2/assets"))
+            .header("x-backupduck-request", "125")
             .body(manifest.clone())
             .send()
             .await

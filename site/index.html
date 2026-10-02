@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>PhotoBridge — Your photos. Beyond one device.</title>
+    <title>BackupDuck — Photo backup to Pixel</title>
     <meta
       name="description"
       content="Back up photos and videos over Wi-Fi from iPhone or Mac to Android and Pixel. Photo libraries, Mac folders, external drives and SD cards. Free for noncommercial use."
@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#ffffff" />
     <meta
       property="og:title"
-      content="PhotoBridge — Your photos. Beyond one device."
+      content="BackupDuck — Photo backup to Pixel"
     />
     <meta
       property="og:description"
@@ -19,7 +19,7 @@
     />
     <meta
       property="og:image"
-      content="https://photobridge-app.vercel.app/icon.png"
+      content="https://backupduck.vercel.app/icon.png"
     />
     <link rel="icon" href="/icon.png" />
     <link rel="stylesheet" href="/style.css" />
@@ -29,13 +29,13 @@
     <header>
       <div class="nav wrap">
         <a class="brand" href="#"
-          ><img src="/icon.png" width="38" height="38" alt="" />PhotoBridge</a
+          ><img src="/icon.png" width="38" height="38" alt="" /><span data-i18n="brand_name">BackupDuck</span></a
         >
         <nav aria-label="Main navigation">
           <a href="#features"
-            ><span data-i18n="nav_features">Why PhotoBridge</span></a
+            ><span data-i18n="nav_features">Why BackupDuck</span></a
           ><a href="#how"><span data-i18n="nav_how">How it works</span></a
-          ><a href="https://github.com/qhhonx/photobridge">GitHub ↗</a
+          ><a href="https://github.com/qhhonx/backupduck">GitHub ↗</a
           ><button id="language" aria-label="Change language">中文</button
           ><a class="button small" href="#download"
             ><span data-i18n="nav_download">Download</span></a
@@ -70,7 +70,7 @@
         </p>
         <div class="hero-actions">
           <a class="button" href="#download"
-            ><span data-i18n="hero_download">Get PhotoBridge</span
+            ><span data-i18n="hero_download">Get BackupDuck</span
             ><svg
               viewBox="0 0 24 24"
               fill="none"
@@ -93,7 +93,7 @@
           <div class="desktop">
             <div class="window-bar">
               <div class="traffic"><i></i><i></i><i></i></div>
-              <span>PhotoBridge</span
+              <span>BackupDuck</span
               ><svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -224,7 +224,7 @@
             </div>
             <div class="phone-content">
               <div class="phone-brand">
-                <img src="/icon.png" width="28" height="28" alt="" />PhotoBridge
+                <img src="/icon.png" width="28" height="28" alt="" />BackupDuck
               </div>
               <div class="receiver-pill">
                 <span class="dot"></span
@@ -488,7 +488,7 @@
               photos and videos. Your source files stay untouched.
             </p>
             <p data-i18n="folders_guide">
-              <a class="text-link" href="https://github.com/qhhonx/photobridge/blob/main/docs/folder-backup.md">Folder backup guide ↗</a>
+              <a class="text-link" href="https://github.com/qhhonx/backupduck/blob/main/docs/folder-backup.md">Folder backup guide ↗</a>
             </p>
           </article>
           <article class="feature quiet">
@@ -533,7 +533,7 @@
             <h3 data-i18n="private_title">Your devices. Your originals.</h3>
             <p data-i18n="private_body">
               Pair by QR code. Transfer on your local network with encryption.
-              No PhotoBridge account or cloud storage in between.
+              No BackupDuck account or cloud storage in between.
             </p>
             <div class="private-route">
               <svg
@@ -630,7 +630,7 @@
         <div class="demo-copy">
           <span class="kicker" data-i18n="demo_kicker">IPHONE → PIXEL · 42 SECONDS</span>
           <h2 id="demo-title" data-i18n="demo_title">See your memories<br />make the move.</h2>
-          <p class="section-copy" data-i18n="demo_body">Pair over Wi-Fi. Bring your library. Keep new photos coming. See how PhotoBridge gives your memories another home.</p>
+          <p class="section-copy" data-i18n="demo_body">Pair over Wi-Fi. Bring your library. Keep new photos coming. See how BackupDuck gives your memories another home.</p>
           <ul class="demo-highlights">
             <li data-i18n="demo_direct">Direct to your Pixel, without a Mac relay.</li>
             <li data-i18n="demo_motion">Photos, videos, Live Photos and bursts.</li>
@@ -640,10 +640,10 @@
           <p class="demo-note" data-i18n="demo_note">Illustrated UI with sample photos. Google Photos handles cloud backup on Pixel. iOS schedules background uploads; installation currently requires a Mac and Xcode.</p>
         </div>
         <figure class="demo-player">
-          <video id="product-demo" controls playsinline preload="none" width="1080" height="1920" poster="/media/demo-en-v1.jpg" aria-label="PhotoBridge product demo">
+          <video id="product-demo" controls playsinline preload="none" width="1080" height="1920" poster="/media/demo-en-v1.jpg" aria-label="BackupDuck product demo">
             <span data-i18n="demo_fallback">Your browser does not support embedded video.</span>
           </video>
-          <figcaption data-i18n="demo_caption">42 seconds · Music and on-screen text · Sample demonstration</figcaption>
+          <figcaption data-i18n="demo_caption">42 seconds · Earlier BackupDuck appearance · Sample demonstration</figcaption>
         </figure>
       </section>
       <section class="section wrap how" id="how">
@@ -673,7 +673,7 @@
             </div>
             <h3 data-i18n="step_network">Join the same Wi-Fi</h3>
             <p data-i18n="step_network_body">
-              Open PhotoBridge on your sender and Android receiver. Start
+              Open BackupDuck on your sender and Android receiver. Start
               receiving on Android.
             </p>
           </article>
@@ -825,7 +825,7 @@
             src="/icon.png"
             width="76"
             height="76"
-            alt="PhotoBridge"
+            alt="BackupDuck"
           />
           <h2 data-i18n="download_title">
             Give your photos<br />a second place to call home.
@@ -859,11 +859,11 @@
             <a
               class="button"
               id="download-mac"
-              href="https://github.com/qhhonx/photobridge/releases"
+              href="https://github.com/qhhonx/backupduck/releases"
               ><span data-i18n="download_releases">View releases</span></a
             >
             <p data-i18n="mac_install" class="small-note">
-              Move to Applications. This beta is not Apple-notarized; allow it
+              Move to Applications. This release candidate is not Apple-notarized; allow it
               in Privacy & Security if prompted. Future updates use Sparkle.
             </p>
           </article>
@@ -888,7 +888,7 @@
             <a
               class="button"
               id="download-android"
-              href="https://github.com/qhhonx/photobridge/releases"
+              href="https://github.com/qhhonx/backupduck/releases"
               ><span data-i18n="download_releases">View releases</span></a
             >
             <p data-i18n="android_install" class="small-note">
@@ -917,7 +917,7 @@
             <p class="requirements">iOS 17+</p>
             <a
               class="button secondary"
-              href="https://github.com/qhhonx/photobridge/blob/main/docs/installation.md"
+              href="https://github.com/qhhonx/backupduck/blob/main/docs/installation.md"
               ><span data-i18n="ios_build">Build with Xcode ↗</span></a
             >
             <p data-i18n="ios_install" class="small-note">
@@ -952,7 +952,7 @@
               For the same folder source and receiver, unchanged files already
               queued or received are skipped. New or changed files are eligible
               for backup. Files added through another source or sent to a new
-              receiver may be backed up separately. PhotoBridge does not modify
+              receiver may be backed up separately. BackupDuck does not modify
               or delete your originals.
             </p>
           </details>
@@ -969,7 +969,7 @@
               Will backup run all night on iPhone?
             </summary>
             <p data-i18n="faq_background_a">
-              PhotoBridge supports background transfers and preparation. iOS
+              BackupDuck supports background transfers and preparation. iOS
               controls when preparation runs, so uninterrupted overnight backup
               is not guaranteed. Avoid force-quitting the app. A running Mac is
               useful for large first imports.
@@ -981,7 +981,7 @@
             </summary>
             <p data-i18n="faq_space_a">
               Storage budgets pause new reception when space is low. Verified
-              gallery copies can replace PhotoBridge’s private staging copies.
+              gallery copies can replace BackupDuck’s private staging copies.
               Experimental Google Photos space management uses its own
               safe-backup confirmation and may need attention if the interface
               changes.
@@ -992,8 +992,8 @@
               Does “received” mean backed up to Google Photos?
             </summary>
             <p data-i18n="faq_cloud_a">
-              No. PhotoBridge verifies delivery to the receiver. Google Photos
-              uploads separately; enable backup for the PhotoBridge folder and
+              No. BackupDuck verifies delivery to the receiver. Google Photos
+              uploads separately; enable backup for the BackupDuck folder and
               confirm cloud completion there.
             </p>
           </details>
@@ -1002,7 +1002,7 @@
               Can this be my only backup?
             </summary>
             <p data-i18n="faq_beta_a">
-              PhotoBridge is an early beta. Keep your original library and
+              BackupDuck is an release candidate. Keep your original library and
               another trusted copy. Try photos, a video and a Live Photo before
               a large import.
             </p>
@@ -1013,15 +1013,15 @@
     <footer class="wrap">
       <div>
         <a class="brand" href="#"
-          ><img src="/icon.png" width="38" height="38" alt="" />PhotoBridge</a
+          ><img src="/icon.png" width="38" height="38" alt="" /><span data-i18n="brand_name">BackupDuck</span></a
         >
         <p data-i18n="footer_note">Keep the moments. Choose the destination.</p>
       </div>
       <div class="footer-links">
-        <a href="https://github.com/qhhonx/photobridge">GitHub ↗</a
-        ><a href="https://github.com/qhhonx/photobridge/issues"
+        <a href="https://github.com/qhhonx/backupduck">GitHub ↗</a
+        ><a href="/privacy">Privacy / 隐私</a><a href="https://github.com/qhhonx/backupduck/issues"
           ><span data-i18n="footer_feedback">Feedback</span></a
-        ><a href="https://github.com/qhhonx/photobridge/blob/main/docs/licensing.md"
+        ><a href="https://github.com/qhhonx/backupduck/blob/main/docs/licensing.md"
           ><span data-i18n="footer_license">License</span></a
         ><small data-i18n="footer_independent"
           >Source available · Free for noncommercial use.</small

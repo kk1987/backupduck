@@ -1,6 +1,6 @@
 import XCTest
 import UIKit
-@testable import PhotoBridge
+@testable import BackupDuck
 
 final class LibraryPresentationTests: XCTestCase {
   func testBurstFramesAcrossPagesStayOneRowAndPreserveIdentity() {

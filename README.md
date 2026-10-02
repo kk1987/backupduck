@@ -1,13 +1,13 @@
-# PhotoBridge
+# BackupDuck · 备份鸭
 
-<img src="assets/AppIcon.png" width="112" alt="PhotoBridge icon">
+<img src="assets/AppIcon.png" width="112" alt="BackupDuck icon">
 
 Back up original photos, videos and supported Live Photos directly from iPhone or
-Mac to your Android receiver. No PhotoBridge account or cloud subscription is
+Mac to your Android receiver. No BackupDuck account or cloud subscription is
 required for local transfers.
 
-[Official website](https://photobridge-app.vercel.app) ·
-[Downloads](https://github.com/qhhonx/photobridge/releases) ·
+[Official website](https://backupduck.vercel.app) ·
+[Downloads](https://github.com/qhhonx/backupduck/releases) ·
 [Installation](docs/installation.md) · [Architecture](docs/architecture.md)
 
 ## License and commercial use
@@ -15,7 +15,7 @@ required for local transfers.
 **Source available. Free for noncommercial use. Commercial rights are reserved.**
 This checkout is offered under the [PolyForm Noncommercial License 1.0.0](LICENSE).
 Commercial use outside the license's permitted purposes requires separate written
-permission from the relevant PhotoBridge copyright holders. This applies to
+permission from the relevant BackupDuck copyright holders. This applies to
 individuals as well as companies, including paid App Store distribution,
 subscriptions, advertising-supported repackaging and paid hosted services.
 
@@ -37,7 +37,7 @@ licensing requests.
 - Signed Sparkle updates on Mac and verified, user-confirmed APK updates on Android.
 - An English/Simplified Chinese website and native interfaces.
 
-**Early beta:** preserve your source library and another trusted backup. Receiver
+**Release candidate:** preserve your source library and another trusted backup. Receiver
 receipt and Google Photos cloud backup are separate states. iOS background work is
 system-scheduled. Experimental Google Photos cleanup may need attention when its
 interface changes. See [validation and limits](docs/native-validation.md).
@@ -47,6 +47,10 @@ iOS 17+ is available from source; there is no App Store/TestFlight release yet.
 Windows, NAS and hosted receivers are not shipped. Native hosts own platform media,
 UI and background execution; the Rust core owns transfer and durable state.
 
+## Brand transition
+
+BackupDuck is the new name of BackupDuck. New platform installs use `app.backupduck` and must be installed manually and paired again. Existing apps and originals are not automatically removed. See [the transition guide](docs/brand-transition.md).
+
 ## Try a local backup
 
 Requires Rust 1.90 (pinned in `rust-toolchain.toml`). Run from this checkout:
@@ -54,15 +58,15 @@ Requires Rust 1.90 (pinned in `rust-toolchain.toml`). Run from this checkout:
 ```sh
 cargo build --workspace --locked
 mkdir -p runtime/source
-cargo run -p photobridge -- init-token runtime/local.token
-cargo run -p photobridge -- serve --root runtime/receiver --token-file runtime/local.token
+cargo run -p backupduck -- init-token runtime/local.token
+cargo run -p backupduck -- serve --root runtime/receiver --token-file runtime/local.token
 ```
 
 In another terminal, put an original `photo.jpg` in `runtime/source`, then run:
 
 ```sh
-cargo run -p photobridge -- manifest --source-id example-photo --file runtime/source/photo.jpg --output runtime/photo.json
-cargo run -p photobridge -- send --server http://127.0.0.1:8484 --token-file runtime/local.token --manifest runtime/photo.json --files runtime/source
+cargo run -p backupduck -- manifest --source-id example-photo --file runtime/source/photo.jpg --output runtime/photo.json
+cargo run -p backupduck -- send --server http://127.0.0.1:8484 --token-file runtime/local.token --manifest runtime/photo.json --files runtime/source
 ```
 
 For a motion asset, add its original paired video with

@@ -309,9 +309,9 @@ private struct ActivityLogReport: Transferable {
     FileRepresentation(exportedContentType: .json) { (_: ActivityLogReport) in
       let data = try await Bridge.call(["op": "activity_log", "receiver": false])
       let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-        "PhotoBridge-diagnostics-" + UUID().uuidString, isDirectory: true)
+        "BackupDuck-diagnostics-" + UUID().uuidString, isDirectory: true)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let url = directory.appendingPathComponent("PhotoBridge-diagnostics.json")
+      let url = directory.appendingPathComponent("BackupDuck-diagnostics.json")
       try data.write(to: url, options: .atomic)
       return SentTransferredFile(url)
     }
@@ -375,7 +375,7 @@ struct ActivityLogView: View {
             Button("settings_done") { dismiss() }.accessibilityIdentifier("activity.done")
           }
           ToolbarItem(placement: .cancellationAction) {
-            ShareLink(item: ActivityLogReport(), preview: SharePreview("PhotoBridge-diagnostics.json")) {
+            ShareLink(item: ActivityLogReport(), preview: SharePreview("BackupDuck-diagnostics.json")) {
               Text("logs_export")
             }.disabled(!journal.loaded).accessibilityIdentifier("activity.export")
           }

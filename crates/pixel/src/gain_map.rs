@@ -7,7 +7,7 @@
 //! iPhone HDR photos decode with a gain map, so their prepared stills take this
 //! form. Packaging must merge into that directory and keep MPF consistent
 //! instead of refusing the preexisting XMP packet.
-use photobridge_core::{Error, Result};
+use backupduck_core::{Error, Result};
 use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 use std::ops::Range;
 

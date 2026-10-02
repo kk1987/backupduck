@@ -1,13 +1,13 @@
 [package]
-name = "photobridge-transport"
+name = "backupduck-transport"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-photobridge-core.workspace = true
-photobridge-store.workspace = true
+backupduck-core.workspace = true
+backupduck-store.workspace = true
 tokio.workspace = true
 axum.workspace = true
 reqwest.workspace = true
@@ -18,4 +18,4 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 reqwest = { workspace = true, features = ["stream"] }
-photobridge-pixel.workspace = true
+backupduck-pixel.workspace = true

@@ -8,11 +8,11 @@ use std::{
 };
 fn call(input: Value) -> Value {
     let input = CString::new(input.to_string()).unwrap();
-    let output = unsafe { photobridge_native::photobridge_call(input.as_ptr()) };
+    let output = unsafe { backupduck_native::backupduck_call(input.as_ptr()) };
     assert!(!output.is_null());
     let envelope: Value =
         unsafe { serde_json::from_slice(CStr::from_ptr(output).to_bytes()).unwrap() };
-    unsafe { photobridge_native::photobridge_free(output) };
+    unsafe { backupduck_native::backupduck_free(output) };
     assert_eq!(envelope["ok"], true, "{envelope}");
     envelope["value"].clone()
 }
@@ -82,14 +82,14 @@ fn stage(root: &Path, phase: &str) {
 }
 #[test]
 fn ten_thousand_sources_resume_after_process_exit_without_duplicate_jobs() {
-    if let Ok(root) = std::env::var("PHOTOBRIDGE_HISTORY_FIXTURE_ROOT") {
+    if let Ok(root) = std::env::var("BACKUPDUCK_HISTORY_FIXTURE_ROOT") {
         stage(
             Path::new(&root),
-            &std::env::var("PHOTOBRIDGE_HISTORY_FIXTURE_PHASE").unwrap(),
+            &std::env::var("BACKUPDUCK_HISTORY_FIXTURE_PHASE").unwrap(),
         );
         return;
     }
-    let root = std::env::temp_dir().join(format!("photobridge-history-ffi-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("backupduck-history-ffi-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     for phase in ["first", "second"] {
         let result = Command::new(std::env::current_exe().unwrap())
@@ -98,8 +98,8 @@ fn ten_thousand_sources_resume_after_process_exit_without_duplicate_jobs() {
                 "ten_thousand_sources_resume_after_process_exit_without_duplicate_jobs",
                 "--nocapture",
             ])
-            .env("PHOTOBRIDGE_HISTORY_FIXTURE_ROOT", &root)
-            .env("PHOTOBRIDGE_HISTORY_FIXTURE_PHASE", phase)
+            .env("BACKUPDUCK_HISTORY_FIXTURE_ROOT", &root)
+            .env("BACKUPDUCK_HISTORY_FIXTURE_PHASE", phase)
             .output()
             .unwrap();
         assert!(

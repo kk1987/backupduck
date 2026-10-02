@@ -14,7 +14,7 @@ A draft or release missing either platform archive/manifests is not offered.
 The Mac feed is cached at the edge for at most 60 seconds, with browser caching
 disabled and no stale response window. Allow that interval after publication.
 
-The production project is `photobridge-app`, connected to this public repository
+The production project is `backupduck`, connected to this public repository
 with `main` as its production branch and `site` as its root directory. Website
 deployment does not require application signing secrets. A documentation-only
 push still deploys the site; application publication skips an unchanged version.
@@ -25,14 +25,14 @@ Repository Actions secrets:
 
 - `SPARKLE_PRIVATE_KEY`: base64 Ed25519 seed for signed Mac updates and feeds.
 - `ANDROID_KEYSTORE_BASE64`: dedicated Android release keystore, base64 encoded.
-- `ANDROID_KEYSTORE_PASSWORD`: password for that keystore, alias `photobridge`.
+- `ANDROID_KEYSTORE_PASSWORD`: password for that keystore. The signing entry is detected automatically; use `ANDROID_KEY_ALIAS` only if the store contains multiple keys.
 
 Never commit these values. Back them up offline: losing the Android key prevents
 updates to existing installations; losing the Sparkle key also breaks updates for
 ad hoc signed Mac installations. Public trust material is in app configuration.
 The Mac package has an ad hoc integrity signature and is not Apple-notarized.
 
-For local release builds, set `PHOTOBRIDGE_RELEASE=1`; local development signing
+For local release builds, set `BACKUPDUCK_RELEASE=1`; local development signing
 identities must not enter public packages. See scripts/package-release.sh and
 scripts/verify-release.py for verification. iOS uses each developer's own team;
 no personal iOS signing material is provided by CI.

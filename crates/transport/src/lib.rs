@@ -13,8 +13,8 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use photobridge_core::*;
-use photobridge_store::Receiver;
+use backupduck_core::*;
+use backupduck_store::Receiver;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -64,7 +64,7 @@ impl IntoResponse for ApiError {
         // Never return local filesystem paths, SQL details or bearer credentials.
         (
             status,
-            [("x-photobridge-reason", code)],
+            [("x-backupduck-reason", code)],
             Json(Problem {
                 code: code.into(),
                 message: code.into(),
@@ -101,13 +101,13 @@ pub fn shared_router_observed(
         observer,
     };
     Ok(Router::new()
-        .route("/v1/capabilities", get(capabilities))
-        .route("/v1/device-profile", post(exchange_device_profile))
-        .route("/v1/assets", post(register))
-        .route("/v1/bundles", post(bundle::receive))
-        .route("/v1/assets/{id}", get(status))
-        .route("/v1/assets/{id}/commit", post(commit))
-        .route("/v1/assets/{id}/resources/{hash}", put(upload))
+        .route("/v2/capabilities", get(capabilities))
+        .route("/v2/device-profile", post(exchange_device_profile))
+        .route("/v2/assets", post(register))
+        .route("/v2/bundles", post(bundle::receive))
+        .route("/v2/assets/{id}", get(status))
+        .route("/v2/assets/{id}/commit", post(commit))
+        .route("/v2/assets/{id}/resources/{hash}", put(upload))
         .layer(DefaultBodyLimit::max(MAX_CHUNK_BYTES))
         .layer(middleware::from_fn_with_state(state.clone(), authorize))
         .with_state(state))
@@ -133,7 +133,7 @@ async fn authorize(
     }
     if let Some(id) = request
         .headers()
-        .get("x-photobridge-sender")
+        .get("x-backupduck-sender")
         .and_then(|h| h.to_str().ok())
     {
         if !valid_digest(id) {
@@ -142,7 +142,7 @@ async fn authorize(
         let id = id.to_string();
         let kind = request
             .headers()
-            .get("x-photobridge-device-type")
+            .get("x-backupduck-device-type")
             .and_then(|h| h.to_str().ok())
             .map(str::to_owned);
         let ip = request
@@ -155,8 +155,8 @@ async fn authorize(
             .map_err(|_| Error::Storage("receiver lock".into()))
             .and_then(|r| {
                 r.observe_sender(&id, ip, kind.as_deref())?;
-                if request.uri().path() != "/v1/device-profile"
-                    && request.uri().path() != "/v1/capabilities"
+                if request.uri().path() != "/v2/device-profile"
+                    && request.uri().path() != "/v2/capabilities"
                 {
                     r.check_sender(&id)?;
                 }
@@ -176,7 +176,7 @@ async fn authorize(
     }
     // Streaming bundles enforce a bounded idle timeout and declared lengths in
     // their reader. A total 60-second limit would abort healthy large uploads.
-    if request.uri().path() == "/v1/bundles" {
+    if request.uri().path() == "/v2/bundles" {
         return next.run(request).await;
     }
     match tokio::time::timeout(Duration::from_secs(60), next.run(request)).await {
@@ -339,7 +339,7 @@ impl Client {
                 409 => Error::Conflict("receiver state changed; query status before retry".into()),
                 507 if response
                     .headers()
-                    .get("x-photobridge-reason")
+                    .get("x-backupduck-reason")
                     .is_some_and(|v| v == "low_space") =>
                 {
                     Error::LowSpace
@@ -354,7 +354,7 @@ impl Client {
     pub async fn capabilities(&self) -> Result<Capabilities> {
         Self::decode(
             self.http
-                .get(format!("{}/v1/capabilities", self.base))
+                .get(format!("{}/v2/capabilities", self.base))
                 .bearer_auth(&self.token)
                 .send()
                 .await
@@ -378,13 +378,13 @@ impl Client {
         profile.validate()?;
         let mut request = self
             .http
-            .post(format!("{}/v1/device-profile", self.base))
+            .post(format!("{}/v2/device-profile", self.base))
             .bearer_auth(&self.token)
             .timeout(Duration::from_secs(5))
             .json(profile)
-            .header("x-photobridge-sender", &profile.id);
+            .header("x-backupduck-sender", &profile.id);
         if let Some(kind) = device_type {
-            request = request.header("x-photobridge-device-type", kind);
+            request = request.header("x-backupduck-device-type", kind);
         }
         let mut response = request.send().await.map_err(network)?;
         if response.status() == StatusCode::NOT_FOUND {
@@ -408,7 +408,7 @@ impl Client {
         asset.validate()?;
         Self::decode(
             self.http
-                .post(format!("{}/v1/assets", self.base))
+                .post(format!("{}/v2/assets", self.base))
                 .bearer_auth(&self.token)
                 .json(asset)
                 .send()
@@ -423,7 +423,7 @@ impl Client {
         }
         Self::decode(
             self.http
-                .get(format!("{}/v1/assets/{id}", self.base))
+                .get(format!("{}/v2/assets/{id}", self.base))
                 .bearer_auth(&self.token)
                 .send()
                 .await
@@ -444,7 +444,7 @@ impl Client {
         let chunk = digest(&bytes);
         Self::decode(
             self.http
-                .put(format!("{}/v1/assets/{id}/resources/{hash}", self.base))
+                .put(format!("{}/v2/assets/{id}/resources/{hash}", self.base))
                 .bearer_auth(&self.token)
                 .query(&[("offset", offset.to_string()), ("sha256", chunk)])
                 .body(bytes)
@@ -460,7 +460,7 @@ impl Client {
         }
         Self::decode(
             self.http
-                .post(format!("{}/v1/assets/{id}/commit", self.base))
+                .post(format!("{}/v2/assets/{id}/commit", self.base))
                 .bearer_auth(&self.token)
                 .send()
                 .await

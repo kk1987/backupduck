@@ -1,4 +1,4 @@
-# PhotoBridge protocol v1
+# BackupDuck protocol v2
 
 Every route requires `Authorization: Bearer <token>`. Assets and responses use
 JSON. Chunks use raw bytes. Maximum chunk size is advertised in capabilities and
@@ -6,11 +6,11 @@ is currently 4 MiB. Maximum manifest size is 64 KiB.
 
 | Method | Path | Meaning |
 | --- | --- | --- |
-| GET | `/v1/capabilities` | Protocol version, chunk bound, supported asset/target capabilities |
-| POST | `/v1/assets` | Validate/register a manifest and return persisted status |
-| GET | `/v1/assets/{id}` | Query resource offsets, receipt and processing state |
-| PUT | `/v1/assets/{id}/resources/{sha256}?offset=N&sha256=CHUNK_HASH` | Upload a verified chunk |
-| POST | `/v1/assets/{id}/commit` | Verify all original resources and atomically acknowledge the asset |
+| GET | `/v2/capabilities` | Protocol version, chunk bound, supported asset/target capabilities |
+| POST | `/v2/assets` | Validate/register a manifest and return persisted status |
+| GET | `/v2/assets/{id}` | Query resource offsets, receipt and processing state |
+| PUT | `/v2/assets/{id}/resources/{sha256}?offset=N&sha256=CHUNK_HASH` | Upload a verified chunk |
+| POST | `/v2/assets/{id}/commit` | Verify all original resources and atomically acknowledge the asset |
 
 Registration is idempotent. A full-file SHA-256 identifies each original resource.
 The `sha256` query parameter is the digest of this request's chunk, not the entire
@@ -40,9 +40,9 @@ cloud backup are separate from transfer receipt; no cloud-proof claim is introdu
 
 ## Optional complete-asset upload
 
-A receiver advertising `bundle_upload: true` accepts `POST /v1/bundles` with
-`Content-Type: application/x-photobridge-bundle`. Missing capability means false.
-The file-backed envelope contains eight bytes `PBRG0001`, a four-byte big-endian
+A receiver advertising `bundle_upload: true` accepts `POST /v2/bundles` with
+`Content-Type: application/x-backupduck-bundle`. Missing capability means false.
+The file-backed envelope contains eight bytes `BDCK0002`, a four-byte big-endian
 manifest length, the UTF-8 JSON manifest, then each resource's original bytes in
 manifest order. Manifest and resource bounds are unchanged. A provided content
 length must exactly match the envelope; trailing or missing bytes prevent commit.

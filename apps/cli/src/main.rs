@@ -1,7 +1,7 @@
+use backupduck_core::*;
+use backupduck_store::Receiver;
+use backupduck_transport::Client;
 use clap::{Parser, Subcommand};
-use photobridge_core::*;
-use photobridge_store::Receiver;
-use photobridge_transport::Client;
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -12,7 +12,7 @@ use std::{
 };
 
 #[derive(Parser)]
-#[command(version, about = "PhotoBridge reference sender and receiver")]
+#[command(version, about = "BackupDuck reference sender and receiver")]
 struct Args {
     #[command(subcommand)]
     command: Command,
@@ -132,10 +132,8 @@ async fn main() -> Result<()> {
             let capacity = capacity_gib
                 .checked_mul(1024 * 1024 * 1024)
                 .ok_or(Error::Capacity)?;
-            let app = photobridge_transport::router(
-                Receiver::open(root, capacity)?,
-                &token(token_file)?,
-            )?;
+            let app =
+                backupduck_transport::router(Receiver::open(root, capacity)?, &token(token_file)?)?;
             let listener = tokio::net::TcpListener::bind(listen).await?;
             println!("Receiver listening on {}", listener.local_addr()?);
             axum_serve(listener, app).await?;

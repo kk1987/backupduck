@@ -76,7 +76,7 @@ impl DesktopPairing {
             .map(|v| format!("{v:02x}"))
             .collect::<String>();
         let invite = DesktopInvite {
-            kind: "photobridge_desktop_pairing".into(),
+            kind: "backupduck_desktop_pairing".into(),
             connection: Pairing {
                 version: PROTOCOL_VERSION,
                 receiver_id: digest(cert.der()),
@@ -172,7 +172,7 @@ async fn accept(
     }
 }
 pub async fn submit(invite: DesktopInvite, pairing: Pairing) -> Result<()> {
-    if invite.kind != "photobridge_desktop_pairing" {
+    if invite.kind != "backupduck_desktop_pairing" {
         return Err(Error::Invalid("desktop pairing code".into()));
     }
     validate_local_endpoint(&invite.connection.endpoint)?;
@@ -211,7 +211,7 @@ mod tests {
     #[tokio::test]
     async fn desktop_exchange_is_pinned_single_use_and_expires() {
         let root =
-            std::env::temp_dir().join(format!("photobridge-pair-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("backupduck-pair-test-{}", std::process::id()));
         let port = std::net::TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()

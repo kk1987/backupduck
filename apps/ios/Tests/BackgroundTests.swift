@@ -2,7 +2,7 @@ import AVFoundation
 import Photos
 import XCTest
 
-@testable import PhotoBridge
+@testable import BackupDuck
 
 @MainActor final class BackgroundTests: XCTestCase {
   func testManualRebackupOnlyBypassesCompletedReceipt() {
@@ -251,12 +251,12 @@ import XCTest
     XCTAssertEqual(model.jobs.first { $0.id == job.id }?.confirmedBytes, 128 * 1024 + 7)
   }
   func testPersistedOldRouteCallbackClassification() throws {
-    let pairing = Pairing(version: 1, receiverID: "known", endpoint: "https://192.168.1.3:8484", certificate: "fixture", token: "fixture")
+    let pairing = Pairing(version: 2, receiverID: "known", endpoint: "https://192.168.1.3:8484", certificate: "fixture", token: "fixture")
     let attempt = NativeAttempt(jobID: 1, generation: 2, receiverID: "known")
     let restored = try JSONDecoder().decode(NativeAttempt.self, from: JSONEncoder().encode(attempt))
-    XCTAssertTrue(BackgroundTransfer.isOldRoute(receiverID: restored.receiverID, originalURL: URL(string: "https://192.168.1.2:8484/v1/assets"), current: pairing))
-    XCTAssertFalse(BackgroundTransfer.isOldRoute(receiverID: "another", originalURL: URL(string: "https://192.168.1.2:8484/v1/assets"), current: pairing))
-    XCTAssertFalse(BackgroundTransfer.isOldRoute(receiverID: "known", originalURL: URL(string: "https://192.168.1.3:8484/v1/assets"), current: pairing))
+    XCTAssertTrue(BackgroundTransfer.isOldRoute(receiverID: restored.receiverID, originalURL: URL(string: "https://192.168.1.2:8484/v2/assets"), current: pairing))
+    XCTAssertFalse(BackgroundTransfer.isOldRoute(receiverID: "another", originalURL: URL(string: "https://192.168.1.2:8484/v2/assets"), current: pairing))
+    XCTAssertFalse(BackgroundTransfer.isOldRoute(receiverID: "known", originalURL: URL(string: "https://192.168.1.3:8484/v2/assets"), current: pairing))
     let legacy = try JSONDecoder().decode(NativeAttempt.self, from: Data("{\"job_id\":1,\"generation\":2}".utf8))
     XCTAssertNil(legacy.receiverID)
   }

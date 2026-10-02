@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: photobridge-release
+  group: backupduck-release
   cancel-in-progress: false
 jobs:
   release:
@@ -41,14 +41,14 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-          PHOTOBRIDGE_RELEASE: '1'
+          BACKUPDUCK_RELEASE: '1'
           ANDROID_BUILD_TASK: assembleRelease
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
           test -n "$SPARKLE_PRIVATE_KEY"
           umask 077
-          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/photobridge.keystore"
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/backupduck.keystore"
           export SPARKLE_KEY_FILE="$RUNNER_TEMP/sparkle.key"
           trap 'rm -f "$ANDROID_KEYSTORE_FILE" "$SPARKLE_KEY_FILE"' EXIT
           python3 -c 'import os,base64; open(os.environ["ANDROID_KEYSTORE_FILE"],"wb").write(base64.b64decode(os.environ["ANDROID_KEYSTORE_BASE64"]))'
@@ -75,10 +75,10 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases-before-publish.json"
           existing=$(python3 -c 'import json,sys; print("yes" if any(r["tag_name"]==sys.argv[1] for r in json.load(open(sys.argv[2]))) else "no")' "$tag" "$RUNNER_TEMP/releases-before-publish.json")
           if [ "$existing" = no ]; then
-            gh release create "$tag" --target "$GITHUB_SHA" --draft --title "PhotoBridge $tag" --notes-file docs/release-notes.md
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --title "BackupDuck $tag" --notes-file docs/release-notes.md
           fi
           gh release upload "$tag" build/release/*.zip build/release/*.apk build/release/appcast.xml build/release/android-update.json build/release/SHA256SUMS --clobber
           case "$tag" in
-            *-beta.*) gh release edit "$tag" --draft=false --prerelease ;;
+            *-alpha.*|*-beta.*|*-rc.*) gh release edit "$tag" --draft=false --prerelease ;;
             *) gh release edit "$tag" --draft=false --latest ;;
           esac

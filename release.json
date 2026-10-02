@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0-beta.38",
-  "build": 42,
-  "website": "https://photobridge-app.vercel.app",
-  "repository": "qhhonx/photobridge",
-  "distribution_repository": "qhhonx/photobridge"
+  "version": "0.2.0-rc.1",
+  "build": 44,
+  "website": "https://backupduck.vercel.app",
+  "repository": "qhhonx/backupduck",
+  "distribution_repository": "qhhonx/backupduck"
 }

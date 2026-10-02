@@ -1,10 +1,10 @@
-use photobridge_core::*;
-use photobridge_store::{catalog::Catalog, devices::DeviceDirectory, Receiver};
+use backupduck_core::*;
+use backupduck_store::{catalog::Catalog, devices::DeviceDirectory, Receiver};
 use std::{collections::BTreeMap, io::Cursor, net::SocketAddr};
 
 #[tokio::test]
 async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
-    let root = std::env::temp_dir().join(format!("photobridge-senders-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("backupduck-senders-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let token = "a".repeat(64);
     let a = DeviceProfile {
@@ -16,7 +16,7 @@ async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
         name: "Mac".into(),
     };
     let receiver = Receiver::open(&root, 1 << 20).unwrap();
-    let router = photobridge_transport::router(receiver, &token).unwrap();
+    let router = backupduck_transport::router(receiver, &token).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let server = tokio::spawn(async move {
@@ -30,10 +30,10 @@ async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
     let http = reqwest::Client::new();
     for (profile, kind) in [(&a, "iPhone"), (&b, "Mac")] {
         let response = http
-            .post(format!("{base}/v1/device-profile"))
+            .post(format!("{base}/v2/device-profile"))
             .bearer_auth(&token)
-            .header("x-photobridge-sender", &profile.id)
-            .header("x-photobridge-device-type", kind)
+            .header("x-backupduck-sender", &profile.id)
+            .header("x-backupduck-device-type", kind)
             .json(profile)
             .send()
             .await
@@ -55,7 +55,7 @@ async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
     );
     let bytes = vec![7u8; 123];
     let asset = Asset {
-        version: 1,
+        version: PROTOCOL_VERSION,
         source_id: "fixture".into(),
         revision: "1".into(),
         kind: AssetKind::Photo,
@@ -74,9 +74,9 @@ async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
     })
     .unwrap();
     let send = |sender: &str| {
-        http.post(format!("{base}/v1/bundles"))
+        http.post(format!("{base}/v2/bundles"))
             .bearer_auth(&token)
-            .header("x-photobridge-sender", sender)
+            .header("x-backupduck-sender", sender)
             .header("content-type", BUNDLE_CONTENT_TYPE)
             .body(body.clone())
     };

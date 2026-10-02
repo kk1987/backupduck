@@ -12,7 +12,7 @@ impl BurstMetadata {
             return Err(Error::Invalid("burst identifier".into()));
         }
         Ok(Self {
-            group_id: digest(format!("photobridge-burst-v1:{identifier}").as_bytes()),
+            group_id: digest(format!("backupduck-burst-v1:{identifier}").as_bytes()),
             primary,
         })
     }

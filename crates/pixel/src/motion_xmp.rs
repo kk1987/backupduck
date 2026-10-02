@@ -1,6 +1,6 @@
 //! Add Motion Photo metadata to an ordinary JPEG's existing XMP packet.
 //! Keep all unrelated XML and the JPEG image bytes unchanged.
-use photobridge_core::{Error, Result};
+use backupduck_core::{Error, Result};
 use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 
 const RDF: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#";

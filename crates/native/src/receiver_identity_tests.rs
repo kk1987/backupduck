@@ -3,7 +3,7 @@ struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "photobridge-relocation-{}-{}",
+            "backupduck-relocation-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn date_order_paginates_ties_unknowns_and_state_changes() {
         let path = std::env::temp_dir().join(format!(
-            "photobridge-sort-{}-{}",
+            "backupduck-sort-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -96,7 +96,7 @@ mod tests {
                 .as_nanos()
         ));
         let mut s = Sender::open(&path).unwrap();
-        let manifest = r#"{"version":1,"source_id":"source","revision":"1","kind":"photo","metadata":{},"resources":[]}"#;
+        let manifest = r#"{"version":2,"source_id":"source","revision":"1","kind":"photo","metadata":{},"resources":[]}"#;
         for id in 1..=207 {
             let mut asset: serde_json::Value = serde_json::from_str(manifest).unwrap();
             if id > 2 {

@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use photobridge_store::catalog::Catalog;
+use backupduck_store::catalog::Catalog;
 use serde::Serialize;
 use std::time::{Duration, Instant};
 
@@ -332,7 +332,7 @@ mod tests {
     #[tokio::test]
     async fn browser_access_requires_phone_code_and_separate_session() {
         let root =
-            std::env::temp_dir().join(format!("photobridge-dashboard-{}", random_hex().unwrap()));
+            std::env::temp_dir().join(format!("backupduck-dashboard-{}", random_hex().unwrap()));
         fs::create_dir_all(root.join("store")).unwrap();
         let receiver = Arc::new(Mutex::new(
             Receiver::open(root.join("store"), 1 << 20).unwrap(),
@@ -492,7 +492,7 @@ mod tests {
     #[tokio::test]
     async fn browser_code_locks_after_five_failures() {
         let root =
-            std::env::temp_dir().join(format!("photobridge-dashboard-{}", random_hex().unwrap()));
+            std::env::temp_dir().join(format!("backupduck-dashboard-{}", random_hex().unwrap()));
         fs::create_dir_all(root.join("store")).unwrap();
         let receiver = Arc::new(Mutex::new(
             Receiver::open(root.join("store"), 1 << 20).unwrap(),

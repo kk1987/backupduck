@@ -1,7 +1,7 @@
 //! Lossless HEIC + QuickTime Live Photo packaging for the Pixel receiver.
 //! Only the HEIF item tables and XMP are rewritten; image and video payloads
 //! are copied byte-for-byte. Unsupported HEIF layouts use the codec fallback.
-use photobridge_core::{BurstMetadata, Error, Result};
+use backupduck_core::{BurstMetadata, Error, Result};
 use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 use std::{
     fs::{self, File, OpenOptions},
