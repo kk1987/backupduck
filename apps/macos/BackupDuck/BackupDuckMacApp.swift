@@ -11,7 +11,7 @@ import SwiftUI
     Window("brand_name", id: "main") {
       MacWorkspace(model: model, library: library)
         .frame(minWidth: 900, minHeight: 620)
-        .task { await model.open(); await AppUpdater.shared.start() }
+        .task { SleepAssertion.shared.bind(model); await model.open(); await AppUpdater.shared.start() }
         .task { await library.open() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
           Task { await library.open() }

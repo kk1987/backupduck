@@ -326,6 +326,7 @@
 "menu_open" = "Open BackupDuck";
 "menu_quit" = "Quit BackupDuck";
 "menu_backup_ready" = "Ready to back up";
+"menu_preventing_sleep" = "Preventing sleep while backing up";
 
 "task_status_count" = "%d items";
 "task_loaded_count" = "%d loaded. Load more to see the remaining tasks.";
@@ -546,6 +547,7 @@
 "mac_all_sources" = "All sources";
 "mac_global_pause" = "Pause all backups";
 "mac_global_pause_note" = "Pauses backups and transfers from System Library and folders. Folders can still scan; resume to continue scheduled work.";
+"mac_sleep_note" = "While work is pending, BackupDuck keeps the Mac awake with a system activity assertion. Closing the lid on battery still sleeps the Mac; keep it on power for long runs.";
 "mac_pair_first" = "Pair a receiver first.";
 "mac_transfer_concurrency_note" = "System Library and folders share 1–4 transfer slots. Reducing concurrency lets active tasks finish.";
 "mac_storage_cache_description" = "System Library and folders share a staging cache for temporary copies during preparation and transfer. This setting does not affect receiver storage.";

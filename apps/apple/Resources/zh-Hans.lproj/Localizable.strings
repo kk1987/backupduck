@@ -326,6 +326,7 @@
 "menu_open" = "打开 备份鸭";
 "menu_quit" = "退出 备份鸭";
 "menu_backup_ready" = "备份已就绪";
+"menu_preventing_sleep" = "备份期间阻止睡眠";
 
 "task_status_count" = "共 %d 项";
 "task_loaded_count" = "已加载 %d 项，继续加载可查看其余任务";
@@ -546,6 +547,7 @@
 "mac_all_sources" = "所有来源";
 "mac_global_pause" = "暂停全部备份";
 "mac_global_pause_note" = "暂停系统图库和文件夹的备份及传输。文件夹仍可扫描；恢复后继续已安排的任务。";
+"mac_sleep_note" = "有待处理任务时，备份鸭会通过系统活动声明阻止 Mac 空闲睡眠。电池供电时合盖仍会睡眠；长时间运行请接通电源。";
 "mac_pair_first" = "请先配对接收设备。";
 "mac_transfer_concurrency_note" = "系统图库和文件夹共享 1–4 个传输名额。减少并发时，已开始的任务继续完成。";
 "mac_storage_cache_description" = "系统图库和文件夹共用中转缓存。准备和传输的临时副本占用此空间，设置不影响接收设备。";

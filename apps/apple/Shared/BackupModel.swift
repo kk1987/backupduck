@@ -130,6 +130,14 @@ enum Bridge {
       }
     }
   #endif
+  /// True while unattended work is pending: preparation, discovery, a library
+  /// scan or queued transfers. Hosts use it to hold a sleep assertion.
+  var transferActive: Bool {
+    guard ready, !paused, pairing != nil else { return false }
+    return importing || pendingImports > 0 || discoveryPending > 0
+      || historicalImport?.state == "scanning"
+      || summary.running + summary.queued + summary.waiting > 0
+  }
   @Published var importingSourceID: String?
   @Published var exportProgress: Double?
   @Published var storage: StorageSnapshot?

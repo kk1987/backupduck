@@ -55,6 +55,7 @@ struct MacPreferences: View {
             set: { value in Task { await model.setPaused(value) } }))
             .disabled(!model.ready || model.pairing == nil)
           Text("mac_global_pause_note").foregroundStyle(.secondary)
+          Text("mac_sleep_note").foregroundStyle(.secondary)
         }
         TransferConcurrencySettings(model: model)
         Section("list_display_settings") {
