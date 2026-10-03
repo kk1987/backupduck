@@ -31,6 +31,10 @@ internal suspend fun Instrumentation.checkRelayRetention(root: File, photo: File
         check(MediaPublisher.publish(targetContext,item)==copy)
         NativeBridge.request(JSONObject().put("op","gallery_publication").put("id",id).put("copy",copy.json()))
     }
+    // Recorded copies carry the cloud lookup digest into the user's receipt export.
+    val receipt=GalleryReceiptExport.create(targetContext,receiverRoot).getJSONArray("items")
+    val exported=(0 until receipt.length()).map(receipt::getJSONObject).associateBy { it.getString("id") }
+    check(ids.zip(copies).all { (id,copy) -> copy.sha1!=null && exported[id]?.optString("sha1")==copy.sha1 && exported.getValue(id).getString("cloud_state")=="pending" }) { "receipt_sha1_missing" }
     fun history() = (NativeBridge.request(JSONObject().put("op","receiver_history").put("root",receiverRoot).put("state","all").put("kind","all")) as JSONObject).getJSONArray("items")
     fun released(id:String): Boolean { val h=history(); return (0 until h.length()).map(h::getJSONObject).first{it.getString("id")==id}.getBoolean("originals_released") }
     check(ids.none(::released)) { "disabled_relay_removed_originals" }

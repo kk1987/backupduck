@@ -1,6 +1,7 @@
 //! Durable local receiver storage. One writer owns the root; resources are
 //! content-addressed, and an asset is received only after every resource verifies.
 pub mod catalog;
+pub mod cloud;
 pub mod devices;
 pub mod retention;
 pub mod usage;
@@ -123,6 +124,26 @@ impl Receiver {
         if !columns.iter().any(|c| c == "published_at_ms") {
             conn.execute("ALTER TABLE assets ADD COLUMN published_at_ms INTEGER", [])
                 .map_err(db)?;
+        }
+        // Cloud verification is reported by an external auditor; release
+        // columns are reserved for a later verified gallery-copy cleanup.
+        for (name, definition) in [
+            ("cloud_state", "TEXT NOT NULL DEFAULT 'unknown'"),
+            ("cloud_checked_at_ms", "INTEGER"),
+            ("cloud_checks", "INTEGER NOT NULL DEFAULT 0"),
+            ("cloud_media_key", "TEXT"),
+            ("cloud_device_model", "TEXT"),
+            ("gallery_released", "INTEGER NOT NULL DEFAULT 0"),
+            ("gallery_released_at_ms", "INTEGER"),
+            ("gallery_release_reason", "TEXT"),
+        ] {
+            if !columns.iter().any(|c| c == name) {
+                conn.execute(
+                    &format!("ALTER TABLE assets ADD COLUMN {name} {definition}"),
+                    [],
+                )
+                .map_err(db)?;
+            }
         }
         let mut receiver = Self {
             root,
@@ -301,6 +322,9 @@ impl Receiver {
         let (total, received, published, failed, waiting): (i64,i64,i64,i64,i64) = self.conn.query_row(
             "SELECT COUNT(*),COALESCE(SUM(received),0),COALESCE(SUM(processing='complete'),0),COALESCE(SUM(processing='failed'),0),COALESCE(SUM(received=1 AND processing IN ('pending','not_requested')),0) FROM assets", [],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(db)?;
+        let (cloud_verified, cloud_quota, cloud_missing, gallery_released): (i64, i64, i64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(cloud_state='verified'),0),COALESCE(SUM(cloud_state='verified_counts_against_quota'),0),COALESCE(SUM(cloud_state='missing'),0),COALESCE(SUM(gallery_released),0) FROM assets", [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).map_err(db)?;
         let reserved: i64 = self
             .conn
             .query_row("SELECT COALESCE(SUM(size),0) FROM blobs", [], |r| r.get(0))
@@ -323,7 +347,7 @@ impl Receiver {
             items.push(serde_json::json!({"id":id,"filename":asset.resources[0].filename,"kind":asset.kind,"total_bytes":bytes,"confirmed_bytes":confirmed,"receipt":status.receipt,"processing":status.processing,"originals_released":self.originals_released(&id)?}));
         }
         Ok(
-            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"waiting":waiting,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"recent":items}),
+            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"waiting":waiting,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"cloud_verified":cloud_verified,"cloud_quota":cloud_quota,"cloud_missing":cloud_missing,"gallery_released":gallery_released,"recent":items}),
         )
     }
     pub fn register(&mut self, asset: Asset) -> Result<AssetStatus> {
@@ -473,12 +497,12 @@ impl Receiver {
     }
     pub fn status(&self, id: &str) -> Result<AssetStatus> {
         let asset = self.asset(id)?;
-        let (received, processing, released, processing_error): (bool, String, bool, Option<String>) = self
+        let (received, processing, released, processing_error, cloud_state): (bool, String, bool, Option<String>, String) = self
             .conn
             .query_row(
-                "SELECT received,processing,originals_released,processing_error FROM assets WHERE id=?1",
+                "SELECT received,processing,originals_released,processing_error,cloud_state FROM assets WHERE id=?1",
                 [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .map_err(db)?;
         let processing = match processing.as_str() {
@@ -497,6 +521,7 @@ impl Receiver {
             },
             processing,
             processing_error,
+            cloud_state: Some(cloud_state),
             resources: asset
                 .resources
                 .iter()

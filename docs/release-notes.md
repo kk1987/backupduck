@@ -3,6 +3,7 @@
 - Pixel gallery copies keep their original Apple Photos filenames, such as `IMG_1234.HEIC`, instead of `BD_<date>_<id>` names. The extension follows the saved format, Motion Photos end in `_MP`, and each burst frame keeps its own name. Taken names get ` (1)` through ` (20)` before falling back to the dated `BD_` name. Existing gallery copies are not renamed.
 - The capture-date audit script accepts the Pixel gallery receipt export (`--receipt-json`) to match original filenames to received assets.
 - HEIC burst frames are published on Pixel as HEIC without re-encoding, keeping HDR gain maps and metadata, e.g. `IMG_1234.HEIC`. Only the burst markers are added to the primary XMP. A new receiver setting, "Convert HEIC bursts to JPEG" (off by default), restores the previous JPEG copies; unsupported HEIC layouts still fall back to JPEG. Google Photos cloud grouping of HEIC bursts is unverified.
+- The Pixel receiver records a SHA-1 of each gallery copy and tracks a cloud verification state for it, reported by a future Mac auditor over two new authenticated routes. Existing gallery copies gain the SHA-1 in the background. The receipt export includes `sha1` and `cloud_state`. Nothing is deleted based on this state yet.
 
 # RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)
 

@@ -23,6 +23,12 @@ impl SenderHost {
             .map_err(lock)?
             .set_bundle_upload(receiver, enabled)
     }
+    pub fn set_cloud_audit(&self, receiver: &str, enabled: bool) -> Result<()> {
+        self.sender
+            .lock()
+            .map_err(lock)?
+            .set_cloud_audit(receiver, enabled)
+    }
     fn request_file(&self, a: &Attempt) -> PathBuf {
         self.request_root
             .join(format!("{}-{}.body", a.job_id, a.generation))

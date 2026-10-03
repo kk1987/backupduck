@@ -4,6 +4,8 @@ mod bundle;
 pub use bundle::{bundle_size, write_bundle, BUNDLE_CONTENT_TYPE, BUNDLE_MAGIC};
 mod burst;
 pub use burst::BurstMetadata;
+mod cloud;
+pub use cloud::*;
 mod device;
 pub use device::DeviceProfile;
 use serde::{Deserialize, Serialize};
@@ -187,6 +189,9 @@ pub struct AssetStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub processing_error: Option<String>,
     pub resources: Vec<ResourceStatus>,
+    /// Gallery-copy cloud verification state. Older receivers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_state: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Capabilities {
@@ -196,6 +201,9 @@ pub struct Capabilities {
     pub target_processing: Vec<String>,
     #[serde(default)]
     pub bundle_upload: bool,
+    /// `/v2/publications` and `/v2/cloud-observations` are available.
+    #[serde(default)]
+    pub cloud_audit: bool,
 }
 impl Default for Capabilities {
     fn default() -> Self {
@@ -205,6 +213,7 @@ impl Default for Capabilities {
             motion_assets: true,
             target_processing: vec![],
             bundle_upload: true,
+            cloud_audit: true,
         }
     }
 }

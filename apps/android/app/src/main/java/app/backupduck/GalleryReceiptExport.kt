@@ -18,8 +18,13 @@ internal object GalleryReceiptExport {
         val previousNames = context.getSharedPreferences("cloud_audit_names", Context.MODE_PRIVATE)
         val backfill = previousNames.edit()
         SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            // The store adds cloud columns when the receiver next opens it.
+            val hasCloud = db.rawQuery("SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='cloud_state')", null).use {
+                it.moveToFirst() && it.getInt(0) == 1
+            }
+            val cloudColumn = if (hasCloud) "a.cloud_state" else "'unknown'"
             db.rawQuery(
-                "SELECT a.id,a.manifest,a.published_at_ms,g.copy FROM assets a " +
+                "SELECT a.id,a.manifest,a.published_at_ms,g.copy,$cloudColumn FROM assets a " +
                     "LEFT JOIN gallery_copies g ON g.asset_id=a.id " +
                     "WHERE a.received=1 AND a.processing='complete' ORDER BY a.rowid",
                 null
@@ -38,10 +43,13 @@ internal object GalleryReceiptExport {
                     val size = copy.getLong("size")
                     val hash = copy.getString("sha256")
                     check(size > 0 && hash.matches(Regex("[0-9a-f]{64}"))) { "invalid_publication_evidence" }
+                    val sha1 = copy.optString("sha1").takeIf(String::isNotEmpty)
+                    check(sha1?.matches(Regex("[0-9a-f]{40}")) != false) { "invalid_publication_evidence" }
                     val kind = JSONObject(rows.getString(1)).getString("kind")
                     val item = JSONObject().put("id", id).put("name", name).put("size", size)
-                        .put("sha256", hash).put("kind", kind)
+                        .put("sha256", hash).put("sha1", sha1 ?: JSONObject.NULL).put("kind", kind)
                         .put("published_at_ms", if (rows.isNull(2)) JSONObject.NULL else rows.getLong(2))
+                        .put("cloud_state", rows.getString(4))
                     entries.put(item)
                     if (copy.optString("display_name").isBlank()) backfill.putString(id, name)
                 }

@@ -11,6 +11,8 @@ is currently 4 MiB. Maximum manifest size is 64 KiB.
 | GET | `/v2/assets/{id}` | Query resource offsets, receipt and processing state |
 | PUT | `/v2/assets/{id}/resources/{sha256}?offset=N&sha256=CHUNK_HASH` | Upload a verified chunk |
 | POST | `/v2/assets/{id}/commit` | Verify all original resources and atomically acknowledge the asset |
+| GET | `/v2/publications?cloud=due\|all&after=ID&limit=N` | List published gallery copies for a cloud auditor (`cloud_audit`) |
+| POST | `/v2/cloud-observations` | Record cloud auditor verdicts for gallery copies (`cloud_audit`) |
 
 Registration is idempotent. A full-file SHA-256 identifies each original resource.
 The `sha256` query parameter is the digest of this request's chunk, not the entire
@@ -23,8 +25,8 @@ After an HTTP error the caller must not infer that an operation did not happen.
 
 Receipt statuses are `receiving` and `received`. Processing statuses are
 `not_requested`, `pending`, `complete`, and `failed`. Processing completion has no
-implied Google Photos cloud meaning. No deletion or cloud-verification endpoint
-exists.
+implied Google Photos cloud meaning. No deletion endpoint exists. Asset status may
+include `cloud_state`; older receivers omit it.
 
 Typical errors: 400 invalid input, 401 missing/wrong authentication, 404 unknown
 asset/resource, 409 conflict/incomplete asset, 413 oversized request, 422 integrity
@@ -60,3 +62,36 @@ sequence. When the additional envelope would exceed the sender's staging budget
 or free-space reserve, it uses the original bounded chunk path. No extra background
 execution entitlement is implied; actual locked-device scheduling remains subject
 to the operating system.
+
+## Cloud verification
+
+A receiver advertising `cloud_audit: true` lets an external auditor check whether
+published gallery copies reached the cloud. Missing capability means false. The
+receiver never contacts a cloud service; it records verdicts it is given. Gallery
+evidence carries the SHA-1 of the gallery-copy bytes, which cloud media lookups
+use, beside the SHA-256. Copies published before SHA-1 evidence existed are
+re-read on the receiver and gain it later.
+
+`GET /v2/publications?cloud=due&after=ID&limit=N` returns
+`{"items":[{asset_id,sha1,sha256,size,display_name,kind,published_at_ms,cloud_state,cloud_checks}],"next":ID|null}`
+in asset ID order. `limit` is 1–100 (default 100); `after` is an asset ID from a
+previous `next`, which is null once a page is not full. `due` lists published
+copies in state `pending` or `verified_counts_against_quota` that are at least ten
+minutes old and whose last lookup is older than ten minutes doubled per previous
+check, capped at one day. `cloud=all` lists every published copy with SHA-1
+evidence, regardless of state or timing.
+
+`POST /v2/cloud-observations` takes at most 100 observations in at most 64 KiB:
+`{"observations":[{"asset_id":ID,"sha1":HEX,"result":"free"|"counts_against_quota"|"not_found","media_key":S?,"device_model":S?}]}`.
+Optional strings are at most 64 bytes without control characters. Malformed input
+returns 400. An observation is rejected, not applied, when the asset is unknown or
+unpublished, or its SHA-1 differs from the stored copy (a stale verdict). `free`
+sets `verified`; `counts_against_quota` sets `verified_counts_against_quota`;
+`not_found` counts a check and sets `missing` once the copy was published more
+than seven days ago. Quota and missing copies can still become `verified`;
+`verified` never changes again. The reply counts resulting states:
+`{"verified":N,"quota":N,"still_pending":N,"missing":N,"rejected":N}`.
+
+Cloud states are `unknown` (no SHA-1 evidence yet), `pending`, `verified`,
+`verified_counts_against_quota` and `missing`. A verdict is the auditor's report,
+not a receiver-side proof, and nothing is deleted because of it.

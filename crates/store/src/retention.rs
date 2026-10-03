@@ -11,9 +11,24 @@ pub struct GalleryCopy {
     /// The exact MediaStore display name chosen at publication. Older receipts omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// SHA-1 of the same bytes, the digest cloud lookups use. Older receipts omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha1: Option<String>,
 }
 impl GalleryCopy {
-    fn validate(&self) -> Result<()> {
+    /// Compare stored evidence with a fresh proof. Stored evidence without
+    /// SHA-1 predates it and accepts any fresh SHA-1 of the same bytes.
+    pub fn matches(&self, fresh: &GalleryCopy) -> bool {
+        self.locator == fresh.locator
+            && self.sha256 == fresh.sha256
+            && self.size == fresh.size
+            && self.display_name == fresh.display_name
+            && self
+                .sha1
+                .as_ref()
+                .is_none_or(|sha1| fresh.sha1.as_ref() == Some(sha1))
+    }
+    pub fn validate(&self) -> Result<()> {
         if self.locator.is_empty()
             || self.locator.len() > 2048
             || self.locator.chars().any(char::is_control)
@@ -26,6 +41,7 @@ impl GalleryCopy {
                     || name.contains(['/', '\\'])
                     || name.chars().any(char::is_control)
             })
+            || self.sha1.as_deref().is_some_and(|sha1| !valid_sha1(sha1))
         {
             return Err(Error::Invalid("gallery copy".into()));
         }
@@ -88,7 +104,7 @@ impl Receiver {
         if !eligible {
             return Err(Error::Integrity);
         }
-        if self.gallery_copy(id)?.is_some_and(|old| old != *copy) {
+        if self.gallery_copy(id)?.is_some_and(|old| !old.matches(copy)) {
             return Err(Error::Integrity);
         }
         // Only the host's owned pending item may be replaced. Complete copies
@@ -123,12 +139,12 @@ impl Receiver {
         if !received {
             return Err(Error::Integrity);
         }
-        if self.gallery_copy(id)?.is_some_and(|old| old != *copy) {
+        if self.gallery_copy(id)?.is_some_and(|old| !old.matches(copy)) {
             return Err(Error::Conflict("gallery copy changed".into()));
         }
         if self
             .expected_gallery_copy(id)?
-            .is_some_and(|old| old != *copy)
+            .is_some_and(|old| !old.matches(copy))
         {
             return Err(Error::Integrity);
         }
@@ -145,7 +161,29 @@ impl Receiver {
             .map_err(db)?;
         tx.execute("UPDATE assets SET processing='complete',published_at_ms=COALESCE(published_at_ms,?2) WHERE id=?1", params![id, now_ms()?])
             .map_err(db)?;
+        if copy.sha1.is_some() {
+            add_sha1(&tx, id, copy)?;
+        }
         tx.commit().map_err(db)
+    }
+    /// Add SHA-1 to older evidence after the host freshly re-read the copy.
+    /// Returns whether stored evidence changed; repeating it is harmless.
+    pub fn backfill_gallery_sha1(&mut self, id: &str, fresh: &GalleryCopy) -> Result<bool> {
+        fresh.validate()?;
+        if fresh.sha1.is_none() {
+            return Err(Error::Invalid("gallery copy sha1".into()));
+        }
+        let stored = self.gallery_copy(id)?.ok_or(Error::NotFound)?;
+        if !stored.matches(fresh) {
+            return Err(Error::Integrity);
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db)?;
+        let changed = add_sha1(&tx, id, fresh)?;
+        tx.commit().map_err(db)?;
+        Ok(changed)
     }
     /// Independent opt-in relay policy; never pass gallery evidence to archive
     /// reclamation. The fresh proof must exactly match recorded delivery bytes.
@@ -159,7 +197,10 @@ impl Receiver {
             return Err(Error::Conflict("relay disabled".into()));
         }
         verified.validate()?;
-        if self.gallery_copy(id)?.as_ref() != Some(verified) {
+        if !self
+            .gallery_copy(id)?
+            .is_some_and(|stored| stored.matches(verified))
+        {
             return Err(Error::Integrity);
         }
         let eligible: bool = self
@@ -177,13 +218,15 @@ impl Receiver {
         self.conn.execute("UPDATE assets SET originals_released=1,release_reason='gallery' WHERE id=?1 AND originals_released=0",[id]).map_err(db)?;
         self.reclaim_unreferenced()
     }
-    pub fn gallery_candidates(&self, after: &str) -> Result<Vec<GalleryCandidate>> {
+    /// Relay candidates when `relay` is on, plus confirmed copies whose
+    /// evidence predates SHA-1 and still needs a fresh read to add it.
+    pub fn gallery_candidates(&self, after: &str, relay: bool) -> Result<Vec<GalleryCandidate>> {
         if !after.is_empty() && !valid_digest(after) {
             return Err(Error::Invalid("gallery cursor".into()));
         }
-        let mut query = self.conn.prepare("SELECT id FROM assets WHERE received=1 AND processing='complete' AND originals_released=0 AND id>?1 ORDER BY id LIMIT 4").map_err(db)?;
+        let mut query = self.conn.prepare("SELECT id FROM assets WHERE received=1 AND processing='complete' AND id>?1 AND ((?2 AND originals_released=0) OR (cloud_state='unknown' AND EXISTS(SELECT 1 FROM gallery_copies g WHERE g.asset_id=assets.id AND json_extract(g.copy,'$.sha1') IS NULL))) ORDER BY id LIMIT 4").map_err(db)?;
         let ids = query
-            .query_map([after], |r| r.get::<_, String>(0))
+            .query_map(params![after, relay], |r| r.get::<_, String>(0))
             .map_err(db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(db)?;
@@ -211,4 +254,20 @@ impl Receiver {
             })
             .collect()
     }
+}
+
+/// Store a matching fresh copy's SHA-1 over older evidence and queue it for audit.
+fn add_sha1(tx: &rusqlite::Transaction, id: &str, fresh: &GalleryCopy) -> Result<bool> {
+    let changed = tx
+        .execute(
+            "UPDATE gallery_copies SET copy=?2 WHERE asset_id=?1 AND json_extract(copy,'$.sha1') IS NULL",
+            params![id, serde_json::to_string(fresh)?],
+        )
+        .map_err(db)?;
+    tx.execute(
+        "UPDATE assets SET cloud_state='pending' WHERE id=?1 AND cloud_state='unknown'",
+        [id],
+    )
+    .map_err(db)?;
+    Ok(changed > 0)
 }
