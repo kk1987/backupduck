@@ -278,6 +278,9 @@
 "rebackup_edited_help" = "Off by default: once a photo is backed up, later edits to it are not uploaded again, even when you check existing photos again. BackupDuck backs up original files, so with this on an edited photo is checked again and uploaded as a new copy only if its original file changed. To force another copy, select the photo and use \"Back up already received items again\".";
 "include_hidden_photos" = "Include Hidden Photos";
 "include_hidden_photos_explanation" = "On by default, so the Hidden album is backed up with the rest of the library. Turned off, hidden photos and videos are not backed up. A scan already running keeps the photos it found when it started; after changing this, use \"Check existing photos again\".";
+"hidden_photos_visible_count" = "Hidden photos visible to BackupDuck: %d";
+"hidden_photos_locked_warning_mac" = "If Photos protects the Hidden album with Touch ID or a password, macOS hides those photos from all apps. Turn that protection off in Photos > Settings > General for the duration of the migration. The count can take a while to update after that; relaunching BackupDuck shows it right away.";
+"hidden_photos_locked_warning_ios" = "If Photos protects the Hidden album with Face ID, Touch ID or a passcode, iOS hides those photos from all apps. Turn that protection off in Settings > Photos for the duration of the migration. The count can take a while to update after that; relaunching BackupDuck shows it right away.";
 "error_history_snapshot_unavailable" = "This scan's saved photo list is unavailable. Start a new scan to include the current library; already queued transfers remain.";
 "history_operation_failed" = "The library scan could not continue. Your progress is saved; try again.";
 "event_history_scan_started" = "Existing-library scan started";

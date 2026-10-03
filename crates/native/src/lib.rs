@@ -38,7 +38,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock,
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -168,7 +168,30 @@ pub struct ReceiverHost {
     maintenance: Arc<Mutex<maintenance::Maintenance>>,
     handle: axum_server::Handle,
     task: tokio::task::JoinHandle<()>,
+    stopping: Arc<AtomicBool>,
+    listener_lost: Arc<AtomicBool>,
     dashboard: Option<dashboard::DashboardHost>,
+}
+/// Bare TCP connect to the receiver's own socket. It sends no HTTP request,
+/// so the transport observer never sees it.
+struct ListenerProbe {
+    listen: SocketAddr,
+    maintenance: Arc<Mutex<maintenance::Maintenance>>,
+    lost: Arc<AtomicBool>,
+}
+impl ListenerProbe {
+    const TIMEOUT: Duration = Duration::from_millis(1500);
+    fn listening(&self) -> bool {
+        let listening = std::net::TcpStream::connect_timeout(&self.listen, Self::TIMEOUT).is_ok();
+        if listening {
+            self.lost.store(false, Ordering::Relaxed);
+        } else if !self.lost.swap(true, Ordering::Relaxed) {
+            if let Ok(log) = self.maintenance.lock() {
+                let _ = log.log("receiver_listener_lost", None, None);
+            }
+        }
+        listening
+    }
 }
 impl ReceiverHost {
     pub async fn start(root: &Path, addr: SocketAddr, capacity: u64) -> Result<Self> {
@@ -234,10 +257,27 @@ impl ReceiverHost {
         listener.set_nonblocking(true)?;
         let handle = axum_server::Handle::new();
         let server = axum_server::from_tcp_rustls(listener, config).handle(handle.clone());
+        let stopping = Arc::new(AtomicBool::new(false));
+        let stopped_log = maintenance.clone();
+        let stopped_flag = stopping.clone();
         let task = tokio::spawn(async move {
-            let _ = server
+            let result = server
                 .serve(router.into_make_service_with_connect_info::<std::net::SocketAddr>())
                 .await;
+            if stopped_flag.load(Ordering::Relaxed) {
+                return;
+            }
+            // Only the OS error number is kept; error text can carry addresses.
+            let context = maintenance::EventContext {
+                system_error: result
+                    .err()
+                    .and_then(|error| error.raw_os_error())
+                    .map(i64::from),
+                ..Default::default()
+            };
+            if let Ok(log) = stopped_log.lock() {
+                let _ = log.log_context("receiver_server_stopped", None, None, Some(&context));
+            }
         });
         Ok(Self {
             root: root.into(),
@@ -247,6 +287,8 @@ impl ReceiverHost {
             maintenance,
             handle,
             task,
+            stopping,
+            listener_lost: Arc::new(AtomicBool::new(false)),
             dashboard: None,
         })
     }
@@ -267,12 +309,27 @@ impl ReceiverHost {
             .map(dashboard::DashboardHost::info)
             .ok_or(Error::NotFound)
     }
+    /// The server task is alive and its socket accepts TCP connections.
     pub fn healthy(&self) -> bool {
-        !self.task.is_finished()
+        !self.task.is_finished() && self.probe().listening()
+    }
+    fn probe(&self) -> ListenerProbe {
+        ListenerProbe {
+            listen: self.listen,
+            maintenance: self.maintenance.clone(),
+            lost: self.listener_lost.clone(),
+        }
+    }
+    /// Stops the listener while the host stays registered, as an unexpected
+    /// server exit would.
+    #[doc(hidden)]
+    pub fn close_listener_for_test(&self) {
+        self.handle.shutdown();
     }
 }
 impl Drop for ReceiverHost {
     fn drop(&mut self) {
+        self.stopping.store(true, Ordering::Relaxed);
         self.dashboard = None;
         self.handle.shutdown();
         self.task.abort();
@@ -1864,8 +1921,15 @@ fn dispatch(command: Command) -> Result<Value> {
             result
         }
         Command::ReceiverStatus => {
-            let h = HOSTS.lock().map_err(lock)?;
-            Ok(json!({"running":h.receiver.as_ref().is_some_and(|r|r.healthy())}))
+            // Probe outside the HOSTS lock; a connect can take up to its timeout.
+            let probe = HOSTS
+                .lock()
+                .map_err(lock)?
+                .receiver
+                .as_ref()
+                .filter(|r| !r.task.is_finished())
+                .map(ReceiverHost::probe);
+            Ok(json!({"running":probe.is_some_and(|p|p.listening())}))
         }
         Command::Publications { after } => {
             let h = HOSTS.lock().map_err(lock)?;

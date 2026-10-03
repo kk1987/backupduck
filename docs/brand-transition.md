@@ -17,8 +17,9 @@ Stop backup and receiving in the old apps before starting the new pair, so two
 independent setups do not run simultaneously. A new history may resend photos;
 Google Photos duplicate handling is separate and is not guaranteed by this app.
 
-On Pixel, gallery copies newly created by BackupDuck use its own folder. Enable
-backup for that folder in Google Photos and verify cloud results separately.
+On Pixel, gallery copies newly created by BackupDuck use its own folder. Google
+Photos may back it up together with Camera; if it does not, enable backup for that
+folder in Google Photos. Verify cloud results separately.
 Accessibility-based space management, if used, needs permission for the new app.
 Existing PhotoBridge gallery and cloud copies are not renamed or modified.
 
@@ -28,7 +29,8 @@ Existing PhotoBridge gallery and cloud copies are not renamed or modified.
 授予权限并配对；不会自动迁移旧版的配对、设置和传输记录，也不会自动卸载
 旧版或删除照片。请先暂停旧版的备份与接收，再测试新的一组设备。
 
-Pixel 的 Google 相册需要为新版保存文件夹开启备份；设备“已接收”或“已保存”
+Pixel 的 Google 相册可能会将新版保存文件夹与“相机”一起备份；如未备份，请为它
+开启备份。设备“已接收”或“已保存”
 不代表已经上传云端。请先核对小批量照片、实况、连拍和视频，再继续大量备份。
 
 ## Coordinated release candidate

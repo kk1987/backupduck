@@ -21,7 +21,7 @@
 <string name="receiver_published">已向设备图库发布 %1$d 项</string>
 <string name="receiver_error">未能完成操作：%1$s</string>
 <string name="receiver_pair_instruction">使用 iPhone 上的 备份鸭 扫描。此二维码授予接收端访问权限，请仅用于自己的设备。</string>
-<string name="receiver_cloud_note">“已接收”表示文件已在本机校验。请在 Google 相册中启用 备份鸭 文件夹备份，云端上传由 Google 相册完成。</string>
+<string name="receiver_cloud_note">“已接收”表示文件已在本机校验。云端上传由 Google 相册完成，它可能会将 备份鸭 项目与“相机”一起备份；如未备份，请在 Google 相册中为 备份鸭 设备文件夹开启备份。</string>
 <string name="receiver_motion_note">实况优先保留原始照片和视频；可在设置中决定是否允许兼容转换。</string>
 <string name="receiver_network_missing">请先连接 Wi-Fi 网络。</string>
 <string name="receiver_notification">正在安全接收照片</string>
@@ -244,7 +244,7 @@
     <string name="help_gallery_title">“已写入相册”表示已有设备副本</string>
     <string name="help_gallery_body">接收端会在确认接收后准备系统相册副本，包括支持的实况转换和连拍元数据。可在“传输”页查看处理状态并重试失败项。其他相册是否聚合连拍取决于该相册，原件与各帧接收记录仍独立保留。</string>
     <string name="help_cloud_title">云端备份是独立操作</string>
-    <string name="help_cloud_body">Google 相册负责自己的上传。请选择预期账号，并按需要开启 备份鸭 设备文件夹的备份。备份鸭 的接收或相册写入状态不能证明云端备份完成。当前实验功能只检查能否识别 Google 相册页面，不会删除文件或启用自动清理。</string>
+    <string name="help_cloud_body">Google 相册负责自己的上传。请选择预期账号。Google 相册可能会将 备份鸭 项目与“相机”一起备份；如未备份，请开启 备份鸭 设备文件夹的备份。备份鸭 的接收或相册写入状态不能证明云端备份完成。当前实验功能只检查能否识别 Google 相册页面，不会删除文件或启用自动清理。</string>
     <string name="help_space_limits_title">空间限制的含义</string>
     <string name="help_space_limits_body">“空间限制”包含原件预算和最低可用空间。相册副本与转换临时文件也会占用手机容量。提高原件预算不会增加磁盘可用空间。空间不足时，先查看原件与相册副本的独立统计，再决定如何保留。</string>
     <string name="help_keep_originals_title">保留或归档原件</string>

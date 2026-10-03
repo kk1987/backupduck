@@ -166,6 +166,8 @@ class ReceiverService : Service() {
                             .put("root", "$filesDir/receiver").put("code", when (code) {
                                 "receiver_port_in_use" -> "receiver_start_port_in_use"
                                 "receiver_interface_unavailable", "wifi_required" -> "receiver_start_network_unavailable"
+                                // Failed health check of a running receiver; the loop restarts it.
+                                "receiver_unavailable" -> "receiver_unhealthy_restart"
                                 else -> "receiver_start_failed"
                             })) }
                         ReceiverState.mutable.update { it.copy(phase = "waiting", error = code) }

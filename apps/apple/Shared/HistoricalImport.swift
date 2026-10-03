@@ -233,13 +233,45 @@ struct HistoricalImportSettings: View {
 /// Library scope shared by the grid, scans and change history.
 struct LibraryScopeSettingsSection: View {
   @AppStorage(LibraryScopeSettings.includeHiddenKey) private var includeHidden = true
+  /// Hidden assets PhotoKit exposes now; nil without full Photos access.
+  @State private var visibleHidden: Int?
   var body: some View {
     Section {
       Toggle("include_hidden_photos", isOn: $includeHidden)
         .onChange(of: includeHidden) { _, _ in
           NotificationCenter.default.post(name: LibraryScopeSettings.changed, object: nil)
+          Task { await countVisibleHidden() }
         }
+      if let visibleHidden {
+        Text(String(format: NSLocalizedString("hidden_photos_visible_count", comment: ""), visibleHidden))
+          .font(.callout).foregroundStyle(.secondary)
+        if visibleHidden == 0 && includeHidden {
+          #if os(macOS)
+            Text("hidden_photos_locked_warning_mac").font(.callout).foregroundStyle(.orange)
+          #else
+            Text("hidden_photos_locked_warning_ios").font(.callout).foregroundStyle(.orange)
+          #endif
+        }
+      }
     } footer: { Text("include_hidden_photos_explanation") }
+      .task { await countVisibleHidden() }
+  }
+  /// A locked Hidden album (Touch ID, Face ID or password) is withheld from
+  /// third-party apps even with includeHiddenAssets, and PhotoKit exposes no
+  /// lock state. The visible count is the only signal.
+  private func countVisibleHidden() async {
+    guard PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized else {
+      visibleHidden = nil
+      return
+    }
+    visibleHidden = await Task.detached(priority: .utility) {
+      let options = PHFetchOptions()
+      options.includeHiddenAssets = true
+      guard let album = PHAssetCollection.fetchAssetCollections(
+        with: .smartAlbum, subtype: .smartAlbumAllHidden, options: nil).firstObject
+      else { return 0 }
+      return PHAsset.fetchAssets(in: album, options: options).count
+    }.value
   }
 }
 

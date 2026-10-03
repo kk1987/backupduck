@@ -21,7 +21,7 @@
 <string name="receiver_published">Published %1$d items to the device gallery</string>
 <string name="receiver_error">Could not complete this operation: %1$s</string>
 <string name="receiver_pair_instruction">Scan this code in BackupDuck on your iPhone. It grants access to this receiver. Share it only with your own devices.</string>
-<string name="receiver_cloud_note">Received means files are verified on this device. Enable backup for the BackupDuck folder in Google Photos. Cloud backup is handled by Google Photos.</string>
+<string name="receiver_cloud_note">Received means files are verified on this device. Cloud backup is handled by Google Photos, which can back up BackupDuck items together with Camera. If they are not backed up, enable backup for the BackupDuck device folder in Google Photos.</string>
 <string name="receiver_motion_note">Live Photos are first added with their original image and video. Compatibility conversion is optional in Settings.</string>
 <string name="receiver_network_missing">Connect to a Wi-Fi network first.</string>
 <string name="receiver_notification">Receiving photos securely</string>
@@ -244,7 +244,7 @@
     <string name="help_gallery_title">Published means a device-gallery copy exists</string>
     <string name="help_gallery_body">The receiver prepares a system-gallery copy after receipt, including supported Motion Photo conversion and burst metadata. Check Transfers for processing status and retry failed processing there. Grouped burst display in an external gallery depends on that gallery; source originals and per-frame receipts remain separate.</string>
     <string name="help_cloud_title">Cloud backup is a separate operation</string>
-    <string name="help_cloud_body">Google Photos performs its own upload. Select the intended account and enable backup for the BackupDuck device folder if needed. A BackupDuck receipt or gallery publication does not confirm cloud backup. The current experiment only checks recognizable Google Photos screens; it does not delete files or enable automatic cleanup.</string>
+    <string name="help_cloud_body">Google Photos performs its own upload. Select the intended account. Google Photos can back up BackupDuck items together with Camera; if they are not backed up, enable backup for the BackupDuck device folder. A BackupDuck receipt or gallery publication does not confirm cloud backup. The current experiment only checks recognizable Google Photos screens; it does not delete files or enable automatic cleanup.</string>
     <string name="help_space_limits_title">Two limits protect available space</string>
     <string name="help_space_limits_body">Storage limits includes an original-storage budget and a minimum free-space reserve. Gallery copies and conversion scratch files also occupy the phone. Increasing the original budget does not create free disk space. If space is insufficient, review the separate original and gallery totals before choosing what to retain.</string>
     <string name="help_keep_originals_title">Keep or archive original files</string>

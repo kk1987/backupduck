@@ -83,6 +83,16 @@ code that parks after the cap, instead of a missing original. A running
 historical scan keeps the identifiers it captured at its start, so a changed
 setting applies to the whole library only after "Check existing photos again".
 
+A Hidden album locked with Touch ID, Face ID or a password in Photos is withheld
+from third-party apps: on macOS with the lock on, PhotoKit returned no hidden
+assets even with `includeHiddenAssets` (the Hidden smart album counted 0; after
+turning the lock off it counted 1288 and the library total grew by the same
+amount). There is no API for the lock state, so `LibraryScopeSettingsSection`
+shows the `smartAlbumAllHidden` count PhotoKit currently exposes and, when it is
+0 with the setting on, tells the user to turn the lock off for the migration.
+A process that was already running saw the change only after several minutes
+(the cause is not known); a relaunch shows it right away.
+
 ## Rescan and content identity
 
 Gallery metadata (favorite, location, capture date, burst fields) is part of the

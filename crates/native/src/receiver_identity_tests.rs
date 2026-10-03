@@ -176,3 +176,27 @@ async fn occupied_receiving_port_has_a_specific_error_and_recovers_when_released
         .await
         .unwrap();
 }
+
+#[test]
+fn listener_probe_logs_a_lost_listener_once() {
+    let root = Scratch::new();
+    let maintenance = Arc::new(Mutex::new(maintenance::Maintenance::open(&root.0).unwrap()));
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let probe = ListenerProbe {
+        listen: listener.local_addr().unwrap(),
+        maintenance: maintenance.clone(),
+        lost: Arc::new(AtomicBool::new(false)),
+    };
+    assert!(probe.listening());
+    drop(listener);
+    assert!(!probe.listening());
+    assert!(!probe.listening());
+    let events = maintenance.lock().unwrap().events().unwrap();
+    let lost = events
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["code"] == "receiver_listener_lost")
+        .count();
+    assert_eq!(lost, 1);
+}

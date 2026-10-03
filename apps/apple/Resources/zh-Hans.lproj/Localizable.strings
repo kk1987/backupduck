@@ -278,6 +278,9 @@
 "rebackup_edited_help" = "默认关闭：照片备份后，之后对它的编辑不会再次上传，重新检查已有照片时也不会。BackupDuck 备份的是原始文件，开启后会重新检查编辑过的照片，只有原始文件本身变了才会作为新副本上传。如需强制再备份一份，请选中照片并使用“已备份项目也重新备份”。";
 "include_hidden_photos" = "包含隐藏的照片";
 "include_hidden_photos_explanation" = "默认开启，“已隐藏”相簿会随图库一起备份。关闭后，隐藏的照片和视频不会备份。正在进行的扫描仍按开始时找到的照片执行；更改此项后，请使用“重新检查已有照片”。";
+"hidden_photos_visible_count" = "备份鸭 可读取的隐藏照片：%d";
+"hidden_photos_locked_warning_mac" = "如果“照片”使用触控 ID 或密码保护“已隐藏”相簿，macOS 会对所有 App 隐藏这些照片。迁移期间请在“照片 > 设置 > 通用”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开 备份鸭 可立即显示。";
+"hidden_photos_locked_warning_ios" = "如果“照片”使用面容 ID、触控 ID 或密码保护“已隐藏”相簿，iOS 会对所有 App 隐藏这些照片。迁移期间请在“设置 > 照片”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开 备份鸭 可立即显示。";
 "error_history_snapshot_unavailable" = "本轮保存的照片清单不可用。可重新开始扫描当前图库；已排队的传输不受影响。";
 "history_operation_failed" = "图库扫描暂时无法继续，进度已保留，请重试。";
 "event_history_scan_started" = "已开始扫描已有图库";
