@@ -1,7 +1,7 @@
 //! `batchexecute` request/response framing.
 
 use crate::{
-    session::{check_status, Session, ORIGIN},
+    session::{check_status, signed_out, Session, ORIGIN},
     Error, Result,
 };
 use serde_json::{json, Value};
@@ -113,6 +113,9 @@ impl Session {
             .send()
             .await
             .map_err(|e| Attempt::Fatal(e.into()))?;
+        if signed_out(response.url()) {
+            return Err(Attempt::Fatal(Error::SessionExpired));
+        }
         check_status(response.status()).map_err(Attempt::Fatal)?;
         let body = response
             .text()
