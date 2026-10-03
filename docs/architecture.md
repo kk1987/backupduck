@@ -68,6 +68,20 @@ failed task that needs a manual retry after the budget is raised, instead of
 waiting forever like ordinary capacity pressure. Older receivers report plain
 capacity, which keeps the automatic retry.
 
+## Apple library scope
+
+Every PhotoKit fetch on iOS and macOS goes through `photoLibraryFetchOptions()`,
+so the grid, counts, historical scans, change history, burst expansion and
+export see one membership: all burst frames, plus the Hidden album unless the
+"Include Hidden Photos" setting (`includeHiddenPhotos`, default on) is off. The
+default is on because a silent exclusion would leave hidden items out of a
+whole-library migration. Turning it off makes hidden items missing from those
+fetches; `importAssets` re-fetches the missing identifiers with hidden assets
+included and reports the ones it finds as `hidden_excluded`, an item-specific
+code that parks after the cap, instead of a missing original. A running
+historical scan keeps the identifiers it captured at its start, so a changed
+setting applies to the whole library only after "Check existing photos again".
+
 ## Rescan and content identity
 
 Gallery metadata (favorite, location, capture date, burst fields) is part of the

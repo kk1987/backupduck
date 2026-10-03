@@ -230,6 +230,19 @@ struct HistoricalImportSettings: View {
   }
 }
 
+/// Library scope shared by the grid, scans and change history.
+struct LibraryScopeSettingsSection: View {
+  @AppStorage(LibraryScopeSettings.includeHiddenKey) private var includeHidden = true
+  var body: some View {
+    Section {
+      Toggle("include_hidden_photos", isOn: $includeHidden)
+        .onChange(of: includeHidden) { _, _ in
+          NotificationCenter.default.post(name: LibraryScopeSettings.changed, object: nil)
+        }
+    } footer: { Text("include_hidden_photos_explanation") }
+  }
+}
+
 /// A compact overview; detailed scan controls live with backup preferences.
 struct HistoricalImportProgress: View {
   @ObservedObject var model: BackupModel

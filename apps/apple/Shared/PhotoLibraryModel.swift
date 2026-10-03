@@ -10,11 +10,22 @@ import Photos
   typealias LibraryImage = UIImage
 #endif
 
+/// Which PhotoKit assets count as the library. Hidden items default to
+/// included so a whole-library migration does not silently leave them behind.
+enum LibraryScopeSettings {
+  static let includeHiddenKey = "includeHiddenPhotos"
+  static let changed = Notification.Name("BackupDuckLibraryScopeChanged")
+  static var includeHidden: Bool {
+    UserDefaults.standard.object(forKey: includeHiddenKey) as? Bool ?? true
+  }
+}
+
 // Use identical membership for browsing, export, thumbnails and scroll anchors.
 // PhotoKit otherwise returns only representative burst frames by default.
 func photoLibraryFetchOptions() -> PHFetchOptions {
   let options = PHFetchOptions()
   options.includeAllBurstAssets = true
+  options.includeHiddenAssets = LibraryScopeSettings.includeHidden
   return options
 }
 
@@ -54,6 +65,7 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
   private var requestGeneration = 0
   private var observerRegistered = false
   private var changesTask: Task<Void, Never>?
+  private var scopeObserver: AnyCancellable?
   var scrollOffset = CGPoint.zero
   var scrollAnchorID: String?
   var scrollAnchorInset: CGFloat = 0
@@ -79,6 +91,11 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     if !observerRegistered {
       PHPhotoLibrary.shared().register(self)
       observerRegistered = true
+    }
+    if scopeObserver == nil {
+      scopeObserver = NotificationCenter.default.publisher(for: LibraryScopeSettings.changed)
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _ in Task { await self?.scopeChanged() } }
     }
     if fetch == nil { await reload() }
   }
@@ -111,6 +128,15 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     guard filter != next else { return }
     filter = next
     selection.removeAll()
+    scrollOffset = .zero
+    scrollAnchorID = nil
+    scrollAnchorInset = 0
+    scrollResetGeneration += 1
+    await reload(resetWindow: true)
+  }
+  /// Counts and grid membership follow the new scope; reload drops
+  /// selected items that left it.
+  func scopeChanged() async {
     scrollOffset = .zero
     scrollAnchorID = nil
     scrollAnchorInset = 0

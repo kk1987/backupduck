@@ -161,7 +161,7 @@
 "error_receiver_budget_single_item" = "该项目大于接收端的全部存储预算。请在接收端提高预算后重试。";
 "error_local_cache_budget_single_item" = "该项目大于中转缓存预算。请在设置中提高预算后重试。";
 "error_export_failed" = "“照片”无法导出原件。请稍后重试，或在“照片”中检查该项目。";
-"error_hidden_excluded" = "该项目已在“照片”中隐藏。取消隐藏后才能备份。";
+"error_hidden_excluded" = "该项目已在“照片”中隐藏，而当前不包含隐藏的照片。请在设置中开启“包含隐藏的照片”或取消隐藏，然后重试。";
 "error_photos_permission" = "当前的有限照片访问权限不包含此项目。请在设置中允许访问。";
 "error_other" = "准备原件失败，原因无法识别。";
 "event_source_needs_attention" = "一张照片多次准备失败，已停止重试，需要处理";
@@ -276,6 +276,8 @@
 "history_explanation" = "本轮只备份开始时图库中已有、且允许访问的照片、视频、实况和连拍。之后加入的项目需开启“自动备份新增照片”，或再启动一轮扫描。暂停只停止发现，已排队任务仍会传输；扫描结束不代表备份完成。";
 "rebackup_edited_toggle" = "重新备份编辑过的照片";
 "rebackup_edited_help" = "默认关闭：照片备份后，之后对它的编辑不会再次上传，重新检查已有照片时也不会。BackupDuck 备份的是原始文件，开启后会重新检查编辑过的照片，只有原始文件本身变了才会作为新副本上传。如需强制再备份一份，请选中照片并使用“已备份项目也重新备份”。";
+"include_hidden_photos" = "包含隐藏的照片";
+"include_hidden_photos_explanation" = "默认开启，“已隐藏”相簿会随图库一起备份。关闭后，隐藏的照片和视频不会备份。正在进行的扫描仍按开始时找到的照片执行；更改此项后，请使用“重新检查已有照片”。";
 "error_history_snapshot_unavailable" = "本轮保存的照片清单不可用。可重新开始扫描当前图库；已排队的传输不受影响。";
 "history_operation_failed" = "图库扫描暂时无法继续，进度已保留，请重试。";
 "event_history_scan_started" = "已开始扫描已有图库";
