@@ -1,6 +1,7 @@
 #![cfg(feature = "folder-source")]
 use backupduck_folder_source::{millis, Index};
 use backupduck_native::{backupduck_call, backupduck_free};
+mod common;
 use serde_json::{json, Value};
 use std::{
     ffi::{CStr, CString},
@@ -57,12 +58,18 @@ fn folder_motion_uses_existing_tls_queue_and_only_reclaims_owned_snapshots() {
     let video = index.entry("source", "original.mov").unwrap();
     drop(index);
     ok(json!({"op":"open_sender","root":queue}));
-    let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = socket.local_addr().unwrap();
-    drop(socket);
-    let pairing = ok(
-        json!({"op":"start_receiver","root":temp.join("receiver"),"listen":address.to_string(),"capacity":1000000}),
-    );
+    // A probed port can be taken by a parallel test before the bind; retry.
+    let pairing = (0..10)
+        .find_map(|_| {
+            let address = common::free_address();
+            let r = call(json!({"op":"start_receiver","root":temp.join("receiver"),"listen":address.to_string(),"capacity":1000000}));
+            if r["ok"] == true {
+                return Some(r["value"].clone());
+            }
+            assert!(common::address_in_use(&r.to_string()), "{r}");
+            None
+        })
+        .expect("no free loopback port after 10 attempts");
     let receiver = pairing["receiver_id"].as_str().unwrap();
     let validation = folder(json!({"action":"validate_rules","include":["["],"exclude":[]}));
     assert!(validation["error"].as_str().unwrap().contains('['));

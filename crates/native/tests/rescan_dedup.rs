@@ -1,6 +1,7 @@
 //! A rescan or metadata-only edit must not publish a received photo again.
 use backupduck_core::*;
-use backupduck_native::{ReceiverHost, SenderHost};
+use backupduck_native::SenderHost;
+mod common;
 use backupduck_sender::JobState;
 use serde_json::{json, Value};
 use std::{
@@ -17,10 +18,6 @@ fn call(input: Value) -> Value {
     assert_eq!(envelope["ok"], true, "{envelope}");
     envelope["value"].clone()
 }
-fn address() -> std::net::SocketAddr {
-    let s = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    s.local_addr().unwrap()
-}
 
 #[test]
 fn rescan_skips_sources_received_under_an_older_revision() {
@@ -33,9 +30,7 @@ fn rescan_skips_sources_received_under_an_older_revision() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     // Receive revision 1 over the real loopback transport.
     let (receiver, received) = runtime.block_on(async {
-        let r = ReceiverHost::start(&root.join("receiver"), address(), 100000)
-            .await
-            .unwrap();
+        let r = common::start_receiver(&root.join("receiver"), 100000).await;
         let sender = SenderHost::open(&sender_root).unwrap();
         let sha256 = digest(b"original photo bytes");
         let asset = Asset {
