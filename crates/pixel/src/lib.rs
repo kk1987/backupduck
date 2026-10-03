@@ -2,6 +2,7 @@
 //! A native Android host must implement conversion and MediaStore publication.
 mod burst;
 mod gain_map;
+mod heic_burst;
 mod heic_motion;
 mod motion_xmp;
 mod photo_date;
@@ -12,6 +13,7 @@ use backupduck_core::{
     Asset, AssetKind, BurstMetadata, Error, Result, TargetPlan, TargetProcessor,
 };
 pub use burst::write_jpeg_burst;
+pub use heic_burst::write_heic_burst;
 pub use heic_motion::write_heic_motion_with_burst;
 pub use heic_motion::write_heic_motion_with_burst_and_video_mime;
 
@@ -80,15 +82,7 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
     if let Some(burst) = burst {
         burst.validate()?;
     }
-    let burst_fields = burst
-        .map(|b| {
-            format!(
-                " GCamera:BurstID=\"{}\" GCamera:BurstPrimary=\"{}\"",
-                b.group_id,
-                if b.primary { 1 } else { 0 }
-            )
-        })
-        .unwrap_or_default();
+    let burst_fields = burst.map(burst::burst_attributes).unwrap_or_default();
     use backupduck_core::{Error, Result};
     use std::{
         fs::{File, OpenOptions},
