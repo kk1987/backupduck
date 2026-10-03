@@ -119,7 +119,21 @@ enum Bridge {
     self?.receiverUnavailable = true
     self?.receiverConnection = .unknown
     self?.activeExport?.cancel()
+    self?.probeWhilePaused()
   })
+  private var pausedProbe: Task<Void, Never>?
+  /// While paused nothing else probes the receiver, so the indicator would stay
+  /// unknown after a network change. One debounced probe; never resumes work.
+  private func probeWhilePaused() {
+    guard paused, pairing != nil, pausedProbe == nil else { return }
+    pausedProbe = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 1_000_000_000)  // coalesce path flaps
+      guard let self else { return }
+      self.pausedProbe = nil
+      guard self.paused, let target = self.pairing else { return }
+      _ = await self.checkReceiverConnection(target)
+    }
+  }
   func canPrepareForReceiver() async -> Bool {
     guard !paused, let target = pairing else { return false }
     return await checkReceiverConnection(target) && !paused
@@ -263,6 +277,7 @@ enum Bridge {
         try result.write(to: root.appendingPathComponent("cache-retirement-result.json"), options: .atomic)
       }
       ready = true
+      probeWhilePaused()
       await refreshPendingImportCount()
       // Initial lifecycle callbacks may arrive before storage is ready. Capture
       // the actual state now without inventing an earlier foreground transition.
