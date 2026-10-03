@@ -56,12 +56,17 @@ back; a match without quota information is left pending for the next run.
 
 ## Protocol
 
-Bootstrap: `GET https://photos.google.com/` (or `/u/N/`) without following
-redirects, then read `<script data-id="_gd">window.WIZ_global_data = {...};`.
-Keys: `SNlM0e` (XSRF `at`), `FdrFJe` (`f.sid`), `cfb2h` (`bl`), `Im6cmf` (RPC
-path prefix, e.g. `/_/PhotosUi`; Toolkit reads `eptZe`). A redirect, 401/403 or
-a missing key means the session expired. The account email (`oPEP7c`) is not
-read.
+Bootstrap: `GET https://photos.google.com/` (or `/u/N/`), following redirects.
+A signed-in account whose cookies were exported before it ever opened Photos
+has no `photos.google.com` service cookies yet; Google then bounces through
+`accounts.google.com/ServiceLogin?...&osid=1` and back, setting `OSID` and
+`__Secure-OSID` for `photos.google.com` on the way (observed 2026-10-03: three
+redirects, then `/?pli=1` with status 200). Then read
+`<script data-id="_gd">window.WIZ_global_data = {...};`. Keys: `SNlM0e` (XSRF
+`at`), `FdrFJe` (`f.sid`), `cfb2h` (`bl`), `Im6cmf` (RPC path prefix, e.g.
+`/_/PhotosUi`; Toolkit reads `eptZe`). Ending on `accounts.google.com`, a
+401/403 or a missing key means the session expired. The account email
+(`oPEP7c`) is not read.
 
 RPC: `POST {Im6cmf}/data/batchexecute?rpcids=ID&source-path=/&f.sid=..&bl=..&rt=c`
 with form body `f.req=[[[ID, "<payload JSON>", null, "generic"]]]&at=<SNlM0e>`.

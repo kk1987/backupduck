@@ -89,7 +89,16 @@ impl fmt::Debug for Session {
     }
 }
 
-/// 401/403 and redirects (to the sign-in page) mean the cookies are stale.
+/// A response that ended on accounts.google.com is the sign-in page: the
+/// exported cookies no longer carry a session. Photos itself may redirect
+/// within photos.google.com (passive service login that sets its `OSID`
+/// cookies), which is why redirects are followed rather than rejected.
+pub(crate) fn signed_out(url: &reqwest::Url) -> bool {
+    url.host_str()
+        .is_some_and(|h| h == "accounts.google.com" || h.ends_with(".accounts.google.com"))
+}
+
+/// 401/403 and a leftover redirect mean the cookies are stale.
 pub(crate) fn check_status(status: StatusCode) -> Result<()> {
     match status.as_u16() {
         200..=299 => Ok(()),
@@ -103,7 +112,9 @@ impl Session {
     pub async fn open(jar: Arc<Jar>, account_index: u32) -> Result<Self> {
         let client = reqwest::Client::builder()
             .cookie_provider(jar)
-            .redirect(Policy::none())
+            // Passive login bounces through accounts.google.com and back,
+            // setting the photos.google.com service cookies on the way.
+            .redirect(Policy::limited(10))
             .user_agent(concat!(
                 "backupduck-cloud-audit/",
                 env!("CARGO_PKG_VERSION")
@@ -113,6 +124,9 @@ impl Session {
             .build()?;
         let base_path = base_path(account_index);
         let response = client.get(format!("{ORIGIN}{base_path}")).send().await?;
+        if signed_out(response.url()) {
+            return Err(Error::SessionExpired);
+        }
         check_status(response.status())?;
         let globals = parse_global_data(&response.text().await?)?;
         Ok(Self {
@@ -157,6 +171,16 @@ mod tests {
         ));
         assert_eq!(base_path(0), "/");
         assert_eq!(base_path(2), "/u/2/");
+    }
+
+    #[test]
+    fn sign_in_page_means_signed_out() {
+        let parse = |u: &str| reqwest::Url::parse(u).unwrap();
+        assert!(signed_out(&parse(
+            "https://accounts.google.com/ServiceLogin?service=lh2&continue=https://photos.google.com/"
+        )));
+        assert!(!signed_out(&parse("https://photos.google.com/?pli=1")));
+        assert!(!signed_out(&parse("https://photos.google.com/u/1/")));
     }
 
     #[test]
