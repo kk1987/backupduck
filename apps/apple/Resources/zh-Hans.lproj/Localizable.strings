@@ -133,6 +133,7 @@
 "event_cache_reclaim_failed" = "缓存回收未完成";
 "event_transfer_received" = "接收端已完整校验原件";
 "event_transfer_queued" = "已加入传输队列";
+"event_transfer_deduplicated" = "内容相同，已备份过";
 "event_backup_paused" = "备份已暂停";
 "event_backup_resumed" = "备份已恢复";
 "event_publication_complete" = "已发布到设备图库";
@@ -263,6 +264,8 @@
 "history_counts" = "已检查 %d 项 · %d 项待准备";
 "history_backup_paused" = "请恢复备份，以继续图库扫描和传输。";
 "history_explanation" = "本轮只备份开始时图库中已有、且允许访问的照片、视频、实况和连拍。之后加入的项目需开启“自动备份新增照片”，或再启动一轮扫描。暂停只停止发现，已排队任务仍会传输；扫描结束不代表备份完成。";
+"rebackup_edited_toggle" = "重新备份编辑过的照片";
+"rebackup_edited_help" = "默认关闭：照片备份后，之后对它的编辑不会再次上传，重新检查已有照片时也不会。BackupDuck 备份的是原始文件，开启后会重新检查编辑过的照片，只有原始文件本身变了才会作为新副本上传。如需强制再备份一份，请选中照片并使用“已备份项目也重新备份”。";
 "error_history_snapshot_unavailable" = "本轮保存的照片清单不可用。可重新开始扫描当前图库；已排队的传输不受影响。";
 "history_operation_failed" = "图库扫描暂时无法继续，进度已保留，请重试。";
 "event_history_scan_started" = "已开始扫描已有图库";

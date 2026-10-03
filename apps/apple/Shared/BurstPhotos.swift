@@ -24,7 +24,8 @@ extension BackupModel {
         }.value
         try Task.checkCancellation()
         guard pairing?.receiverID == receiver else { throw CancellationError() }
-        let data = try await Bridge.call(["op": "source_states", "receiver_id": receiver, "sources": sources])
+        let data = try await Bridge.call(["op": "source_states", "receiver_id": receiver,
+          "include_previous_receipts": !Self.rebackupEdited, "sources": sources])
         let known = try JSONDecoder().decode([String: String].self, from: data)
         let needed = sources.filter { known[$0[0]] == nil }.map { $0[0] }
         if !needed.isEmpty {

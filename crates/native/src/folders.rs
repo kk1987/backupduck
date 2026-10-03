@@ -452,9 +452,20 @@ pub fn call(command: Command) -> Result<Value> {
                         AssetKind::Photo
                     };
                     let (asset, files) = manifest(source_id, combined, kind, metadata, resources)?;
+                    let requested = asset.id()?;
                     let job = host.enqueue(&receiver, asset, files)?;
+                    // Byte-identical content was already received; drop this copy.
+                    let deduplicated = job.asset.id()? != requested;
+                    if deduplicated {
+                        let _ = fs::remove_dir_all(&folder);
+                    }
                     if let Ok(maintenance) = host.maintenance.lock() {
-                        let _ = maintenance.log("transfer_queued", Some(job.id), None);
+                        let event = if deduplicated {
+                            "transfer_deduplicated"
+                        } else {
+                            "transfer_queued"
+                        };
+                        let _ = maintenance.log(event, Some(job.id), None);
                     }
                     Ok::<_, Error>(job.id)
                 })();

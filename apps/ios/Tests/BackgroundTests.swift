@@ -10,6 +10,8 @@ import XCTest
     XCTAssertFalse(BackupModel.shouldSkipSource("failed", rebackupReceived: false))
     XCTAssertTrue(BackupModel.shouldSkipSource("received", rebackupReceived: false))
     XCTAssertFalse(BackupModel.shouldSkipSource("received", rebackupReceived: true))
+    XCTAssertTrue(BackupModel.shouldSkipSource("received_previous", rebackupReceived: false))
+    XCTAssertFalse(BackupModel.shouldSkipSource("received_previous", rebackupReceived: true))
     for state in ["queued", "running", "waiting", "paused"] {
       XCTAssertTrue(BackupModel.shouldSkipSource(state, rebackupReceived: true))
     }

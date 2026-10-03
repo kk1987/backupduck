@@ -181,6 +181,11 @@ impl Sender {
         {
             return Err(Error::Invalid("sender input".into()));
         }
+        if !asset.metadata.contains_key("backupduck_rebackup_id") {
+            if let Some(received) = self.received_content(receiver, &asset)? {
+                return Ok(received);
+            }
+        }
         self.conn
             .execute(
                 "INSERT INTO jobs(receiver_id,asset_id,manifest,sources) VALUES(?1,?2,?3,?4)
@@ -204,6 +209,31 @@ impl Sender {
             )
             .map_err(db)?;
         self.job(job_id)
+    }
+    /// A received job of the same source with byte-identical resources.
+    /// Metadata-only edits (favorite, location, date) change the asset id but
+    /// must not publish a second gallery copy.
+    fn received_content(&self, receiver: &str, asset: &Asset) -> Result<Option<Job>> {
+        let ids = self.conn.prepare("SELECT id FROM jobs WHERE receiver_id=?1 AND json_extract(manifest,'$.source_id')=?2 AND state='received' ORDER BY id DESC").map_err(db)?
+            .query_map(params![receiver, asset.source_id], |r| r.get::<_, i64>(0)).map_err(db)?
+            .collect::<std::result::Result<Vec<_>, _>>().map_err(db)?;
+        // Digests are unique within a valid asset, so this is set equality.
+        let same = |a: &Asset| {
+            a.kind == asset.kind
+                && a.resources.len() == asset.resources.len()
+                && asset.resources.iter().all(|r| {
+                    a.resources
+                        .iter()
+                        .any(|o| o.role == r.role && o.sha256 == r.sha256)
+                })
+        };
+        for id in ids {
+            let job = self.job(id)?;
+            if same(&job.asset) {
+                return Ok(Some(job));
+            }
+        }
+        Ok(None)
     }
     pub fn source_job_id(
         &self,

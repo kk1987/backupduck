@@ -521,6 +521,9 @@ enum Command {
         run: i64,
         sources: Vec<(String, String)>,
         finished: bool,
+        /// Re-add sources received under an older revision (edited photos).
+        #[serde(default)]
+        rebackup_edited: bool,
     },
     ScheduleSources {
         receiver_id: String,
@@ -984,13 +987,19 @@ fn dispatch(command: Command) -> Result<Value> {
             run,
             sources,
             finished,
+            rebackup_edited,
         } => {
             let host = sender()?;
-            let known = host
-                .sender
-                .lock()
-                .map_err(lock)?
-                .source_states(&receiver_id, &sources)?;
+            let known = {
+                let sender = host.sender.lock().map_err(lock)?;
+                let mut known = sender.source_states(&receiver_id, &sources)?;
+                if !rebackup_edited {
+                    for (id, state) in sender.previous_receipts(&receiver_id, &sources)? {
+                        known.entry(id).or_insert(state);
+                    }
+                }
+                known
+            };
             let status = host.maintenance.lock().map_err(lock)?.history_batch(
                 &receiver_id,
                 run,
@@ -1246,12 +1255,19 @@ fn dispatch(command: Command) -> Result<Value> {
             resources,
         } => {
             let (a, p) = manifest(source_id, revision, kind, metadata, resources)?;
+            let requested = a.id()?;
             let host = sender()?;
             let job = host.enqueue(&receiver_id, a, p)?;
+            // Byte-identical content already received for this source.
+            let event = if job.asset.id()? == requested {
+                "transfer_queued"
+            } else {
+                "transfer_deduplicated"
+            };
             host.maintenance
                 .lock()
                 .map_err(lock)?
-                .log("transfer_queued", Some(job.id), None)?;
+                .log(event, Some(job.id), None)?;
             Ok(serde_json::to_value(job)?)
         }
         Command::PrepareNative { receiver_id } => Ok(serde_json::to_value(

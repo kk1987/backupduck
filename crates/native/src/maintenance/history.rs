@@ -131,6 +131,23 @@ impl Maintenance {
 mod tests {
     use super::*;
     #[test]
+    fn received_under_an_older_revision_is_not_rescheduled() {
+        let root = std::env::temp_dir().join(format!(
+            "backupduck-history-previous-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let m = Maintenance::open(&root).unwrap();
+        let run = m.history_control("a", HistoryAction::Start).unwrap().run;
+        let sources = vec![("edited".into(), "2".into())];
+        let known = BTreeMap::from([("edited".into(), "received_previous".into())]);
+        let s = m.history_batch("a", run, &sources, &known, true).unwrap();
+        assert_eq!((s.checked, s.pending), (1, 0));
+        assert_eq!(m.pending("a").unwrap()["count"], 0);
+        drop(m);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn history_is_resumable_idempotent_and_receiver_scoped() {
         let root = std::env::temp_dir().join(format!("backupduck-history-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
