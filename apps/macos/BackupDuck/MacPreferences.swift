@@ -15,6 +15,7 @@ struct MacPreferences: View {
   var body: some View {
     TabView(selection: $section) {
       Form {
+        MigrationPresetBanner(model: model)
         Section("device_identity") { DeviceIdentitySettings(model: model) }
         Section {
           Toggle("auto_backup_new", isOn: Binding(
@@ -73,6 +74,7 @@ struct MacPreferences: View {
           Text("settings_about_description").foregroundStyle(.secondary)
         } header: { Text("brand_name") }
       }.formStyle(.grouped)
+        .task { await model.refreshStorage() }
         .tabItem { Label("backup_settings", systemImage: "arrow.triangle.2.circlepath") }
         .tag(MacSettingsSection.backup)
 
@@ -101,5 +103,33 @@ struct MacPreferences: View {
         .tabItem { Label("help_title", systemImage: "questionmark.circle") }
         .tag(MacSettingsSection.help)
     }.sheet(isPresented: $logs) { ActivityLogView() }
+  }
+}
+
+/// One-time offer of migration-sized storage. The Mac cannot change the
+/// receiver's budget remotely, so only the local cache is applied here.
+private struct MigrationPresetBanner: View {
+  @ObservedObject var model: BackupModel
+  @AppStorage("migrationPresetSeen") private var seen = false
+  private static let cache: UInt64 = 20 << 30
+  var body: some View {
+    if !seen, let settings = model.storage?.settings, settings.cache_budget_bytes < Self.cache {
+      Section {
+        Label("migration_preset_title", systemImage: "shippingbox").font(.headline)
+        Text("migration_preset_body").foregroundStyle(.secondary)
+        HStack {
+          Button("migration_preset_apply") {
+            Task {
+              var next = settings
+              next.cache_budget_bytes = Self.cache
+              await model.saveStorage(next)
+              if model.storageError == nil { seen = true }
+            }
+          }.buttonStyle(.borderedProminent).disabled(model.savingStorage)
+          Button("migration_preset_dismiss") { seen = true }
+        }
+        if let error = model.storageError { Text(error).foregroundStyle(.orange) }
+      }
+    }
   }
 }

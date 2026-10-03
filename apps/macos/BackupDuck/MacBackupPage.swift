@@ -29,6 +29,7 @@ struct MacBackupPage: View {
             metric("queued", value: model.summary.queued)
             metric("waiting", value: model.summary.waiting)
             metric("failed", value: model.summary.failed)
+            metric("needs_attention", value: model.needsAttention)
           }
           VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -79,7 +80,7 @@ struct MacBackupPage: View {
   private func metric(_ state: String, value: Int) -> some View {
     Button { showTransfers(state) } label: {
       VStack(alignment: .leading, spacing: 10) {
-        Label(LocalizedStringKey(state == "scanned" ? "task_title_scanned" : "state_" + state), systemImage: taskSymbol(state))
+        Label(transferFilterTitle(state), systemImage: taskSymbol(state))
           .font(.callout).foregroundStyle(.secondary)
           .frame(height: 34, alignment: .topLeading)
         Text(value.formatted()).font(.largeTitle).monospacedDigit()

@@ -69,7 +69,7 @@ class ReceiverService : Service() {
                         runCatching { DeviceProfiles.read(this@ReceiverService) }
                         val pairing = NativeBridge.request(JSONObject().put("op", "start_receiver")
                             .put("root", "$filesDir/receiver").put("listen", "$address:8484")
-                            .put("capacity", 6L * 1024 * 1024 * 1024)) as JSONObject
+                            .put("capacity", 10L * 1024 * 1024 * 1024)) as JSONObject
                         opened = true
                         // A foreground service alone does not keep the Wi-Fi radio awake
                         // when this always-on receiver's screen is off.

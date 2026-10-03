@@ -43,14 +43,14 @@ struct IOSBackupPage: View {
           } label: {
             Label("backup_all_tasks", systemImage: "list.bullet")
           }.accessibilityIdentifier("backup.all_tasks")
-          ForEach(["preparing", "running", "queued", "waiting", "paused", "failed", "received", "scanned"], id: \.self) { state in
+          ForEach(transferFilters, id: \.self) { state in
             NavigationLink {
               TransferList(model: model, filter: state).padding(.horizontal, 20).padding(.top, 12)
-                .navigationTitle(LocalizedStringKey(state == "scanned" ? "task_title_scanned" : "state_" + state))
+                .navigationTitle(transferFilterTitle(state))
                 .navigationBarTitleDisplayMode(.inline)
             } label: {
               HStack {
-                Label(LocalizedStringKey(state == "scanned" ? "task_title_scanned" : "state_" + state), systemImage: taskSymbol(state))
+                Label(transferFilterTitle(state), systemImage: taskSymbol(state))
                 Spacer()
                 Text(model.transferCount(for: state).formatted()).monospacedDigit().foregroundStyle(.secondary)
               }

@@ -404,7 +404,35 @@ import SwiftUI
           "Scan completion must not report pending preparation as complete")
         try await capture("history-scanned", view: AnyView(Form { HistoricalImportSettings(model: model) }.formStyle(.grouped)), output: output,
           size: NSSize(width: 620, height: 480))
-        print("Rendered 12 fixture screens; settings, device rename and historical-scan state checks passed.")
+        // Saving storage settings above reset every cap, so park sources only now.
+        UserDefaults.standard.removeObject(forKey: "migrationPresetSeen")
+        UserDefaults.standard.set(MacSettingsSection.backup.rawValue, forKey: "macSettingsSection")
+        try await capture("settings-migration-preset", view: AnyView(MacPreferences(model: model)),
+          output: output, size: NSSize(width: 620, height: 580))
+        precondition(model.storage!.settings.cache_budget_bytes == 2 << 30)
+        // Thumbnails would query Photos; the fixture never touches the library.
+        UserDefaults.standard.set(false, forKey: "macListThumbnails")
+        let parkedSources = ["synthetic-parked-export", "synthetic-parked-hidden"]
+        _ = try await Bridge.call(["op": "schedule_sources", "receiver_id": paired.receiverID, "sources": parkedSources])
+        for (source, code) in zip(parkedSources, ["export_failed", "hidden_excluded"]) {
+          for _ in 0..<5 {
+            _ = try await Bridge.call(["op": "source_result", "receiver_id": paired.receiverID,
+              "source": source, "complete": false, "error": code])
+          }
+        }
+        await model.refreshPendingImportCount()
+        precondition(model.parkedSources == 2 && model.needsAttention == 2 + model.summary.failed,
+          "Parked sources must count toward needs attention")
+        try await capture("backup-needs-attention", view: overview(), output: output)
+        try await capture("transfers-needs-attention",
+          view: AnyView(TransferList(model: model, filter: "needs_attention").padding(24)), output: output)
+        _ = try await Bridge.call(["op": "skip_source", "receiver_id": paired.receiverID, "source": parkedSources[1]])
+        model.paused = true  // Keep the worker idle; the fixture receiver is unreachable.
+        await model.retryAllNeedsAttention(failedJobs: [])
+        precondition(model.parkedSources == 0, "Retry all must return parked sources to preparation")
+        try await capture("transfers-needs-attention-empty",
+          view: AnyView(TransferList(model: model, filter: "needs_attention").padding(24)), output: output)
+        print("Rendered 16 fixture screens; settings, device rename, historical-scan and needs-attention state checks passed.")
         try FileManager.default.removeItem(at: store)
         app.terminate(nil)
       } catch {
