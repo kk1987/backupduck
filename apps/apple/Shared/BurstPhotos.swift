@@ -19,7 +19,7 @@ extension BackupModel {
         let sources = await Task.detached(priority: .utility) {
           (start..<end).map { index -> [String] in
             let asset = members.object(at: index)
-            return [asset.localIdentifier, String(Int64((asset.modificationDate ?? asset.creationDate ?? Date(timeIntervalSince1970: 0)).timeIntervalSince1970 * 1000))]
+            return [asset.localIdentifier, PhotoLibraryModel.revision(asset)]
           }
         }.value
         try Task.checkCancellation()

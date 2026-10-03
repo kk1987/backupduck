@@ -589,10 +589,7 @@ enum Bridge {
         }
         let added = try await Bridge.call([
           "op": "enqueue", "receiver_id": target.receiverID, "source_id": asset.localIdentifier,
-          "revision": String(
-            Int64(
-              (asset.modificationDate ?? asset.creationDate ?? Date(timeIntervalSince1970: 0))
-                .timeIntervalSince1970 * 1000)),
+          "revision": PhotoLibraryModel.revision(asset),
           "kind": live ? "motion" : video ? "video" : "photo", "metadata": metadata,
           "resources": resources,
         ])
