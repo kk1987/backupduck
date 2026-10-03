@@ -34,6 +34,13 @@ class GalleryNamingTest {
         assertEquals("", GalleryNaming.extensionFor(null, "noextension"))
     }
 
+    @Test fun heicBurstFallbackNamesFollowTheWrittenFormat() {
+        val burst = item("photo", "IMG_1235.HEIC", burst = true)
+        assertEquals("BD_20260815_024141Z_a1b2.heic", GalleryNaming.name(burst, 4, "image/heic"))
+        assertEquals("BD_${id}.heic", GalleryNaming.legacyName(burst, "image/heic"))
+        assertEquals("BD_${id}.jpg", GalleryNaming.legacyName(burst, "image/jpeg"))
+    }
+
     @Test fun motionPhotosEndInMp() {
         val motion = item("motion", "IMG_1234.HEIC")
         assertEquals("IMG_1234_MP.HEIC", GalleryNaming.preferred(motion, "image/heic"))

@@ -59,6 +59,11 @@ back to a dated `BD_<date>_<id>` name. Copies published by earlier versions keep
 their `BD_` names. The gallery receipt export in Settings maps every saved name
 to its asset.
 
+Burst frames carry Google's `GCamera:BurstID` and `BurstPrimary` markers. HEIC
+burst frames are published as HEIC without re-encoding, so HDR and metadata
+stay intact; a Settings switch converts them to JPEG instead. Whether Google
+Photos groups HEIC bursts after cloud backup is unverified.
+
 ## Brand transition
 
 BackupDuck is the new name of BackupDuck. New platform installs use `app.backupduck` and must be installed manually and paired again. Existing apps and originals are not automatically removed. See [the transition guide](docs/brand-transition.md).
