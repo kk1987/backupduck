@@ -32,6 +32,9 @@ import SwiftUI
     } else if model.summary.waiting > 0 {
       key = "state_waiting"
       symbol = "clock"
+    } else if model.parkedSources > 0 {
+      key = "state_needs_attention"
+      symbol = "exclamationmark.triangle"
     } else if model.summary.failed > 0 {
       key = "state_failed"
       symbol = "exclamationmark.circle"

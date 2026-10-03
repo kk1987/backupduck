@@ -169,6 +169,12 @@
 "event_receiver_budget_single_item" = "该项目大于接收端的全部存储预算。请在接收端提高预算后重试。";
 "event_local_cache_budget_single_item" = "该项目大于中转缓存预算。请在设置中提高预算后重试。";
 "event_export_failed" = "“照片”无法导出原件。请稍后重试，或在“照片”中检查该项目。";
+"filter_needs_attention" = "全部问题";
+"task_explanation_needs_attention" = "多次准备失败后停止重试的照片，以及传输失败的任务。排除原因后重试，或跳过某张照片，将其移出准备队列。";
+"needs_attention_empty" = "没有需要处理的项目";
+"retry_all_needs_attention" = "全部重试";
+"skip_task" = "跳过";
+"attempts_count" = "已尝试 %d 次";
 "migration_preset_title" = "要迁移整个图库吗？";
 "migration_preset_body" = "为这台 Mac 应用 20 GB 中转缓存。Mac 无法修改手机的预算：请在手机的“空间预算 > 原件存储预算”中设为 10 GB。";
 "migration_preset_apply" = "应用 20 GB 缓存";

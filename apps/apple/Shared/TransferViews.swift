@@ -182,22 +182,20 @@ struct TransferList: View {
     VStack(alignment: .leading, spacing: 20) {
       HStack {
         VStack(alignment: .leading, spacing: 6) {
-          Text(LocalizedStringKey(filter == "all" ? "transfer_tasks" : filter == "scanned" ? "task_title_scanned" : "state_" + filter))
+          Text(filter == "all" ? "transfer_tasks" : transferFilterTitle(filter))
             .font(.title2.weight(.medium)).accessibilityIdentifier("transfers.title")
-          Text(String(format: NSLocalizedString("task_status_count", comment: ""), (sourceFilter.isEmpty || filter == "preparing" || filter == "scanned") ? model.transferCount(for: filter) : (browser.summary?.count(for: filter) ?? 0)))
+          Text(String(format: NSLocalizedString("task_status_count", comment: ""), (sourceFilter.isEmpty || !Self.queueFilter(filter)) ? model.transferCount(for: filter) : (browser.summary?.count(for: filter) ?? 0)))
             .font(.callout).foregroundStyle(.secondary).monospacedDigit()
             .accessibilityIdentifier("transfers.count")
         }
         Spacer()
         Picker("task_filter", selection: $filter) {
           Text("backup_all_tasks").tag("all")
-          ForEach(["preparing", "running", "queued", "waiting", "paused", "failed", "received", "scanned"], id: \.self) {
-            Text(LocalizedStringKey($0 == "scanned" ? "task_title_scanned" : "state_" + $0)).tag($0)
-          }
+          ForEach(transferFilters, id: \.self) { Text(transferFilterTitle($0)).tag($0) }
         }.pickerStyle(.menu).labelsHidden().fixedSize()
           .accessibilityIdentifier("transfers.filter")
       }.frame(maxWidth: .infinity, alignment: .leading)
-      if !sourceOptions.isEmpty, filter != "preparing", filter != "scanned" {
+      if !sourceOptions.isEmpty, Self.queueFilter(filter) {
         HStack {
           Text("task_source_filter").font(.callout).foregroundStyle(.secondary)
           Spacer()
@@ -211,8 +209,12 @@ struct TransferList: View {
         .font(.callout).foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("transfers.explanation")
-      TransferSortControl(ordering: Binding(get: { ordering }, set: { ordering = $0 }), filter: filter)
-      if filter == "preparing" || filter == "scanned" {
+      if filter != "needs_attention" {
+        TransferSortControl(ordering: Binding(get: { ordering }, set: { ordering = $0 }), filter: filter)
+      }
+      if filter == "needs_attention" {
+        NeedsAttentionList(model: model)
+      } else if filter == "preparing" || filter == "scanned" {
         SourceBrowser(model: model, history: filter == "scanned", descending: ordering.descending, sort: ordering.sort)
       } else {
         if browser.hasMore {
@@ -249,10 +251,14 @@ struct TransferList: View {
       }
     }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .task(id: queryID) {
-      if filter != "preparing" && filter != "scanned" {
+      if Self.queueFilter(filter) {
         await refresh()
       }
     }
+  }
+  /// Filters backed by the sender job queue rather than pre-queue sources.
+  private static func queueFilter(_ filter: String) -> Bool {
+    !["preparing", "scanned", "needs_attention"].contains(filter)
   }
   private func refresh() async {
     let receiver = model.pairing?.receiverID
@@ -260,6 +266,183 @@ struct TransferList: View {
     guard sourceFilter.isEmpty, !Task.isCancelled, receiver == model.pairing?.receiverID,
       !browser.failed, let summary = browser.summary else { return }
     model.summary = summary
+  }
+}
+
+let transferFilters = [
+  "preparing", "running", "queued", "waiting", "paused", "failed", "needs_attention", "received",
+  "scanned",
+]
+func transferFilterTitle(_ filter: String) -> LocalizedStringKey {
+  switch filter {
+  case "scanned": "task_title_scanned"
+  case "needs_attention": "filter_needs_attention"
+  default: LocalizedStringKey("state_" + filter)
+  }
+}
+
+struct ParkedSource: Decodable, Identifiable, Equatable {
+  let cursor: Int64
+  let source: String
+  let error_code: String?
+  let attempts: Int
+  let created_at_ms: Int64?
+  var id: String { source }
+}
+
+/// Receiver-scoped pages of sources parked after repeated preparation failures.
+@MainActor final class ParkedSourceBrowser: ObservableObject {
+  private struct Page: Decodable {
+    let total: Int
+    let items: [ParkedSource]
+  }
+  @Published var items: [ParkedSource] = []
+  @Published var total = 0
+  @Published var loading = false
+  @Published var failed = false
+  var hasMore: Bool { items.count < total }
+  private var receiver: String?
+  private var generation = 0
+  func refresh(receiver: String?) async {
+    if self.receiver != receiver { items = []; total = 0 }
+    self.receiver = receiver
+    await load(reset: true)
+  }
+  func loadMore() async {
+    guard !loading else { return }
+    await load(reset: false)
+  }
+  private func load(reset: Bool) async {
+    generation += 1
+    let expected = generation
+    guard let receiver else { items = []; total = 0; loading = false; return }
+    loading = true
+    failed = false
+    defer { if generation == expected { loading = false } }
+    // A reset keeps the rows already shown so an action does not shrink the page.
+    var result: [ParkedSource] = []
+    var after: Int64 = 0
+    let wanted = reset ? max(items.count, 1) : items.count + 1
+    do {
+      repeat {
+        let data = try await Bridge.call(["op": "needs_attention", "receiver_id": receiver, "after": after])
+        let page = try JSONDecoder().decode(Page.self, from: data)
+        guard expected == generation, !Task.isCancelled else { return }
+        result.append(contentsOf: page.items)
+        total = page.total
+        guard page.items.count == 100, let last = page.items.last else { break }
+        after = last.cursor
+      } while result.count < wanted
+      if items != result { items = result }
+    } catch {
+      guard expected == generation, !Task.isCancelled else { return }
+      failed = true
+    }
+  }
+}
+
+struct ParkedSourceRow: View {
+  let item: ParkedSource
+  var retry: () -> Void
+  var skip: () -> Void
+  var body: some View {
+    HStack(spacing: 14) {
+      AssetThumbnail(sourceID: item.source)
+      VStack(alignment: .leading, spacing: 7) {
+        HStack {
+          Text("state_needs_attention").lineLimit(1)
+          Spacer()
+          Image(systemName: taskSymbol("needs_attention")).foregroundStyle(.orange)
+        }
+        HStack(spacing: 8) {
+          if let milliseconds = item.created_at_ms {
+            Text(Date(timeIntervalSince1970: Double(milliseconds) / 1000).formatted(date: .abbreviated, time: .shortened))
+          }
+          Text(String(format: NSLocalizedString("attempts_count", comment: ""), item.attempts))
+            .monospacedDigit()
+        }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        HStack(spacing: 12) {
+          Text(LocalizedStringKey("error_" + (item.error_code ?? "other"))).lineLimit(2)
+          Spacer(minLength: 0)
+          Button("retry_task", action: retry).buttonStyle(.plain).foregroundStyle(.tint)
+          Button("skip_task", action: skip).buttonStyle(.plain).foregroundStyle(.tint)
+        }.font(.caption).foregroundStyle(.secondary)
+      }
+    }.padding(.vertical, 10)
+  }
+}
+
+/// Everything that stopped retrying on its own: parked preparation sources
+/// first, then failed queue jobs with their existing retry.
+struct NeedsAttentionList: View {
+  @ObservedObject var model: BackupModel
+  @StateObject private var parked = ParkedSourceBrowser()
+  @StateObject private var jobs = TaskBrowserModel()
+  @State private var working = false
+  private var queryID: String {
+    "\(model.queueRevision)|\(model.parkedSources)|\(model.pairing?.receiverID ?? "")"
+  }
+  private var empty: Bool { parked.items.isEmpty && jobs.jobs.isEmpty }
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Spacer()
+        Button {
+          act { await model.retryAllNeedsAttention(failedJobs: jobs.jobs.map(\.id)) }
+        } label: {
+          Label("retry_all_needs_attention", systemImage: "arrow.clockwise")
+        }.buttonStyle(.bordered).disabled(working || empty || model.pairing == nil)
+          .accessibilityIdentifier("transfers.retry_all_needs_attention")
+      }
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          if (parked.loading || jobs.loading) && empty {
+            ProgressView().frame(maxWidth: .infinity).padding(.top, 36)
+          } else if parked.failed || jobs.failed {
+            VStack(spacing: 12) {
+              Text("tasks_load_failed").foregroundStyle(.secondary)
+              Button("retry_task") { Task { await refresh() } }
+            }.frame(maxWidth: .infinity).padding(.top, 36)
+          } else if empty {
+            ContentUnavailableView("needs_attention_empty", systemImage: "checkmark.circle")
+              .frame(maxWidth: .infinity).padding(.top, 36)
+          }
+          ForEach(parked.items) { item in
+            ParkedSourceRow(item: item,
+              retry: { act { await model.retryParkedSource(item.source) } },
+              skip: { act { await model.skipParkedSource(item.source) } })
+            .disabled(working)
+            Divider()
+          }
+          if parked.hasMore {
+            Button("load_more_tasks") { Task { await parked.loadMore() } }.padding(.vertical, 20)
+          }
+          ForEach(jobs.jobs) { job in
+            TransferRow(job: job, progress: model.transferProgress[job.id]) {
+              Task { await model.retry(job.id) }
+            }
+            Divider()
+          }
+          if jobs.hasMore {
+            Button("load_more_tasks") { Task { await jobs.loadMore() } }.padding(.vertical, 20)
+          }
+        }
+      }
+    }.task(id: queryID) { await refresh() }
+  }
+  private func act(_ action: @escaping () async -> Void) {
+    guard !working else { return }
+    working = true
+    Task {
+      await action()
+      await refresh()
+      working = false
+    }
+  }
+  private func refresh() async {
+    let receiver = model.pairing?.receiverID
+    await parked.refresh(receiver: receiver)
+    await jobs.refresh(filter: "failed", receiver: receiver, descending: true, sort: "activity")
   }
 }
 

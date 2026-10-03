@@ -154,6 +154,8 @@ enum Bridge {
   @Published var reclaimingCache = false
   @Published var cacheReclaimResult: String?
   @Published var pendingImports = 0
+  /// Sources parked after repeated item-specific preparation failures.
+  @Published var parkedSources = 0
   @Published var preparationReason: String?
   private var lastStorageRefresh = Date.distantPast
   private var lastProcessingRefresh = Date.distantPast
@@ -530,8 +532,9 @@ enum Bridge {
       let pending = try await Bridge.call([
         "op": "pending_sources", "receiver_id": target.receiverID,
       ])
-      pendingImports =
-        (try JSONSerialization.jsonObject(with: pending) as? [String: Any])?["count"] as? Int ?? 0
+      let counts = try JSONSerialization.jsonObject(with: pending) as? [String: Any]
+      pendingImports = counts?["count"] as? Int ?? 0
+      parkedSources = counts?["needs_attention"] as? Int ?? 0
     } catch {
       message = error.localizedDescription
       return false
@@ -682,6 +685,7 @@ enum Bridge {
       let pending = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     {
       pendingImports = pending["count"] as? Int ?? 0
+      parkedSources = pending["needs_attention"] as? Int ?? 0
     }
     if !paused { startWorker() }
     scheduleBackgroundWork()
@@ -738,6 +742,7 @@ enum Bridge {
       guard pairing?.receiverID == target.receiverID else { return }
       let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
       if let count = result?["count"] as? Int { pendingImports = count }
+      if let parked = result?["needs_attention"] as? Int { parkedSources = parked }
     } catch { /* Preserve the last known count rather than reporting an empty queue. */ }
   }
   func updatePreparationStorageState() async {
@@ -767,6 +772,7 @@ enum Bridge {
         guard self.pairing?.receiverID == pairing.receiverID else { return }
         result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         pendingImports = result?["count"] as? Int ?? 0
+        parkedSources = result?["needs_attention"] as? Int ?? 0
         let access = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard !paused, access == .authorized || access == .limited else { return }
         guard await canPrepareForReceiver() else { return }
@@ -920,9 +926,38 @@ struct SenderSummary: Decodable {
 }
 
 extension BackupModel {
+  /// Returns parked sources to preparation with a fresh retry cap.
+  func retryParkedSource(_ source: String) async {
+    await parkedSourceCommand("retry_source", source: source)
+  }
+  /// Drops a parked source; a later library scan may schedule it again.
+  func skipParkedSource(_ source: String) async {
+    await parkedSourceCommand("skip_source", source: source)
+  }
+  /// Retries every parked source plus the given failed queue jobs.
+  func retryAllNeedsAttention(failedJobs: [Int64]) async {
+    guard let receiver = pairing?.receiverID else { return }
+    do {
+      _ = try await Bridge.call(["op": "retry_all_needs_attention", "receiver_id": receiver])
+      for id in failedJobs { _ = try await Bridge.call(["op": "retry", "id": id]) }
+    } catch { message = error.localizedDescription }
+    await refreshPendingImportCount()
+    await refresh()
+    if !paused { startWorker() }
+  }
+  private func parkedSourceCommand(_ op: String, source: String) async {
+    guard let receiver = pairing?.receiverID else { return }
+    do {
+      _ = try await Bridge.call(["op": op, "receiver_id": receiver, "source": source])
+    } catch { message = error.localizedDescription }
+    await refreshPendingImportCount()
+  }
+  /// Parked preparation sources plus failed queue jobs; both need a decision.
+  var needsAttention: Int { parkedSources + summary.failed }
   func transferCount(for state: String) -> Int {
     switch state {
     case "preparing": return pendingImports
+    case "needs_attention": return needsAttention
     case "scanned": return historicalImport?.checked ?? 0
     default: return summary.count(for: state)
     }
