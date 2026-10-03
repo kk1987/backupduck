@@ -1,9 +1,11 @@
+use backupduck_cloud_audit as cloud;
 use backupduck_core::*;
 use backupduck_store::Receiver;
 use backupduck_transport::Client;
 use clap::{Parser, Subcommand};
+use serde_json::{json, Value};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, File, OpenOptions},
     io::Write,
     net::SocketAddr,
@@ -62,6 +64,32 @@ enum Command {
         #[arg(long)]
         token_file: PathBuf,
         id: String,
+    },
+    /// Check files against Google Photos through its undocumented web RPC.
+    CloudAudit {
+        #[command(subcommand)]
+        command: CloudCommand,
+    },
+}
+#[derive(Subcommand)]
+enum CloudCommand {
+    /// Look up files by SHA-1 and report whether they count against quota.
+    Lookup {
+        /// Netscape cookies.txt from a signed-in photos.google.com session.
+        #[arg(long)]
+        cookies: PathBuf,
+        /// Signed-in account index (the N in photos.google.com/u/N/).
+        #[arg(long, default_value_t = 0)]
+        account: u32,
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+    },
+    /// Report whether the exported session is still signed in.
+    Status {
+        #[arg(long)]
+        cookies: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        account: u32,
     },
 }
 fn resource(path: &Path, role: ResourceRole) -> Result<Resource> {
@@ -229,6 +257,85 @@ async fn main() -> Result<()> {
                     .await?
             )?
         ),
+        Command::CloudAudit { command } => cloud_audit(command)
+            .await
+            .map_err(|e| Error::Transport(format!("cloud audit: {e}")))?,
+    }
+    Ok(())
+}
+fn load_cookies(path: &Path) -> cloud::Result<cloud::CookieFile> {
+    let file = cloud::CookieFile::load(path)?;
+    #[cfg(unix)]
+    {
+        if !cloud::cookies::check_permissions(path) {
+            eprintln!(
+                "warning: {} is readable by other users and grants full Google account access; chmod 600 it",
+                path.display()
+            );
+        }
+    }
+    Ok(file)
+}
+async fn cloud_audit(command: CloudCommand) -> cloud::Result<()> {
+    match command {
+        CloudCommand::Status { cookies, account } => {
+            let jar = load_cookies(&cookies)?.jar();
+            let valid = match cloud::Session::open(jar, account).await {
+                Ok(_) => true,
+                Err(cloud::Error::SessionExpired) => false,
+                Err(e) => return Err(e),
+            };
+            println!("{}", json!({ "account": account, "session_valid": valid }));
+            if !valid {
+                std::process::exit(1);
+            }
+        }
+        CloudCommand::Lookup {
+            cookies,
+            account,
+            files,
+        } => {
+            let hashes = files
+                .iter()
+                .map(|path| cloud::sha1_hex(File::open(path)?))
+                .collect::<cloud::Result<Vec<_>>>()?;
+            let session = cloud::Session::open(load_cookies(&cookies)?.jar(), account).await?;
+            let mut auditor = cloud::Auditor::new(session, cloud::Throttle::default());
+            let lookups = auditor.lookup_hashes(&hashes).await?;
+            let keys: Vec<String> = lookups
+                .iter()
+                .flatten()
+                .map(|l| l.media_key.clone())
+                .collect();
+            let infos = auditor.item_info(&keys).await?;
+            let infos: HashMap<&str, &cloud::ItemInfo> = infos
+                .iter()
+                .flatten()
+                .map(|i| (i.media_key.as_str(), i))
+                .collect();
+            let report = files
+                .iter()
+                .zip(&hashes)
+                .zip(&lookups)
+                .map(|((path, sha1), lookup)| {
+                    let info = lookup
+                        .as_ref()
+                        .and_then(|l| infos.get(l.media_key.as_str()).copied());
+                    json!({
+                        "file": path.display().to_string(),
+                        "sha1": sha1,
+                        "found": lookup.is_some(),
+                        "media_key": lookup.as_ref().map(|l| &l.media_key),
+                        "device_model": lookup.as_ref().and_then(|l| l.device_model.as_ref()),
+                        "takes_up_space": info.and_then(|i| i.takes_up_space),
+                        "is_original_quality": info.and_then(|i| i.is_original_quality),
+                        "verdict": cloud::verdict(lookup.as_ref(), info),
+                    })
+                })
+                .collect();
+            println!("{:#}", Value::Array(report));
+            eprintln!("{} RPC calls", auditor.calls());
+        }
     }
     Ok(())
 }
