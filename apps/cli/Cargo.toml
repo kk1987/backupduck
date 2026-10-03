@@ -9,6 +9,7 @@ license.workspace = true
 backupduck-core.workspace = true
 backupduck-store.workspace = true
 backupduck-transport.workspace = true
+backupduck-cloud-audit.workspace = true
 tokio.workspace = true
 clap.workspace = true
 getrandom.workspace = true
