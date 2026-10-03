@@ -139,6 +139,14 @@ impl Sender {
             CREATE TRIGGER IF NOT EXISTS jobs_update_revision AFTER UPDATE ON jobs BEGIN UPDATE settings SET value=value+1 WHERE key='revision'; END;
             CREATE INDEX IF NOT EXISTS jobs_source_revision ON jobs(receiver_id,json_extract(manifest,'$.source_id'),json_extract(manifest,'$.revision'));").map_err(db)?;
         sorting::migrate(&conn)?;
+        let has_cloud_audit: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('receiver_features') WHERE name='cloud_audit')", [], |r| r.get(0)).map_err(db)?;
+        if !has_cloud_audit {
+            conn.execute(
+                "ALTER TABLE receiver_features ADD COLUMN cloud_audit INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(db)?;
+        }
         // Rust foreground tasks cannot survive a process exit. OS tasks can and must
         // be reconciled explicitly after the native scheduler has enumerated them.
         conn.execute("UPDATE jobs SET state='queued', generation=generation+1 WHERE state='running' AND native_task_id IS NULL", []).map_err(db)?;
@@ -499,8 +507,24 @@ impl Sender {
     }
     /// Features are accepted only after an authenticated capability check.
     pub fn set_bundle_upload(&mut self, receiver: &str, enabled: bool) -> Result<()> {
-        self.conn.execute("INSERT INTO receiver_features VALUES(?1,?2) ON CONFLICT(receiver_id) DO UPDATE SET bundle_upload=excluded.bundle_upload", params![receiver, enabled]).map_err(db)?;
+        self.conn.execute("INSERT INTO receiver_features(receiver_id,bundle_upload) VALUES(?1,?2) ON CONFLICT(receiver_id) DO UPDATE SET bundle_upload=excluded.bundle_upload", params![receiver, enabled]).map_err(db)?;
         Ok(())
+    }
+    pub fn set_cloud_audit(&mut self, receiver: &str, enabled: bool) -> Result<()> {
+        self.conn.execute("INSERT INTO receiver_features(receiver_id,bundle_upload,cloud_audit) VALUES(?1,0,?2) ON CONFLICT(receiver_id) DO UPDATE SET cloud_audit=excluded.cloud_audit", params![receiver, enabled]).map_err(db)?;
+        Ok(())
+    }
+    pub fn cloud_audit(&self, receiver: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT cloud_audit FROM receiver_features WHERE receiver_id=?1",
+                [receiver],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(db)?
+            .unwrap_or(false))
     }
     pub fn bundle_upload(&self, receiver: &str) -> Result<bool> {
         Ok(self

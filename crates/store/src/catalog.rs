@@ -24,6 +24,8 @@ pub struct HistoryItem {
     pub published_at_ms: Option<i64>,
     pub originals_released: bool,
     pub release_reason: Option<String>,
+    pub cloud_state: String,
+    pub gallery_released: bool,
     pub senders: Vec<super::devices::Peer>,
 }
 #[derive(Serialize)]
@@ -172,7 +174,19 @@ impl Catalog {
         } else {
             "NULL"
         };
-        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column},{received_at_column},{published_at_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4 OFFSET ?6")).map_err(super::db)?;
+        let has_cloud: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='cloud_state')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(super::db)?;
+        let (cloud_column, gallery_released_column) = if has_cloud {
+            ("cloud_state", "gallery_released")
+        } else {
+            ("'unknown'", "0")
+        };
+        let mut query = conn.prepare(&format!("SELECT rowid,id,manifest,received,processing,originals_released,{reason_column},{error_column},{received_at_column},{published_at_column},{cloud_column},{gallery_released_column} FROM assets WHERE {filter} AND (?3 IS NULL OR rowid<?3) ORDER BY rowid DESC LIMIT ?4 OFFSET ?6")).map_err(super::db)?;
         let records = query
             .query_map(
                 params![
@@ -195,6 +209,8 @@ impl Catalog {
                         r.get::<_, Option<String>>(7)?,
                         r.get::<_, Option<i64>>(8)?,
                         r.get::<_, Option<i64>>(9)?,
+                        r.get::<_, String>(10)?,
+                        r.get::<_, bool>(11)?,
                     ))
                 },
             )
@@ -215,6 +231,8 @@ impl Catalog {
             processing_error,
             received_at_ms,
             published_at_ms,
+            cloud_state,
+            gallery_released,
         ) in records.into_iter().take(limit)
         {
             let asset: Asset = serde_json::from_str(&manifest)?;
@@ -277,6 +295,8 @@ impl Catalog {
                 published_at_ms,
                 originals_released,
                 release_reason,
+                cloud_state,
+                gallery_released,
                 senders,
             });
         }

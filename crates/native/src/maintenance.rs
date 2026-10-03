@@ -930,6 +930,7 @@ mod tests {
                 receipt: ReceiptState::Received,
                 processing: ProcessingState::NotRequested,
                 processing_error: None,
+                cloud_state: None,
                 resources: job
                     .asset
                     .resources

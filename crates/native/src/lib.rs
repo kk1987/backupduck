@@ -728,6 +728,11 @@ enum Command {
         #[serde(default)]
         after: String,
     },
+    GallerySha1 {
+        root: Option<PathBuf>,
+        id: String,
+        copy: backupduck_store::retention::GalleryCopy,
+    },
     GalleryPublication {
         root: Option<PathBuf>,
         id: String,
@@ -913,6 +918,10 @@ fn dispatch(command: Command) -> Result<Value> {
             sender.set_bundle_upload(
                 &pairing.receiver_id,
                 caps.version == PROTOCOL_VERSION && caps.bundle_upload,
+            )?;
+            sender.set_cloud_audit(
+                &pairing.receiver_id,
+                caps.version == PROTOCOL_VERSION && caps.cloud_audit,
             )?;
             if let Some(peer) = peer.as_ref() {
                 devices.remember(&pairing.receiver_id, peer)?;
@@ -1321,8 +1330,9 @@ fn dispatch(command: Command) -> Result<Value> {
             }
             if let Ok(host) = sender() {
                 host.set_bundle_upload(&pairing.receiver_id, caps.bundle_upload)?;
+                host.set_cloud_audit(&pairing.receiver_id, caps.cloud_audit)?;
             }
-            Ok(json!({"receiver_id":pairing.receiver_id}))
+            Ok(json!({"receiver_id":pairing.receiver_id,"cloud_audit":caps.cloud_audit}))
         }
         Command::RunSender { pairing } => Ok(serde_json::to_value(
             runtime().block_on(sender()?.run_once(&pairing))?,
@@ -1533,10 +1543,15 @@ fn dispatch(command: Command) -> Result<Value> {
         }),
         Command::GalleryCandidates { root, after } => {
             receiver_storage::with_store(root.as_deref(), |store, maintenance| {
-                if !maintenance.settings.receiver_relay {
-                    return Ok(json!([]));
-                }
-                Ok(serde_json::to_value(store.gallery_candidates(&after)?)?)
+                Ok(serde_json::to_value(store.gallery_candidates(
+                    &after,
+                    maintenance.settings.receiver_relay,
+                )?)?)
+            })
+        }
+        Command::GallerySha1 { root, id, copy } => {
+            receiver_storage::with_store(root.as_deref(), |store, _| {
+                Ok(json!({"updated":store.backfill_gallery_sha1(&id, &copy)?}))
             })
         }
         Command::GalleryPublication { root, id, copy } => {

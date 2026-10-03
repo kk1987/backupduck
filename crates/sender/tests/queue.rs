@@ -55,6 +55,7 @@ fn status(j: &Job, received: bool) -> AssetStatus {
         },
         processing: ProcessingState::NotRequested,
         processing_error: None,
+        cloud_state: None,
         resources: vec![ResourceStatus {
             sha256: j.asset.resources[0].sha256.clone(),
             offset: if received { 10 } else { 5 },
@@ -561,4 +562,31 @@ fn verified_connection_recovers_only_its_network_errors_without_resuming_pause()
         assert_eq!(s.job(old.id).unwrap().state, old.state);
     }
     assert_eq!(s.recover_connection("receiver-1").unwrap(), 0);
+}
+
+#[test]
+fn receiver_features_gain_cloud_audit_without_losing_bundle_upload() {
+    let root = std::env::temp_dir().join(format!("backupduck-features-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    {
+        let conn = rusqlite::Connection::open(root.join("sender.sqlite3")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE receiver_features(receiver_id TEXT PRIMARY KEY,bundle_upload INTEGER NOT NULL);
+             INSERT INTO receiver_features VALUES('old',1);",
+        )
+        .unwrap();
+    }
+    let mut s = Sender::open(&root).unwrap();
+    assert!(s.bundle_upload("old").unwrap());
+    assert!(!s.cloud_audit("old").unwrap());
+    s.set_cloud_audit("old", true).unwrap();
+    s.set_cloud_audit("new", true).unwrap();
+    s.set_bundle_upload("new", true).unwrap();
+    assert!(s.cloud_audit("old").unwrap() && s.bundle_upload("old").unwrap());
+    assert!(s.cloud_audit("new").unwrap() && s.bundle_upload("new").unwrap());
+    assert!(!s.cloud_audit("absent").unwrap());
+    drop(s);
+    assert!(Sender::open(&root).unwrap().cloud_audit("old").unwrap());
+    std::fs::remove_dir_all(root).unwrap();
 }

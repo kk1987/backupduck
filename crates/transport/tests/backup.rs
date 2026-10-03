@@ -642,6 +642,7 @@ fn relay_requires_opt_in_and_matching_delivery_evidence_and_keeps_receipts() {
         sha256: digest(b"converted motion delivery"),
         size: 25,
         display_name: None,
+        sha1: None,
     };
     receiver.register(first.clone()).unwrap();
     assert!(receiver.record_gallery_copy(&id, &copy).is_err());

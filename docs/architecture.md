@@ -86,6 +86,19 @@ publication. The generic protocol still advertises no target-specific processing
 capability; automatic capability negotiation remains future work. Receiver
 receipt never claims Google Photos cloud backup.
 
+### Cloud verification state
+
+Gallery evidence records SHA-1 as well as SHA-256 of the published copy's bytes.
+An external auditor lists published copies over the protocol, looks each up by
+SHA-1 in the user's cloud library, and reports `verified`,
+`verified_counts_against_quota` or not found; copies not found a week after
+publication become `missing`. The receiver stores the state per asset and rejects
+verdicts for bytes other than the stored copy. A receipt still does not mean the
+copy is in the cloud: only a `verified` state reflects an auditor's lookup, and it
+removes nothing. Copies published before SHA-1 evidence are re-read by the
+Android receiver's background sweep to add it. See
+[protocol](protocol.md#cloud-verification).
+
 Conversion location can be optimized later through capability negotiation without
 changing asset identity or the original-resource receipt contract. Original
 retention and derived-output cleanup require an explicit target policy.
