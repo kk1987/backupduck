@@ -238,6 +238,7 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
                         val stored = evidence.optJSONObject("copy")?.let { Uri.parse(it.getString("locator")) }
                         val uri = if (stored?.scheme == "content" && stored.authority == "media") stored else {
                             // Pre-evidence receiver data can still use the legacy name.
+                            // Only those rows lack a stored locator; newer copies keep original names.
                             val collection = if (item.kind == "video") MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                             resolver.query(collection, arrayOf(MediaStore.MediaColumns._ID),
                                 "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.IS_PENDING}=0",

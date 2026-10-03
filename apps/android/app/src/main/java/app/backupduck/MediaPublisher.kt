@@ -81,71 +81,91 @@ internal object MediaPublisher {
             check(cursor.moveToFirst() && cursor.getInt(0) == 0 && cursor.getString(1) == context.packageName && cursor.getString(2) == "DCIM/BackupDuck/" && (Build.VERSION.SDK_INT < 30 || cursor.getInt(3) == 0)) { "gallery_copy_missing" }
         }
     }
+    private data class Row(val uri: Uri, val ready: Boolean, val owner: String?)
     suspend fun publishFile(context: Context, source: File, item: JSONObject, mime: String, metadata: JSONObject?, existingOnly: Boolean = false, originalHash: String? = null, resumeLocator: String? = null): GalleryCopy {
         val resolver = context.contentResolver
-        val legacyName = GalleryNaming.legacyName(item, mime)
         val collection = if (mime.startsWith("video/")) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         // Collection queries omit pending rows on Android 10 unless requested.
-        // Include them to resume our own interrupted writes; ownership checks
-        // below still prevent changing another application's media.
+        // Include them so a name held by any interrupted write counts as taken;
+        // ownership checks below still prevent changing another application's media.
         @Suppress("DEPRECATION")
         val lookupCollection = MediaStore.setIncludePending(collection)
         val relative = "DCIM/BackupDuck/"
         val captured = MediaDates.captured(metadata)
         val columns = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.IS_PENDING, MediaStore.MediaColumns.OWNER_PACKAGE_NAME)
         val selection = "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?"
-        var destination: Uri? = null; var ready = false
-        var chosenName: String? = null
-        synchronized(publicationLock) {
-            // Four hex digits are the common case. A name already owned by a
-            // different asset gets a longer suffix; it is never overwritten.
-            for (candidate in (listOf(legacyName) + GalleryNaming.candidates(item, mime)).distinct()) {
-                var found: Uri? = null; var foundReady = false; var owner: String? = null
-                checkNotNull(resolver.query(lookupCollection, columns, selection, arrayOf(candidate, relative), null)).use { cursor ->
-                    check(cursor.count <= 1) { "gallery_copy_ambiguous" }
-                    if (cursor.moveToFirst()) {
-                        found = ContentUris.withAppendedId(collection, cursor.getLong(0))
-                        foundReady = cursor.getInt(1) == 0
-                        owner = cursor.getString(2)
-                    }
-                }
-                if (found != null) {
-                    if (found.toString() == resumeLocator || candidate == legacyName && resumeLocator == null && owner == context.packageName) {
-                        check(owner == context.packageName) { "gallery_copy_changed" }
-                        destination = found; ready = foundReady; break
-                    }
-                    continue
-                }
-                if (candidate == legacyName || resumeLocator != null || existingOnly) continue
-                destination = checkNotNull(resolver.insert(collection, ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, candidate); put(MediaStore.MediaColumns.MIME_TYPE, mime)
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, relative); put(MediaStore.MediaColumns.IS_PENDING, 1)
-                    putAll(MediaDates.values(captured))
-                })) { "publication_failed" }
-                chosenName = candidate
-                break
-            }
+        fun rows(name: String): List<Row> = checkNotNull(resolver.query(lookupCollection, columns, selection, arrayOf(name, relative), null)).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(Row(ContentUris.withAppendedId(collection, cursor.getLong(0)), cursor.getInt(1) == 0, cursor.getString(2))) }
         }
-        if (destination != null && chosenName == null) {
-            // Existing interrupted publications still need the exact candidate selected.
-            chosenName = resolver.query(requireNotNull(destination), arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use {
-                if (it.moveToFirst()) it.getString(0) else null
-            }
+        fun displayName(uri: Uri): String? = resolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use {
+            if (it.moveToFirst() && it.getString(1) == relative) it.getString(0)?.takeIf(String::isNotBlank) else null
         }
-        check(!chosenName.isNullOrBlank()) { "publication_name_unavailable" }
-        if (resumeLocator != null) check(destination.toString() == resumeLocator) { "gallery_copy_missing" }
-        if (existingOnly) check(destination != null && ready) { "gallery_copy_missing" }
         val size = source.length(); check(size > 0) { "gallery_copy_missing" }
-        val expected = originalHash ?: source.inputStream().use { hash(it, size).first }
-        if (ready) return verify(context, GalleryCopy(requireNotNull(destination).toString(), expected, size, chosenName))
-        val uri = destination ?: error("gallery_copy_ambiguous")
-        val copy = GalleryCopy(uri.toString(), expected, size, chosenName)
+        suspend fun expected() = originalHash ?: source.inputStream().use { hash(it, size).first }
+
+        if (resumeLocator != null) {
+            // Resume only the stored row. Its name is whatever MediaStore kept.
+            val uri = Uri.parse(resumeLocator)
+            val name = synchronized(publicationLock) { if (ownedPending(context, uri)) displayName(uri) else null }
+            check(name != null && !existingOnly) { "gallery_copy_missing" }
+            return write(context, source, item, GalleryCopy(uri.toString(), expected(), size, name), captured)
+        }
+
+        if (existingOnly) {
+            // Pre-evidence relay: adopt a finished copy under an older name, never insert.
+            val found = synchronized(publicationLock) {
+                (listOfNotNull(GalleryNaming.legacyOrNull(item, mime)) + GalleryNaming.datedOrEmpty(item, mime)).distinct().flatMap { name ->
+                    rows(name).filter { it.ready && it.owner == context.packageName }.map { it.uri to name }
+                }
+            }
+            check(found.isNotEmpty()) { "gallery_copy_missing" }
+            val hash = expected()
+            // A short dated suffix may belong to another asset; only matching bytes count.
+            var failure: Exception? = null
+            for ((uri, name) in found) {
+                try { return verify(context, GalleryCopy(uri.toString(), hash, size, name)) }
+                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (error: Exception) { failure = error }
+            }
+            throw checkNotNull(failure)
+        }
+
+        val (row, name) = synchronized(publicationLock) {
+            // Pre-evidence receivers wrote under the legacy name before any receipt.
+            val legacy = GalleryNaming.legacyOrNull(item, mime)
+            val interrupted = legacy?.let(::rows)?.also { check(it.size <= 1) { "gallery_copy_ambiguous" } }
+                ?.firstOrNull { it.owner == context.packageName }
+            if (interrupted != null) return@synchronized interrupted to checkNotNull(legacy)
+            // Any row holding a name, pending or not, ours or not, makes it taken.
+            val requested = ((0..GalleryNaming.MAX_COLLISION_VARIANTS).map { GalleryNaming.preferred(item, mime, it) } +
+                GalleryNaming.datedOrEmpty(item, mime)).distinct().firstOrNull { rows(it).isEmpty() } ?: error("publication_name_unavailable")
+            val inserted = checkNotNull(resolver.insert(collection, ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, requested); put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relative); put(MediaStore.MediaColumns.IS_PENDING, 1)
+                putAll(MediaDates.values(captured))
+            })) { "publication_failed" }
+            // MediaProvider may sanitise or uniquify the requested name; record what it kept.
+            val actual = displayName(inserted)
+            if (actual == null) { resolver.delete(inserted, null, null); error("publication_name_unavailable") }
+            Row(inserted, false, context.packageName) to actual
+        }
+        val copy = GalleryCopy(row.uri.toString(), expected(), size, name)
+        if (row.ready) return verify(context, copy)
+        // A crash before prepare_gallery leaves an owned pending row without
+        // evidence. The next attempt treats its name as taken and inserts again;
+        // the orphan stays pending, hidden from the gallery until MediaProvider
+        // expires it.
+        return write(context, source, item, copy, captured)
+    }
+    private suspend fun write(context: Context, source: File, item: JSONObject, copy: GalleryCopy, captured: Long?): GalleryCopy {
+        val resolver = context.contentResolver
+        val uri = Uri.parse(copy.locator)
         NativeBridge.request(JSONObject().put("op", "prepare_gallery").put("id", item.getString("id")).put("copy", copy.json()))
         val copied = source.inputStream().use { input ->
-            checkNotNull(resolver.openOutputStream(uri, "wt")).use { output -> hash(input, size) { buffer, count -> output.write(buffer, 0, count) } }
+            checkNotNull(resolver.openOutputStream(uri, "wt")).use { output -> hash(input, copy.size) { buffer, count -> output.write(buffer, 0, count) } }
         }
-        check(copied.first == expected && copied.second == size) { "gallery_copy_changed" }
+        check(copied.first == copy.sha256 && copied.second == copy.size) { "gallery_copy_changed" }
         MediaDates.stampPending(context, uri, captured)
         check(resolver.update(uri, MediaDates.values(captured).apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) == 1) { "publication_failed" }
         return verify(context, copy)

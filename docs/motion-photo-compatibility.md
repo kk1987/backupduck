@@ -27,11 +27,14 @@ Other XMP items, original media payloads and auxiliary-image references remain
 intact. Inputs without primary XMP still receive one new item. Ambiguous layouts
 are rejected for the existing codec fallback.
 
-New delivery names end in `_MP` before the image extension, following the
+Motion Photo copies keep the original Apple Photos filename with `_MP` added
+before the image extension, for example `IMG_1234_MP.HEIC` or `IMG_1234_MP.jpg`
+when the still is converted to JPEG, following the
 [Motion Photo filename recommendation](https://developer.android.com/media/platform/motion-photo-format).
-Previous names remain candidates when resuming interrupted publication.
-Confirmed copies retain their stored URI; this change does not rewrite existing
-gallery files or cloud items.
+A collision numbers the name before the suffix (`IMG_1234 (1)_MP.HEIC`).
+Interrupted publications resume through their stored MediaStore URI, and
+confirmed copies retain it; this change does not rewrite existing gallery files
+or cloud items.
 
 ## Regression and playback evidence
 

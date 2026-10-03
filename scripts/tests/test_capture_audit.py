@@ -22,4 +22,25 @@ class CaptureAuditTests(unittest.TestCase):
         self.assertEqual(audit.classify_cloud({'filename':'IMG_0001.JPG'}, {})['status'],'unmatched')
         aid='b'*64
         self.assertEqual(audit.classify_cloud({'filename':'BD_'+aid+'.heic'},{aid:{'capture_ms':None}})['status'],'unknown')
+    def test_receipt_maps_original_names_and_keeps_legacy_names(self):
+        import json, tempfile
+        aid,other='c'*64,'d'*64
+        with tempfile.TemporaryDirectory() as tmp:
+            receipt=Path(tmp)/'receipt.json'
+            receipt.write_text(json.dumps({'schema_version':1,'items':[
+                {'id':aid,'name':'IMG_1234.HEIC'},{'id':other,'name':'IMG_1234 (1).HEIC'},
+                {'id':aid,'name':'reused.jpg'},{'id':other,'name':'reused.jpg'},{'id':'bad','name':'bad.jpg'}]}))
+            names=audit.read_receipt(receipt)
+            media=Path(tmp)/'media.txt'
+            media.write_text('Row: 0 _id=7, _display_name=IMG_1234 (1).HEIC, datetaken=1, date_added=2, date_modified=3\n'
+                'Row: 1 _id=8, _display_name=unknown.jpg, datetaken=1, date_added=2, date_modified=3\n')
+            self.assertEqual([r['asset_id'] for r in audit.read_media(media,names)],[other])
+        self.assertEqual(names['IMG_1234.HEIC'],aid)
+        self.assertIsNone(names['reused.jpg'])
+        self.assertNotIn('bad.jpg',names)
+        assets={aid:{'capture_ms':None},other:{'capture_ms':None}}
+        self.assertEqual(audit.classify_cloud({'filename':'IMG_1234.HEIC'},assets,names)['asset_id'],aid)
+        self.assertEqual(audit.classify_cloud({'filename':'reused.jpg'},assets,names)['status'],'unmatched')
+        self.assertEqual(audit.classify_cloud({'filename':'IMG_1234.HEIC'},assets)['status'],'unmatched')
+        self.assertEqual(audit.classify_cloud({'filename':'BD_'+aid+'.heic'},assets,names)['asset_id'],aid)
 if __name__=='__main__': unittest.main()
