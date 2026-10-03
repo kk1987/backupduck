@@ -5,7 +5,11 @@
     any(target_os = "ios", target_os = "android")
 ))]
 compile_error!("folder-source is a desktop-only capability");
+#[cfg(all(feature = "cloud-audit", any(target_os = "ios", target_os = "android")))]
+compile_error!("cloud-audit is a desktop-only capability");
 mod background;
+#[cfg(feature = "cloud-audit")]
+pub mod cloud;
 mod dashboard;
 #[cfg(feature = "folder-source")]
 mod folders;
@@ -275,6 +279,8 @@ pub struct SenderHost {
     sender: Arc<Mutex<Sender>>,
     cancelled: Arc<AtomicBool>,
     busy: AtomicBool,
+    #[cfg(feature = "cloud-audit")]
+    cloud_audit_busy: AtomicBool,
     request_root: PathBuf,
     export_root: PathBuf,
     maintenance: Mutex<maintenance::Maintenance>,
@@ -291,6 +297,8 @@ impl SenderHost {
             sender: Arc::new(Mutex::new(Sender::open(root)?)),
             cancelled: Arc::new(AtomicBool::new(false)),
             busy: AtomicBool::new(false),
+            #[cfg(feature = "cloud-audit")]
+            cloud_audit_busy: AtomicBool::new(false),
             request_root,
         };
         host.restore_export_locations()?;
@@ -445,6 +453,10 @@ enum Command {
     #[cfg(feature = "folder-source")]
     Folder {
         command: folders::Command,
+    },
+    #[cfg(feature = "cloud-audit")]
+    CloudAudit {
+        command: cloud::Command,
     },
     ReceiverConnectionInfo {
         root: PathBuf,
@@ -628,6 +640,8 @@ enum Command {
         #[serde(default)]
         include_pending: bool,
         #[serde(default)]
+        include_cloud: bool,
+        #[serde(default)]
         include_previous_receipts: bool,
         receiver_id: String,
         sources: Vec<(String, String)>,
@@ -801,6 +815,8 @@ fn dispatch(command: Command) -> Result<Value> {
     match command {
         #[cfg(feature = "folder-source")]
         Command::Folder { command } => folders::call(command),
+        #[cfg(feature = "cloud-audit")]
+        Command::CloudAudit { command } => cloud::call(command),
         Command::ReceiverConnectionInfo { root } => receiver_connection_info(&root),
         Command::ReceiverTransferHold { held } => {
             let h = HOSTS.lock().map_err(lock)?;
@@ -1244,14 +1260,15 @@ fn dispatch(command: Command) -> Result<Value> {
             receiver_id,
             sources,
             include_pending,
+            include_cloud,
             include_previous_receipts,
         } => {
             let host = sender()?;
-            let mut states = host
-                .sender
-                .lock()
-                .map_err(lock)?
-                .source_states(&receiver_id, &sources)?;
+            let mut states = host.sender.lock().map_err(lock)?.source_states_with_cloud(
+                &receiver_id,
+                &sources,
+                include_cloud,
+            )?;
             if include_pending {
                 let pending = host
                     .maintenance
@@ -1701,6 +1718,11 @@ fn error_code(e: Error) -> &'static str {
             "burst_jpeg_xmp_conflict" => "burst_jpeg_xmp_conflict",
             "burst_jpeg_xmp" => "burst_jpeg_xmp",
             "burst_jpeg_structure" => "burst_jpeg_structure",
+            "cloud_audit_unsupported" => "cloud_audit_unsupported",
+            "cloud_session_expired" => "cloud_session_expired",
+            "cloud_cookies_invalid" => "cloud_cookies_invalid",
+            "cloud_rate_limited" => "cloud_rate_limited",
+            "cloud_response_unrecognized" => "cloud_response_unrecognized",
             _ => "unsupported",
         },
     }

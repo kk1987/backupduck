@@ -590,3 +590,100 @@ fn receiver_features_gain_cloud_audit_without_losing_bundle_upload() {
     assert!(Sender::open(&root).unwrap().cloud_audit("old").unwrap());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn cloud_verdicts_mirror_onto_received_jobs() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let job = add(&mut s);
+    let asset_id = job.asset.id().unwrap();
+    let key = [(job.asset.source_id.clone(), job.asset.revision.clone())];
+    assert!(!s
+        .observe_cloud("receiver-2", &asset_id, "verified", None, 1)
+        .unwrap());
+    assert!(s
+        .observe_cloud("receiver-1", &asset_id, "bogus", None, 1)
+        .is_err());
+    let running = s.claim("receiver-1", 0).unwrap().unwrap();
+    s.acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    assert_eq!(s.job(job.id).unwrap().cloud, None);
+    assert!(!serde_json::to_string(&s.job(job.id).unwrap())
+        .unwrap()
+        .contains("\"cloud\""));
+    let summary = s.summary("receiver-1").unwrap();
+    assert_eq!(
+        (
+            &summary["cloud_verified"],
+            &summary["cloud_quota"],
+            &summary["cloud_missing"]
+        ),
+        (&0.into(), &0.into(), &0.into())
+    );
+
+    let before = s.revision().unwrap();
+    assert!(s
+        .observe_cloud(
+            "receiver-1",
+            &asset_id,
+            "verified_counts_against_quota",
+            Some("Pixel 9"),
+            10
+        )
+        .unwrap());
+    let quota = s.revision().unwrap();
+    assert!(quota > before);
+    assert_eq!(s.summary("receiver-1").unwrap()["cloud_quota"], 1);
+    // Same state again: no UI refresh.
+    s.observe_cloud(
+        "receiver-1",
+        &asset_id,
+        "verified_counts_against_quota",
+        None,
+        20,
+    )
+    .unwrap();
+    assert_eq!(s.revision().unwrap(), quota);
+    assert_eq!(
+        s.source_states_with_cloud("receiver-1", &key, true)
+            .unwrap()[&job.asset.source_id],
+        "received"
+    );
+
+    s.observe_cloud("receiver-1", &asset_id, "verified", None, 30)
+        .unwrap();
+    assert!(s.revision().unwrap() > quota);
+    let summary = s.summary("receiver-1").unwrap();
+    assert_eq!(
+        (&summary["cloud_verified"], &summary["cloud_quota"]),
+        (&1.into(), &0.into())
+    );
+    assert_eq!(s.summary("receiver-2").unwrap()["cloud_verified"], 0);
+    assert_eq!(s.job(job.id).unwrap().cloud.as_deref(), Some("verified"));
+    assert_eq!(
+        s.list_filtered_ordered(0, 10, None, None, true).unwrap()[0]
+            .cloud
+            .as_deref(),
+        Some("verified")
+    );
+    assert_eq!(
+        s.source_states_with_cloud("receiver-1", &key, true)
+            .unwrap()[&job.asset.source_id],
+        "backed_up"
+    );
+    assert_eq!(
+        s.source_states("receiver-1", &key).unwrap()[&job.asset.source_id],
+        "received"
+    );
+
+    assert!(s.cloud_audit_run("receiver-1").unwrap().is_none());
+    s.record_cloud_audit_run("receiver-1", 5, &serde_json::json!({"checked": 1}))
+        .unwrap();
+    drop(s);
+    let s = Sender::open(&t.0).unwrap();
+    assert_eq!(
+        s.cloud_audit_run("receiver-1").unwrap(),
+        Some((5, serde_json::json!({"checked": 1})))
+    );
+    assert_eq!(s.job(job.id).unwrap().cloud.as_deref(), Some("verified"));
+}

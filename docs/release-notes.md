@@ -4,6 +4,7 @@
 - The capture-date audit script accepts the Pixel gallery receipt export (`--receipt-json`) to match original filenames to received assets.
 - HEIC burst frames are published on Pixel as HEIC without re-encoding, keeping HDR gain maps and metadata, e.g. `IMG_1234.HEIC`. Only the burst markers are added to the primary XMP. A new receiver setting, "Convert HEIC bursts to JPEG" (off by default), restores the previous JPEG copies; unsupported HEIC layouts still fall back to JPEG. Google Photos cloud grouping of HEIC bursts is unverified.
 - The Pixel receiver records a SHA-1 of each gallery copy and tracks a cloud verification state for it, reported by a future Mac auditor over two new authenticated routes. Existing gallery copies gain the SHA-1 in the background. The receipt export includes `sha1` and `cloud_state`. Nothing is deleted based on this state yet.
+- macOS can check the Pixel's gallery copies against Google Photos (Settings > Google Photos). Pick a `cookies.txt` exported from a signed-in browser, then run a check or a dry run, or let it check every 10 minutes. Verdicts go to the receiver and show in the transfer list (Backed up to Google Photos, counting against Google storage, or not found yet) and as a filled check in the library grid. Backup pauses by default when newly uploaded photos count against Google storage. This uses an undocumented Google interface; results are advisory and nothing is deleted. iOS and Android do not include it.
 
 # RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)
 

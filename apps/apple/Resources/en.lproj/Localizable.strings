@@ -600,3 +600,35 @@
 "brand_name" = "BackupDuck";
 
 "brand_name" = "BackupDuck";
+
+"settings_cloud" = "Google Photos";
+"cloud_audit_title" = "Google Photos check";
+"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory; nothing is deleted because of them. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
+"cloud_audit_readme" = "How to export cookies and what is checked";
+"cloud_audit_cookies" = "Cookies file";
+"cloud_audit_cookies_set" = "Selected";
+"cloud_audit_cookies_unset" = "Not selected";
+"cloud_audit_choose_cookies" = "Choose cookies.txt…";
+"cloud_audit_account_index" = "Google account index (/u/N)";
+"cloud_audit_enabled" = "Check automatically every 10 minutes";
+"cloud_audit_auto_pause" = "Pause backup when new uploads count against Google storage";
+"cloud_audit_check_now" = "Check now";
+"cloud_audit_dry_run" = "Dry run";
+"cloud_audit_last_run" = "Last check %1$@: %2$d checked, %3$d free, %4$d counting against storage, %5$d not found, %6$d unknown";
+"cloud_audit_session_expired" = "Google Photos session expired. Export cookies again.";
+"cloud_quota_warning" = "%d photos in Google Photos count against your Google storage.";
+"cloud_quota_pause" = "Backup paused: %d newly uploaded photos count against your Google storage.";
+"cloud_summary" = "%1$d backed up to Google Photos / %2$d added to phone gallery";
+"cloud_summary_attention" = "%1$d counting against Google storage, %2$d not found in Google Photos";
+"state_cloud_verified" = "Backed up to Google Photos";
+"state_cloud_quota" = "Uploaded, but counting against Google storage";
+"state_cloud_missing" = "Not found in Google Photos yet";
+"state_backed_up" = "Backed up to Google Photos";
+"event_cloud_audit_run" = "Google Photos check finished";
+"event_cloud_session_expired" = "Google Photos session expired";
+"event_cloud_quota_pause" = "Backup paused: uploads count against Google storage";
+"error_cloud_audit_unsupported" = "This receiver cannot record Google Photos checks. Update BackupDuck on the Pixel.";
+"error_cloud_session_expired" = "Google Photos session expired. Export cookies again.";
+"error_cloud_cookies_invalid" = "The cookies file could not be read or contains no Google cookies. Export it again.";
+"error_cloud_rate_limited" = "Google Photos is limiting requests. The next check continues later.";
+"error_cloud_response_unrecognized" = "Google Photos returned a response this version does not understand. The check stopped.";

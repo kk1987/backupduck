@@ -11,9 +11,11 @@ crate-type = ["lib", "staticlib", "cdylib"]
 [features]
 default = []
 folder-source = ["dep:backupduck-folder-source"]
+cloud-audit = ["dep:backupduck-cloud-audit"]
 
 [dependencies]
 backupduck-folder-source = { workspace = true, optional = true }
+backupduck-cloud-audit = { workspace = true, optional = true }
 backupduck-core.workspace = true
 backupduck-store.workspace = true
 backupduck-sender.workspace = true

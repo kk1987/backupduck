@@ -600,3 +600,35 @@
 "brand_name" = "备份鸭";
 
 "brand_name" = "备份鸭";
+
+"settings_cloud" = "Google 相册";
+"cloud_audit_title" = "Google 相册核对";
+"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考，不会因此删除任何内容。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
+"cloud_audit_readme" = "如何导出 Cookie 以及核对内容";
+"cloud_audit_cookies" = "Cookie 文件";
+"cloud_audit_cookies_set" = "已选择";
+"cloud_audit_cookies_unset" = "未选择";
+"cloud_audit_choose_cookies" = "选择 cookies.txt…";
+"cloud_audit_account_index" = "Google 账号序号 (/u/N)";
+"cloud_audit_enabled" = "每 10 分钟自动核对";
+"cloud_audit_auto_pause" = "新上传的照片占用 Google 存储空间时暂停备份";
+"cloud_audit_check_now" = "立即核对";
+"cloud_audit_dry_run" = "试运行";
+"cloud_audit_last_run" = "上次核对 %1$@：已检查 %2$d，免费 %3$d，占用空间 %4$d，未找到 %5$d，未知 %6$d";
+"cloud_audit_session_expired" = "Google 相册登录已过期，请重新导出 Cookie。";
+"cloud_quota_warning" = "Google 相册中有 %d 张照片占用你的 Google 存储空间。";
+"cloud_quota_pause" = "备份已暂停：%d 张新上传的照片占用你的 Google 存储空间。";
+"cloud_summary" = "已备份到 Google 相册 %1$d / 已加入手机相册 %2$d";
+"cloud_summary_attention" = "占用 Google 存储空间 %1$d，Google 相册中未找到 %2$d";
+"state_cloud_verified" = "已备份到 Google 相册";
+"state_cloud_quota" = "已上传，但占用 Google 存储空间";
+"state_cloud_missing" = "暂未在 Google 相册中找到";
+"state_backed_up" = "已备份到 Google 相册";
+"event_cloud_audit_run" = "Google 相册核对完成";
+"event_cloud_session_expired" = "Google 相册登录已过期";
+"event_cloud_quota_pause" = "备份已暂停：上传占用 Google 存储空间";
+"error_cloud_audit_unsupported" = "此接收设备无法记录 Google 相册核对结果。请更新 Pixel 上的备份鸭。";
+"error_cloud_session_expired" = "Google 相册登录已过期，请重新导出 Cookie。";
+"error_cloud_cookies_invalid" = "无法读取 Cookie 文件，或其中没有 Google Cookie。请重新导出。";
+"error_cloud_rate_limited" = "Google 相册正在限制请求，稍后会继续核对。";
+"error_cloud_response_unrecognized" = "Google 相册返回了此版本无法识别的响应，核对已停止。";

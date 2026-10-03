@@ -44,6 +44,16 @@ prints the account email. `lookup` prints one JSON object per file: SHA-1,
 whether a library item has that hash, media key, camera model, the quota flags
 and a verdict (`free`, `counts_against_quota`, `not_found`, `unknown`).
 
+## macOS app
+
+The Mac sender embeds this crate (native feature `cloud-audit`). In Settings >
+Google Photos, choose the exported `cookies.txt` and the account index, then
+"Check now", "Dry run" (look up without reporting) or enable the 10-minute
+check. A run asks the paired Pixel receiver for gallery copies whose check is
+due, looks up at most 600 of them within the limits below and reports verdicts
+back; a match without quota information is left pending for the next run.
+"Google Photos session expired" means the cookies need exporting again.
+
 ## Protocol
 
 Bootstrap: `GET https://photos.google.com/` (or `/u/N/`) without following

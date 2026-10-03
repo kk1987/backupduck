@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum MacSettingsSection: String { case backup, cache, diagnostics, help }
+enum MacSettingsSection: String { case backup, cache, cloud, diagnostics, help }
 
 /// The Settings window and sidebar destination expose the same categories.
 struct MacPreferences: View {
@@ -80,6 +80,10 @@ struct MacPreferences: View {
         .formStyle(.grouped)
         .tabItem { Label("settings_cache", systemImage: "internaldrive") }
         .tag(MacSettingsSection.cache)
+
+      CloudAuditSettings(model: model)
+        .tabItem { Label("settings_cloud", systemImage: "checkmark.icloud") }
+        .tag(MacSettingsSection.cloud)
 
       Form {
         Section {

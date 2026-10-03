@@ -67,10 +67,12 @@ to the operating system.
 
 A receiver advertising `cloud_audit: true` lets an external auditor check whether
 published gallery copies reached the cloud. Missing capability means false. The
-receiver never contacts a cloud service; it records verdicts it is given. Gallery
-evidence carries the SHA-1 of the gallery-copy bytes, which cloud media lookups
-use, beside the SHA-256. Copies published before SHA-1 evidence existed are
-re-read on the receiver and gain it later.
+receiver never contacts a cloud service; it records verdicts it is given (the
+macOS sender is one such auditor, see
+[architecture](architecture.md#cloud-audit)). Gallery evidence carries the SHA-1
+of the gallery-copy bytes, which cloud media lookups use, beside the SHA-256.
+Copies published before SHA-1 evidence existed are re-read on the receiver and
+gain it later.
 
 `GET /v2/publications?cloud=due&after=ID&limit=N` returns
 `{"items":[{asset_id,sha1,sha256,size,display_name,kind,published_at_ms,cloud_state,cloud_checks}],"next":ID|null}`

@@ -7,8 +7,6 @@ use retention::GalleryCopy;
 const FIRST_CHECK_MS: i64 = 600_000;
 /// Repeated lookups back off exponentially up to one day.
 const MAX_BACKOFF_MS: i64 = 86_400_000;
-/// A copy still not found a week after publication is reported missing.
-const MISSING_AFTER_MS: i64 = 7 * 86_400_000;
 
 impl Receiver {
     /// Published copies with SHA-1 evidence. `all` ignores state and timing;
@@ -117,21 +115,7 @@ impl Receiver {
                 summary.rejected += 1;
                 continue;
             }
-            let next = match (state.as_str(), o.result) {
-                (_, CloudResult::Free) => "verified",
-                ("verified", _) => "verified",
-                (_, CloudResult::CountsAgainstQuota) => "verified_counts_against_quota",
-                (current, CloudResult::NotFound) => {
-                    if published_at_ms.is_some_and(|p| now_ms.saturating_sub(p) > MISSING_AFTER_MS)
-                    {
-                        "missing"
-                    } else if current == "unknown" {
-                        "pending"
-                    } else {
-                        current
-                    }
-                }
-            };
+            let next = next_cloud_state(&state, o.result, published_at_ms, now_ms);
             if state != "verified" || o.result == CloudResult::Free {
                 tx.execute(
                     "UPDATE assets SET cloud_state=?2,cloud_checks=cloud_checks+1,cloud_checked_at_ms=?3,\

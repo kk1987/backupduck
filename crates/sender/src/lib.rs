@@ -56,6 +56,9 @@ pub struct Job {
     pub state_changed_at_ms: Option<i64>,
     #[serde(default)]
     pub sort_value: Option<i64>,
+    /// Cloud verification state last reported by the sender's own auditor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attempt {
@@ -130,6 +133,8 @@ impl Sender {
             CREATE INDEX IF NOT EXISTS jobs_due ON jobs(receiver_id,state,next_attempt_at,id);
             CREATE TABLE IF NOT EXISTS native_checkpoints(job_id INTEGER PRIMARY KEY,status TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS processing_observations(job_id INTEGER PRIMARY KEY,state TEXT,error TEXT,checked_at INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS cloud_observations(job_id INTEGER PRIMARY KEY,state TEXT NOT NULL,device_model TEXT,checked_at INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS cloud_audit_runs(receiver_id TEXT PRIMARY KEY,ran_at INTEGER NOT NULL,result TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS receiver_features(receiver_id TEXT PRIMARY KEY,bundle_upload INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
             INSERT OR IGNORE INTO settings VALUES('paused',0);
@@ -205,7 +210,7 @@ impl Sender {
         self.conn.query_row("SELECT id FROM jobs WHERE receiver_id=?1 AND json_extract(manifest,'$.source_id')=?2 AND json_extract(manifest,'$.revision')=?3 ORDER BY id DESC LIMIT 1",params![receiver,source,revision],|r|r.get(0)).optional().map_err(db)
     }
     pub fn job(&self, id: i64) -> Result<Job> {
-        let row = self.conn.query_row("SELECT j.receiver_id,j.manifest,j.sources,j.state,j.generation,j.attempts,j.next_attempt_at,j.confirmed_bytes,j.error_code,j.native_task_id,j.state_changed_at_ms,p.state,p.error FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id WHERE j.id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<i64>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
+        let row = self.conn.query_row("SELECT j.receiver_id,j.manifest,j.sources,j.state,j.generation,j.attempts,j.next_attempt_at,j.confirmed_bytes,j.error_code,j.native_task_id,j.state_changed_at_ms,p.state,p.error,c.state FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<i64>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?,r.get::<_,Option<String>>(13)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
         Ok(Job {
             id,
             receiver_id: row.0,
@@ -225,6 +230,7 @@ impl Sender {
             processing_error: row.12,
             state_changed_at_ms: row.10,
             sort_value: None,
+            cloud: row.13,
         })
     }
     /// Bounded keyset pagination; never materialize the entire library for a UI poll.
@@ -364,18 +370,35 @@ impl Sender {
         receiver: &str,
         sources: &[(String, String)],
     ) -> Result<BTreeMap<String, String>> {
+        self.source_states_with_cloud(receiver, sources, false)
+    }
+    /// `include_cloud` reports received sources whose gallery copy the sender's
+    /// auditor verified in the cloud as `backed_up`.
+    pub fn source_states_with_cloud(
+        &self,
+        receiver: &str,
+        sources: &[(String, String)],
+        include_cloud: bool,
+    ) -> Result<BTreeMap<String, String>> {
         if sources.len() > 400 {
             return Err(Error::Invalid("source window".into()));
         }
-        let mut stmt = self.conn.prepare("SELECT state FROM jobs WHERE receiver_id=?1 AND json_extract(manifest,'$.source_id')=?2 AND json_extract(manifest,'$.revision')=?3 ORDER BY id DESC LIMIT 1").map_err(db)?;
+        let mut stmt = self.conn.prepare("SELECT j.state,c.state FROM jobs j LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND json_extract(j.manifest,'$.source_id')=?2 AND json_extract(j.manifest,'$.revision')=?3 ORDER BY j.id DESC LIMIT 1").map_err(db)?;
         let mut states = BTreeMap::new();
         for (id, revision) in sources {
-            let value: Option<String> = stmt
-                .query_row(params![receiver, id, revision], |r| r.get(0))
+            let value: Option<(String, Option<String>)> = stmt
+                .query_row(params![receiver, id, revision], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
                 .optional()
                 .map_err(db)?;
-            if let Some(value) = value {
-                states.insert(id.clone(), value);
+            if let Some((state, cloud)) = value {
+                let backed_up =
+                    include_cloud && state == "received" && cloud.as_deref() == Some("verified");
+                states.insert(
+                    id.clone(),
+                    if backed_up { "backed_up".into() } else { state },
+                );
             }
         }
         Ok(states)
@@ -437,6 +460,13 @@ impl Sender {
         ).map_err(db)?;
         result["published"] = published.into();
         result["publication_failed"] = publication_failed.into();
+        let (verified, quota, missing): (i64, i64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(c.state='verified'),0),COALESCE(SUM(c.state='verified_counts_against_quota'),0),COALESCE(SUM(c.state='missing'),0) FROM jobs j JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND j.state='received' AND (?2 IS NULL OR COALESCE(json_extract(j.manifest,'$.metadata.source_ref'),'library')=?2)",
+            params![receiver, source], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).map_err(db)?;
+        result["cloud_verified"] = verified.into();
+        result["cloud_quota"] = quota.into();
+        result["cloud_missing"] = missing.into();
         let waiting: Option<(String,i64)> = self.conn.query_row("SELECT error_code,next_attempt_at FROM jobs WHERE receiver_id=?1 AND state='waiting' AND (?2 IS NULL OR COALESCE(json_extract(manifest,'$.metadata.source_ref'),'library')=?2) ORDER BY next_attempt_at,id LIMIT 1",params![receiver,source],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(db)?;
         result["waiting_reason"] = waiting
             .as_ref()
@@ -697,6 +727,68 @@ impl Sender {
                 .map_err(db)?;
         }
         Ok(())
+    }
+    /// Mirror a cloud auditor verdict onto the job that sent `asset_id`.
+    /// Returns false when this sender has no such job (another sender's asset).
+    pub fn observe_cloud(
+        &mut self,
+        receiver: &str,
+        asset_id: &str,
+        state: &str,
+        device_model: Option<&str>,
+        now_ms: i64,
+    ) -> Result<bool> {
+        if !matches!(
+            state,
+            "pending" | "verified" | "verified_counts_against_quota" | "missing"
+        ) {
+            return Err(Error::Invalid("cloud state".into()));
+        }
+        let row: Option<(i64, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT j.id,c.state FROM jobs j LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND j.asset_id=?2",
+                params![receiver, asset_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        let Some((id, previous)) = row else {
+            return Ok(false);
+        };
+        self.conn.execute("INSERT OR REPLACE INTO cloud_observations(job_id,state,device_model,checked_at) VALUES(?1,?2,?3,?4)",
+            params![id, state, device_model, now_ms]).map_err(db)?;
+        if previous.as_deref() != Some(state) {
+            // Refresh the UI revision without rewriting a transfer receipt.
+            self.conn
+                .execute("UPDATE settings SET value=value+1 WHERE key='revision'", [])
+                .map_err(db)?;
+        }
+        Ok(true)
+    }
+    pub fn record_cloud_audit_run(
+        &mut self,
+        receiver: &str,
+        ran_at_ms: i64,
+        result: &serde_json::Value,
+    ) -> Result<()> {
+        self.conn.execute("INSERT OR REPLACE INTO cloud_audit_runs(receiver_id,ran_at,result) VALUES(?1,?2,?3)",
+            params![receiver, ran_at_ms, result.to_string()]).map_err(db)?;
+        Ok(())
+    }
+    /// Last recorded run as `(ran_at_ms, result)`.
+    pub fn cloud_audit_run(&self, receiver: &str) -> Result<Option<(i64, serde_json::Value)>> {
+        let row: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT ran_at,result FROM cloud_audit_runs WHERE receiver_id=?1",
+                [receiver],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        row.map(|(at, result)| Ok((at, serde_json::from_str(&result)?)))
+            .transpose()
     }
     pub fn postpone_processing(&mut self, id: i64, now: i64) -> Result<()> {
         self.conn.execute("INSERT INTO processing_observations(job_id,checked_at) VALUES(?1,?2) ON CONFLICT(job_id) DO UPDATE SET checked_at=excluded.checked_at",

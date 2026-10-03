@@ -56,11 +56,15 @@ struct LibraryGroup: Sendable {
     for state in ["failed", "preparing", "running", "waiting", "paused", "queued", "scheduled"] {
       if known.contains(state) { return state }
     }
-    if known.count == sources.count && known.allSatisfy({ $0 == "received" }) { return "received" }
-    if known.count == sources.count && known.allSatisfy({ ["received", "received_previous"].contains($0) }) {
+    // `backed_up` is a received copy verified in Google Photos; mixed groups
+    // fall back to the weaker received state.
+    let all = known.count == sources.count
+    if all && known.allSatisfy({ $0 == "backed_up" }) { return "backed_up" }
+    if all && known.allSatisfy({ ["backed_up", "received"].contains($0) }) { return "received" }
+    if all && known.allSatisfy({ ["backed_up", "received", "received_previous"].contains($0) }) {
       return "received_previous"
     }
-    return known.contains(where: { ["received", "received_previous"].contains($0) }) ? "partial" : nil
+    return known.contains(where: { ["backed_up", "received", "received_previous"].contains($0) }) ? "partial" : nil
   }
 }
 
@@ -87,7 +91,7 @@ extension LibraryPresentationIndex {
     guard !Task.isCancelled else { return nil }
     let batch = Array(entries[start..<min(start + 400, entries.count)])
     if let data = try? await Bridge.call(["op": "source_states", "include_pending": true,
-      "include_previous_receipts": true, "receiver_id": receiver, "sources": batch]),
+      "include_cloud": true, "include_previous_receipts": true, "receiver_id": receiver, "sources": batch]),
       let result = try? JSONDecoder().decode([String: String].self, from: data) {
       states.merge(result, uniquingKeysWith: { _, new in new })
     } else { return nil }
