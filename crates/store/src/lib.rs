@@ -105,6 +105,7 @@ impl Receiver {
             CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY, manifest TEXT NOT NULL, received INTEGER NOT NULL DEFAULT 0, processing TEXT NOT NULL DEFAULT 'not_requested');
             CREATE TABLE IF NOT EXISTS blobs(hash TEXT PRIMARY KEY, size INTEGER NOT NULL, ready INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS gallery_copies(asset_id TEXT PRIMARY KEY, copy TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS relay_exclusions(asset_id TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS asset_senders(asset_id TEXT NOT NULL,sender_id TEXT NOT NULL,PRIMARY KEY(asset_id,sender_id));
             CREATE TABLE IF NOT EXISTS gallery_expected(asset_id TEXT PRIMARY KEY, copy TEXT NOT NULL);").map_err(db)?;
         let columns: Vec<String> = conn

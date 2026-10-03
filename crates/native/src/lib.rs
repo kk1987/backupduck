@@ -11,6 +11,7 @@ mod background;
 #[cfg(feature = "cloud-audit")]
 pub mod cloud;
 mod dashboard;
+mod dashboard_access;
 #[cfg(feature = "folder-source")]
 mod folders;
 mod maintenance;
@@ -223,7 +224,13 @@ impl ReceiverHost {
             &ident.pairing.token,
             Some(observer),
         )?;
-        let listener = std::net::TcpListener::bind(addr)?;
+        let listener = std::net::TcpListener::bind(addr).map_err(|error| match error.kind() {
+            std::io::ErrorKind::AddrInUse => Error::Conflict("receiver_port_in_use".into()),
+            std::io::ErrorKind::AddrNotAvailable => {
+                Error::Conflict("receiver_interface_unavailable".into())
+            }
+            _ => Error::from(error),
+        })?;
         listener.set_nonblocking(true)?;
         let handle = axum_server::Handle::new();
         let server = axum_server::from_tcp_rustls(listener, config).handle(handle.clone());
@@ -762,6 +769,14 @@ enum Command {
     StartDashboard,
     StopDashboard,
     DashboardInfo,
+    DashboardAccess {
+        root: PathBuf,
+        code: Option<String>,
+        #[serde(default)]
+        reset: bool,
+        #[serde(default)]
+        revoke: bool,
+    },
     ReceiverStatus,
     ReceiverOverview,
     ReceiverLogs {
@@ -778,6 +793,8 @@ enum Command {
         root: Option<PathBuf>,
         #[serde(default)]
         after: String,
+        #[serde(default)]
+        manual: bool,
     },
     GallerySha1 {
         root: Option<PathBuf>,
@@ -788,11 +805,24 @@ enum Command {
         root: Option<PathBuf>,
         id: String,
         copy: backupduck_store::retention::GalleryCopy,
+        #[serde(default)]
+        manual: bool,
     },
     ReleaseGallery {
         root: Option<PathBuf>,
         id: String,
         copy: backupduck_store::retention::GalleryCopy,
+        #[serde(default)]
+        manual: bool,
+    },
+    SetReceiverRelay {
+        root: PathBuf,
+        enabled: bool,
+        include_history: bool,
+    },
+    GalleryReleaseBytes {
+        root: PathBuf,
+        ids: Vec<String>,
     },
     ReceiverStorageUsage {
         root: PathBuf,
@@ -1621,6 +1651,26 @@ fn dispatch(command: Command) -> Result<Value> {
             hosts.receiver.as_mut().ok_or(Error::NotFound)?.dashboard = None;
             Ok(json!({}))
         }
+        Command::DashboardAccess {
+            root,
+            code,
+            reset,
+            revoke,
+        } => {
+            let hosts = HOSTS.lock().map_err(lock)?;
+            if let Some(page) = hosts
+                .receiver
+                .as_ref()
+                .filter(|h| h.root == root)
+                .and_then(|h| h.dashboard.as_ref())
+            {
+                page.change_access(code, reset, revoke)
+            } else {
+                let mut access = dashboard_access::Access::open(&root)?;
+                access.change(code, reset, revoke)?;
+                Ok(json!({"code":access.code()}))
+            }
+        }
         Command::DashboardInfo => HOSTS
             .lock()
             .map_err(lock)?
@@ -1656,12 +1706,63 @@ fn dispatch(command: Command) -> Result<Value> {
             store.prepare_gallery_copy(&id, &copy)?;
             Ok(json!({}))
         }),
-        Command::GalleryCandidates { root, after } => {
+        Command::SetReceiverRelay {
+            root,
+            enabled,
+            include_history,
+        } => {
+            // Configure the scope before enabling deletion, under the same locks
+            // as reception and publication. A failure leaves the policy disabled.
+            let hosts = HOSTS.lock().map_err(lock)?;
+            if !root.join("store/receiver.sqlite3").is_file() {
+                let mut maintenance = maintenance::Maintenance::open(&root)?;
+                let mut settings = maintenance.settings.clone();
+                settings.receiver_relay = enabled;
+                maintenance.save(settings)?;
+                return Ok(json!({}));
+            }
+            drop(hosts);
+            receiver_storage::with_store(Some(&root), |store, maintenance| {
+                let mut settings = maintenance.settings.clone();
+                settings.receiver_relay = false;
+                maintenance.save(settings.clone())?;
+                if enabled {
+                    store.set_relay_history(include_history)?;
+                }
+                settings.receiver_relay = enabled;
+                maintenance.save(settings)?;
+                Ok(json!({}))
+            })
+        }
+        Command::GalleryReleaseBytes { root, ids } => {
+            if !root.join("store/receiver.sqlite3").is_file() {
+                return Ok(json!({"bytes":0}));
+            }
+            receiver_storage::with_store(Some(&root), |store, _| {
+                Ok(json!({"bytes":store.gallery_release_bytes(&ids)?}))
+            })
+        }
+        Command::GalleryCandidates {
+            root,
+            after,
+            manual,
+        } => {
+            if root
+                .as_ref()
+                .is_some_and(|r| !r.join("store/receiver.sqlite3").is_file())
+            {
+                return Ok(json!([]));
+            }
             receiver_storage::with_store(root.as_deref(), |store, maintenance| {
-                Ok(serde_json::to_value(store.gallery_candidates(
-                    &after,
-                    maintenance.settings.receiver_relay,
-                )?)?)
+                // Relay candidates only when recycling is on or manually
+                // requested; SHA-1 backfill rows regardless.
+                Ok(serde_json::to_value(
+                    store.gallery_candidates_with_backfill(
+                        &after,
+                        maintenance.settings.receiver_relay,
+                        manual,
+                    )?,
+                )?)
             })
         }
         Command::GallerySha1 { root, id, copy } => {
@@ -1669,29 +1770,40 @@ fn dispatch(command: Command) -> Result<Value> {
                 Ok(json!({"updated":store.backfill_gallery_sha1(&id, &copy)?}))
             })
         }
-        Command::GalleryPublication { root, id, copy } => {
-            receiver_storage::with_store(root.as_deref(), |store, maintenance| {
-                store.record_gallery_copy(&id, &copy)?;
-                maintenance.log("publication_complete", None, None)?;
-                let bytes = if maintenance.settings.receiver_relay {
-                    store.release_gallery_copy(&id, &copy, true)?
-                } else {
-                    0
-                };
-                if maintenance.settings.receiver_relay {
-                    maintenance.log("relay_originals_reclaimed", None, Some(bytes))?;
-                }
-                Ok(json!({"bytes":bytes}))
-            })
-        }
-        Command::ReleaseGallery { root, id, copy } => {
-            receiver_storage::with_store(root.as_deref(), |store, maintenance| {
-                let bytes =
-                    store.release_gallery_copy(&id, &copy, maintenance.settings.receiver_relay)?;
+        Command::GalleryPublication {
+            root,
+            id,
+            copy,
+            manual,
+        } => receiver_storage::with_store(root.as_deref(), |store, maintenance| {
+            store.record_gallery_copy(&id, &copy)?;
+            maintenance.log("publication_complete", None, None)?;
+            let release =
+                manual || maintenance.settings.receiver_relay && store.relay_eligible(&id)?;
+            let bytes = if release {
+                store.release_gallery_copy(&id, &copy, true)?
+            } else {
+                0
+            };
+            if release {
                 maintenance.log("relay_originals_reclaimed", None, Some(bytes))?;
-                Ok(json!({"bytes":bytes}))
-            })
-        }
+            }
+            Ok(json!({"bytes":bytes}))
+        }),
+        Command::ReleaseGallery {
+            root,
+            id,
+            copy,
+            manual,
+        } => receiver_storage::with_store(root.as_deref(), |store, maintenance| {
+            let bytes = store.release_gallery_copy(
+                &id,
+                &copy,
+                manual || maintenance.settings.receiver_relay && store.relay_eligible(&id)?,
+            )?;
+            maintenance.log("relay_originals_reclaimed", None, Some(bytes))?;
+            Ok(json!({"bytes":bytes}))
+        }),
         Command::ReceiverStorageUsage { root } => Ok(serde_json::to_value(
             backupduck_store::usage::original_usage(&root.join("store"))?,
         )?),
@@ -1800,7 +1912,11 @@ fn dispatch(command: Command) -> Result<Value> {
 fn error_code(e: Error) -> &'static str {
     match e {
         Error::Invalid(_) => "invalid_input",
-        Error::Conflict(_) => "conflict",
+        Error::Conflict(reason) => match reason.as_str() {
+            "receiver_port_in_use" => "receiver_port_in_use",
+            "receiver_interface_unavailable" => "receiver_interface_unavailable",
+            _ => "conflict",
+        },
         Error::NotFound => "not_found",
         Error::Capacity => "capacity",
         Error::ExceedsCapacity => "receiver_budget_single_item",

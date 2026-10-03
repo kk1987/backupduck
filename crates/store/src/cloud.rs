@@ -252,13 +252,42 @@ mod tests {
     }
 
     #[test]
+    fn manual_relay_inspection_never_sees_backfill_rows() {
+        // RC.3's manual historical inspection treats every candidate as a
+        // release; SHA-1 backfill rows must stay out of that list.
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let id = received(&mut r, "released");
+        r.record_gallery_copy(&id, &copy(1, None)).unwrap();
+        r.release_gallery_copy(&id, &copy(1, None), true).unwrap();
+        assert_eq!(state(&r, &id), "unknown");
+        let ids = |v: Vec<retention::GalleryCandidate>| -> Vec<String> {
+            v.into_iter().map(|c| c.publication.id).collect()
+        };
+        assert_eq!(
+            ids(r
+                .gallery_candidates_with_backfill("", false, false)
+                .unwrap()),
+            vec![id.clone()]
+        );
+        assert!(r
+            .gallery_candidates_with_backfill("", false, true)
+            .unwrap()
+            .is_empty());
+        assert!(r.gallery_candidates_scoped("", true).unwrap().is_empty());
+        assert!(r.gallery_candidates("").unwrap().is_empty());
+    }
+
+    #[test]
     fn sha1_backfill_is_idempotent_and_queues_the_copy() {
         let t = Temp::new();
         let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
         let id = received(&mut r, "backfill");
         r.record_gallery_copy(&id, &copy(1, None)).unwrap();
         assert_eq!(state(&r, &id), "unknown");
-        let candidates = r.gallery_candidates("", false).unwrap();
+        let candidates = r
+            .gallery_candidates_with_backfill("", false, false)
+            .unwrap();
         assert_eq!(candidates.len(), 1);
         assert!(candidates[0].confirmed);
         assert!(r
@@ -282,9 +311,17 @@ mod tests {
         ));
         assert_eq!(r.gallery_copy(&id).unwrap(), Some(copy(1, Some('a'))));
         assert_eq!(state(&r, &id), "pending");
-        assert!(r.gallery_candidates("", false).unwrap().is_empty());
+        assert!(r
+            .gallery_candidates_with_backfill("", false, false)
+            .unwrap()
+            .is_empty());
         // Relay keeps its own candidates; stored SHA-1 now gates fresh proofs.
-        assert_eq!(r.gallery_candidates("", true).unwrap().len(), 1);
+        assert_eq!(
+            r.gallery_candidates_with_backfill("", true, false)
+                .unwrap()
+                .len(),
+            1
+        );
         assert!(r.release_gallery_copy(&id, &copy(1, None), true).is_err());
         r.record_gallery_copy(&id, &copy(1, Some('a'))).unwrap();
     }

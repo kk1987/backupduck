@@ -25,6 +25,7 @@ internal class StoragePage(
     private lateinit var galleryPending: TextView
     private lateinit var updated: TextView
     private lateinit var retention: RetentionControls
+    private lateinit var relayStatus: TextView
     private var work: Job? = null
     private var lastRefresh = 0L
     private var pendingDetails = false
@@ -50,6 +51,7 @@ internal class StoragePage(
             label(body, getString(R.string.storage_reserved_note), 13, secondaryColor())
             action(body, R.string.storage_limits) { showStorageControls(StorageSection.LIMITS) { refresh(force = true) } }
             action(body, R.string.originals_export, action = export)
+            action(body, R.string.relay_check_history) { activity.checkHistoricalOriginals { refresh(force = true) } }
         }
         section(panel, R.string.storage_gallery_title)
         card(panel) { body ->
@@ -61,12 +63,20 @@ internal class StoragePage(
         section(panel, R.string.storage_retention_title)
         card(panel) { body ->
             retention = RetentionControls(activity, body)
+            relayStatus = label(body, "", 13, secondaryColor())
             action(body, R.string.storage_how_to_free) {
                 MaterialAlertDialogBuilder(activity).setTitle(R.string.storage_how_to_free)
                     .setMessage(R.string.storage_cleanup_help).setPositiveButton(R.string.receiver_close, null).show()
             }
         }
     } }
+    init {
+        activity.lifecycleScope.launch {
+            RelayMaintenance.status.collect { status ->
+                relayStatus.text = status?.let(activity::getString) ?: ""
+            }
+        }
+    }
     fun refresh(force: Boolean = false, includeDetails: Boolean = true) {
         if (work?.isActive == true) {
             if (force && includeDetails) pendingDetails = true

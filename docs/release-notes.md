@@ -15,6 +15,15 @@
 - The Pixel receiver frees storage reserved by uploads that were abandoned for 7 days (for example after a photo was deleted or a sender was unpaired mid-transfer), including their partial files, so its storage budget no longer shrinks over weeks of unattended use. Content shared with received photos is kept. It checks on start and hourly and logs the freed bytes; a sender that comes back later starts that upload again.
 - Senders retry a busy receiver (for example a Pixel paused by temperature protection) about once a minute instead of backing off up to 15 minutes, so backup resumes soon after the phone cools. Network and storage waits keep their existing backoff.
 
+# 0.2.0-rc.3
+
+- Keep the Pixel receiver on its physical Wi-Fi address when a VPN is active, including global VPN mode. Pairing retains the saved receiver identity when its address changes.
+- Add a manual connection check on iPhone and Mac. Network failures keep the saved pairing; authentication failures receive separate guidance. A successful check resumes eligible transfers without changing a user pause.
+- When enabling Pixel original recycling, choose new receipts only or include historical receipts. The choice persists after restarting. Historical inspection also works with receiving and automatic recycling off, shows estimated reclaimable space, and requires confirmation. Missing, changed or unverifiable gallery copies keep their originals; gallery publication is not confirmation of cloud backup.
+- Keep browser management access codes across restarts and updates. Set or reset a 10-digit code and revoke browser logins on Pixel. Browsers can optionally remember a separate login for 30 days; signing out revokes that browser. Changing the code revokes all browser logins without affecting transfer pairing.
+- Explain receiving-port conflicts and unavailable Wi-Fi addresses with specific recovery steps. Pairing displays the same startup failure and avoids repeated generic alerts.
+- iOS TestFlight uses version 0.2.0 (build 46). Availability of the new build depends on Apple processing and beta review.
+
 # RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)
 
 - Use a dedicated Android release certificate named BackupDuck. The old certificate is no longer used for new releases.

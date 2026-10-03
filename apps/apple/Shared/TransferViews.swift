@@ -614,10 +614,12 @@ struct BackupStatusIndicator: View {
 struct ReceiverStatusIndicator: View {
   @ObservedObject var model: BackupModel
   @State private var details = false
-  private var status: (key: String, symbol: String, color: Color) {
+  var status: (key: String, symbol: String, color: Color) {
     if model.pairingInProgress { return ("receiver_indicator_pairing", "link", .accentColor) }
-    if model.pairingError != nil { return ("receiver_indicator_attention", "exclamationmark.circle", .orange) }
     if model.pairing == nil { return ("backup_indicator_unpaired", "link", .secondary) }
+    if model.checkingConnection { return ("receiver_connection_checking", "arrow.triangle.2.circlepath", .secondary) }
+    if model.receiverConnection == .authentication { return ("receiver_indicator_attention", "exclamationmark.circle", .orange) }
+    if model.receiverConnection == .unavailable { return ("receiver_connection_unavailable", "exclamationmark.circle", .orange) }
     if model.receiverUnavailable || model.waitingForNetwork {
       return ("receiver_indicator_waiting", "wifi.exclamationmark", .orange)
     }
@@ -646,10 +648,15 @@ struct ReceiverStatusIndicator: View {
           ScrollView {
             VStack(alignment: .leading, spacing: 16) {
               Label(LocalizedStringKey(status.key), systemImage: status.symbol).foregroundStyle(status.color)
-              if let error = model.pairingError { Text(error).textSelection(.enabled) }
               Text(model.pairing == nil ? "receiver_pair_instructions" : "receiver_indicator_explanation")
               if let pairing = model.pairing {
                 LabeledContent("receiver_address", value: pairing.endpoint).textSelection(.enabled)
+                if model.receiverConnection == .authentication { Text("receiver_connection_authentication") }
+                else if model.receiverConnection == .unavailable { Text("receiver_connection_unavailable_note") }
+                else if model.receiverUnavailable || model.waitingForNetwork { Text("receiver_connection_network") }
+                Button("receiver_connection_check") { Task { await model.checkConnection() } }
+                  .disabled(model.checkingConnection)
+                  .accessibilityIdentifier("receiver.check_connection")
               }
               Text("receiver_local_network").foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
