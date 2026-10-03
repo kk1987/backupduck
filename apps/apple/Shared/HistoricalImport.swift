@@ -165,7 +165,7 @@ extension BackupModel {
         let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: photoLibraryFetchOptions())
         var revisions = [String: String]()
         assets.enumerateObjects { asset, _, _ in
-          let revision = String(Int64((asset.modificationDate ?? asset.creationDate ?? Date(timeIntervalSince1970: 0)).timeIntervalSince1970 * 1000))
+          let revision = PhotoLibraryModel.revision(asset)
           revisions[asset.localIdentifier] = revision
         }
         return ids.compactMap { id -> [String]? in revisions[id].map { [id, $0] } }
