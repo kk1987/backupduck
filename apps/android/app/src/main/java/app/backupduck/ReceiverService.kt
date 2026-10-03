@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.IBinder
+import android.os.SystemClock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,6 +133,8 @@ class ReceiverService : Service() {
                                 delay(1_000)
                             }
                         }
+                        // start_receiver already expired abandoned reservations once.
+                        var lastExpiry = SystemClock.elapsedRealtime()
                         while (isActive) {
                             val currentAddress = runCatching { wifiAddress(address) }.getOrNull()
                             if (currentAddress != address) {
@@ -140,6 +143,11 @@ class ReceiverService : Service() {
                             }
                             val healthy = NativeBridge.request(JSONObject().put("op", "receiver_status")) as JSONObject
                             check(healthy.getBoolean("running")) { "receiver_unavailable" }
+                            if (SystemClock.elapsedRealtime() - lastExpiry >= ABANDONED_EXPIRY_INTERVAL_MS) {
+                                lastExpiry = SystemClock.elapsedRealtime()
+                                runCatching { NativeBridge.request(JSONObject().put("op", "expire_abandoned")
+                                    .put("root", "$filesDir/receiver")) }
+                            }
                             val space = NativeBridge.request(JSONObject().put("op", "receiver_overview")) as JSONObject
                             if (ReceiverHolds.thermalHeld) ReceiverHolds.sync(this@ReceiverService)
                             else cleanup.tick(space.getLong("free_bytes"), space.getLong("min_free_bytes"))
@@ -244,6 +252,10 @@ class ReceiverService : Service() {
         stopSelf()
     }
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    private companion object {
+        // Uploads idle for the native TTL (7 days) release their reservations.
+        const val ABANDONED_EXPIRY_INTERVAL_MS = 60 * 60 * 1000L
+    }
 }
 
 internal fun safeError(error: Exception): String = error.message?.takeIf { it.matches(Regex("[a-z_]{1,40}")) } ?: "operation_failed"

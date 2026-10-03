@@ -104,8 +104,13 @@ not evidence that a source should automatically upload again.
 Capacity is a reservation budget for original resource bytes, including unfinished
 uploads. It is not a physical disk-free-space guarantee. Filesystem exhaustion
 returns an error without committing the asset. Native receivers must also expose
-actual space/temperature constraints. Reservation cancellation and orphan garbage
-collection are intentionally absent from this first milestone.
+actual space/temperature constraints. An unreceived asset with no register, chunk
+or commit for 7 days is abandoned: the receiver deletes its row and frees any
+reserved blob and partial file no retained asset references. This runs when the
+store opens and hourly from the Android receiver, and is logged as
+`abandoned_reservations_expired`. A sender resuming an expired asset gets 404,
+which is a network retry that drops its checkpoint, so it registers again from
+offset zero. There is no explicit reservation cancellation.
 
 The Android receiver reads battery temperature and Android's thermal status while
 running. Temperature protection is on by default at 40°C (adjustable from 35–45°C,

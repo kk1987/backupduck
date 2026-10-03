@@ -859,3 +859,66 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     assert_eq!(events.len(), 6);
     host.abort();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn expired_reservation_returns_capacity_and_sender_registers_again() {
+    use std::sync::{Arc, Mutex};
+    let scratch = Scratch::new();
+    let receiver = Arc::new(Mutex::new(Receiver::open(&scratch.0, 1024 * 1024).unwrap()));
+    let reserved = || receiver.lock().unwrap().overview().unwrap()["reserved_bytes"].clone();
+    let baseline = reserved();
+    let app = backupduck_transport::shared_router(receiver.clone(), TOKEN).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let host = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = Client::new(&url, TOKEN).unwrap();
+    let (a, bytes) = asset(false);
+    let hash = a.resources[0].sha256.clone();
+    let id = client.register(&a).await.unwrap().asset_id;
+    client
+        .append(&id, &hash, 0, bytes[0][..8].to_vec())
+        .await
+        .unwrap();
+    assert_ne!(reserved(), baseline);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let expired = receiver.lock().unwrap().expire_abandoned(now, 0).unwrap();
+    assert_eq!(expired.assets, 1);
+    assert_eq!(expired.bytes, bytes[0].len() as u64);
+    assert_eq!(reserved(), baseline);
+    assert!(!scratch.0.join("partial").join(&hash).exists());
+    // Status and resumed chunks for the expired asset are 404s.
+    let status = reqwest::Client::new()
+        .get(format!("{url}/v2/assets/{id}"))
+        .bearer_auth(TOKEN)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(status.status(), 404);
+    assert!(matches!(
+        client.append(&id, &hash, 8, bytes[0][8..].to_vec()).await,
+        Err(Error::NotFound)
+    ));
+    // A fresh registration reserves again and the upload completes from zero.
+    let fresh = client.register(&a).await.unwrap();
+    assert_eq!(fresh.asset_id, id);
+    assert_eq!(fresh.resources[0].offset, 0);
+    assert_ne!(reserved(), baseline);
+    let path = scratch.0.join("photo.jpg");
+    fs::write(&path, &bytes[0]).unwrap();
+    let result = client
+        .send(
+            &a,
+            &BTreeMap::from([(hash, path)]),
+            &AtomicBool::new(false),
+            |_| {},
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.receipt, ReceiptState::Received);
+    host.abort();
+}

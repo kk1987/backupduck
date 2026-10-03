@@ -3,6 +3,8 @@
 pub mod catalog;
 pub mod cloud;
 pub mod devices;
+#[cfg(test)]
+mod expiry_tests;
 pub mod retention;
 pub mod usage;
 
@@ -27,6 +29,15 @@ fn now_ms() -> Result<i64> {
 fn db(error: rusqlite::Error) -> Error {
     Error::Storage(error.to_string())
 }
+/// Unreceived assets idle this long lose their reservations. Far above the
+/// transport's 30 s bundle stall and 60 s request timeouts, so only uploads
+/// a sender abandoned (deleted source, unpaired, uninstalled) qualify.
+pub const ABANDONED_TTL_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ExpiredSummary {
+    pub assets: u64,
+    pub bytes: u64,
+}
 #[derive(serde::Serialize)]
 pub struct Publication {
     pub id: String,
@@ -40,6 +51,7 @@ pub struct Receiver {
     capacity: u64,
     min_free: u64,
     admission_held: bool,
+    expired_at_open: ExpiredSummary,
     _lock: File,
 }
 impl Receiver {
@@ -125,6 +137,16 @@ impl Receiver {
             conn.execute("ALTER TABLE assets ADD COLUMN published_at_ms INTEGER", [])
                 .map_err(db)?;
         }
+        if !columns.iter().any(|c| c == "last_activity_ms") {
+            conn.execute("ALTER TABLE assets ADD COLUMN last_activity_ms INTEGER", [])
+                .map_err(db)?;
+            // Uploads in flight across the upgrade get a full TTL from now.
+            conn.execute(
+                "UPDATE assets SET last_activity_ms=?1 WHERE received=0",
+                [now_ms()?],
+            )
+            .map_err(db)?;
+        }
         // Cloud verification is reported by an external auditor; release
         // columns are reserved for a later verified gallery-copy cleanup.
         for (name, definition) in [
@@ -151,10 +173,53 @@ impl Receiver {
             capacity,
             min_free: 0,
             admission_held: false,
+            expired_at_open: ExpiredSummary::default(),
             _lock: lock,
         };
-        receiver.reclaim_unreferenced()?;
+        // Also reclaims blobs left unreferenced by an interrupted release.
+        receiver.expired_at_open = receiver.expire_abandoned(now_ms()?, ABANDONED_TTL_MS)?;
         Ok(receiver)
+    }
+    /// What `open` expired, for the host's activity log.
+    pub fn expired_at_open(&self) -> ExpiredSummary {
+        self.expired_at_open
+    }
+    /// Drops unreceived assets idle for at least `ttl_ms`, then frees blobs no
+    /// longer referenced. Content shared with any other retained asset stays.
+    /// A sender writing to an expired asset gets 404 and registers again.
+    pub fn expire_abandoned(&mut self, now_ms: i64, ttl_ms: u64) -> Result<ExpiredSummary> {
+        let cutoff = now_ms.saturating_sub(i64::try_from(ttl_ms).unwrap_or(i64::MAX));
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db)?;
+        let stale = "SELECT id FROM assets WHERE received=0 AND originals_released=0 AND COALESCE(last_activity_ms,0)<=?1";
+        for table in ["asset_senders", "gallery_expected", "gallery_copies"] {
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE asset_id IN ({stale})"),
+                [cutoff],
+            )
+            .map_err(db)?;
+        }
+        let assets = tx
+            .execute(
+                &format!("DELETE FROM assets WHERE id IN ({stale})"),
+                [cutoff],
+            )
+            .map_err(db)? as u64;
+        tx.commit().map_err(db)?;
+        // Rows go first; a crash only leaves blobs the next open reclaims.
+        let bytes = self.reclaim_unreferenced()?;
+        Ok(ExpiredSummary { assets, bytes })
+    }
+    fn touch(&self, id: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE assets SET last_activity_ms=?2 WHERE id=?1",
+                params![id, now_ms()?],
+            )
+            .map_err(db)?;
+        Ok(())
     }
     pub fn hold_transfers(&mut self, held: bool) {
         self.admission_held = held;
@@ -414,8 +479,8 @@ impl Receiver {
             }
         }
         tx.execute(
-            "INSERT OR IGNORE INTO assets(id,manifest) VALUES(?1,?2)",
-            params![id, serde_json::to_string(&asset)?],
+            "INSERT INTO assets(id,manifest,last_activity_ms) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET last_activity_ms=excluded.last_activity_ms",
+            params![id, serde_json::to_string(&asset)?, now_ms()?],
         )
         .map_err(db)?;
         tx.commit().map_err(db)?;
@@ -588,6 +653,7 @@ impl Receiver {
             if existing != body {
                 return Err(Error::Conflict("replayed chunk differs".into()));
             }
+            self.touch(id)?;
             return self.status(id);
         }
         if offset != current.offset || current.complete {
@@ -603,6 +669,7 @@ impl Receiver {
         file.write_all(body)?;
         file.sync_all()?;
         drop(file);
+        self.touch(id)?;
         self.status(id)
     }
     pub fn commit(&mut self, id: &str) -> Result<AssetStatus> {
@@ -619,7 +686,7 @@ impl Receiver {
             }
         }
         self.conn
-            .execute("UPDATE assets SET received_at_ms=CASE WHEN received=0 THEN ?2 ELSE received_at_ms END,received=1 WHERE id=?1", params![id, now_ms()?])
+            .execute("UPDATE assets SET received_at_ms=CASE WHEN received=0 THEN ?2 ELSE received_at_ms END,received=1,last_activity_ms=?2 WHERE id=?1", params![id, now_ms()?])
             .map_err(db)?;
         self.status(id)
     }
