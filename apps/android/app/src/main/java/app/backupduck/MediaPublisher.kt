@@ -13,12 +13,15 @@ import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
 
-internal data class GalleryCopy(val locator: String, val sha256: String, val size: Long, val displayName: String? = null) {
+/** [sha1] is the digest cloud lookups use; evidence recorded before it existed omits it. */
+internal data class GalleryCopy(val locator: String, val sha256: String, val size: Long, val displayName: String? = null, val sha1: String? = null) {
     fun json() = JSONObject().put("locator", locator).put("sha256", sha256).put("size", size).apply {
         displayName?.let { put("display_name", it) }
+        sha1?.let { put("sha1", it) }
     }
-    companion object { fun parse(value: JSONObject) = GalleryCopy(value.getString("locator"), value.getString("sha256"), value.getLong("size"), value.optString("display_name").ifEmpty { null }) }
+    companion object { fun parse(value: JSONObject) = GalleryCopy(value.getString("locator"), value.getString("sha256"), value.getLong("size"), value.optString("display_name").ifEmpty { null }, value.optString("sha1").ifEmpty { null }) }
 }
+private data class Digests(val sha256: String, val sha1: String, val size: Long)
 internal object MediaPublisher {
     private val publicationLock = Any()
     suspend fun publish(context: Context, item: JSONObject, existingOnly: Boolean = false): GalleryCopy {
@@ -54,25 +57,33 @@ internal object MediaPublisher {
             it.moveToFirst() && it.getInt(0) == 1 && it.getString(1) == context.packageName
         } ?: false
     }
-    private suspend fun hash(input: InputStream, limit: Long, write: ((ByteArray, Int) -> Unit)? = null): Pair<String, Long> {
-        val digest = MessageDigest.getInstance("SHA-256"); val buffer = ByteArray(65_536); var bytes = 0L
+    /** One pass over the bytes yields both the receipt and the cloud lookup digest. */
+    private suspend fun hash(input: InputStream, limit: Long, write: ((ByteArray, Int) -> Unit)? = null): Digests {
+        val sha256 = MessageDigest.getInstance("SHA-256"); val sha1 = MessageDigest.getInstance("SHA-1")
+        val buffer = ByteArray(65_536); var bytes = 0L
         while (true) {
             currentCoroutineContext().ensureActive()
             val count = input.read(buffer); if (count < 0) break
             check(count.toLong() <= limit - bytes) { "gallery_copy_changed" }
-            digest.update(buffer, 0, count); bytes += count; write?.invoke(buffer, count)
+            sha256.update(buffer, 0, count); sha1.update(buffer, 0, count); bytes += count; write?.invoke(buffer, count)
         }
-        return digest.digest().joinToString("") { "%02x".format(it) } to bytes
+        fun hex(value: ByteArray) = value.joinToString("") { "%02x".format(it) }
+        return Digests(hex(sha256.digest()), hex(sha1.digest()), bytes)
     }
-    /** Reopen the owned, ready MediaStore item; indexed size alone is not proof. */
+    private fun Digests.matches(copy: GalleryCopy) = sha256 == copy.sha256 && size == copy.size && (copy.sha1 == null || sha1 == copy.sha1)
+    /**
+     * Reopen the owned, ready MediaStore item; indexed size alone is not proof.
+     * Returns the copy with the SHA-1 of the bytes just read.
+     */
     suspend fun verify(context: Context, copy: GalleryCopy): GalleryCopy {
         val uri = Uri.parse(copy.locator)
-        check(uri.scheme == "content" && uri.authority == "media" && copy.size > 0 && copy.sha256.matches(Regex("[0-9a-f]{64}"))) { "gallery_copy_changed" }
+        check(uri.scheme == "content" && uri.authority == "media" && copy.size > 0 && copy.sha256.matches(Regex("[0-9a-f]{64}")) &&
+            copy.sha1?.matches(Regex("[0-9a-f]{40}")) != false) { "gallery_copy_changed" }
         checkReady(context, uri)
         val actual = checkNotNull(context.contentResolver.openInputStream(uri)).use { hash(it, copy.size) }
-        check(actual.first == copy.sha256 && actual.second == copy.size) { "gallery_copy_changed" }
+        check(actual.matches(copy)) { "gallery_copy_changed" }
         checkReady(context, uri)
-        return copy
+        return copy.copy(sha1 = actual.sha1)
     }
     private fun checkReady(context: Context, uri: Uri) {
         val columns = mutableListOf(MediaStore.MediaColumns.IS_PENDING, MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH)
@@ -102,14 +113,18 @@ internal object MediaPublisher {
             if (it.moveToFirst() && it.getString(1) == relative) it.getString(0)?.takeIf(String::isNotBlank) else null
         }
         val size = source.length(); check(size > 0) { "gallery_copy_missing" }
-        suspend fun expected() = originalHash ?: source.inputStream().use { hash(it, size).first }
+        // The source is read once for SHA-1 even when its SHA-256 is already known.
+        suspend fun expected() = source.inputStream().use { hash(it, size) }.also {
+            check(it.size == size && (originalHash == null || it.sha256 == originalHash)) { "gallery_copy_changed" }
+        }
 
         if (resumeLocator != null) {
             // Resume only the stored row. Its name is whatever MediaStore kept.
             val uri = Uri.parse(resumeLocator)
             val name = synchronized(publicationLock) { if (ownedPending(context, uri)) displayName(uri) else null }
             check(name != null && !existingOnly) { "gallery_copy_missing" }
-            return write(context, source, item, GalleryCopy(uri.toString(), expected(), size, name), captured)
+            val digests = expected()
+            return write(context, source, item, GalleryCopy(uri.toString(), digests.sha256, size, name, digests.sha1), captured)
         }
 
         if (existingOnly) {
@@ -120,11 +135,11 @@ internal object MediaPublisher {
                 }
             }
             check(found.isNotEmpty()) { "gallery_copy_missing" }
-            val hash = expected()
+            val digests = expected()
             // A short dated suffix may belong to another asset; only matching bytes count.
             var failure: Exception? = null
             for ((uri, name) in found) {
-                try { return verify(context, GalleryCopy(uri.toString(), hash, size, name)) }
+                try { return verify(context, GalleryCopy(uri.toString(), digests.sha256, size, name, digests.sha1)) }
                 catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                 catch (error: Exception) { failure = error }
             }
@@ -150,7 +165,8 @@ internal object MediaPublisher {
             if (actual == null) { resolver.delete(inserted, null, null); error("publication_name_unavailable") }
             Row(inserted, false, context.packageName) to actual
         }
-        val copy = GalleryCopy(row.uri.toString(), expected(), size, name)
+        val digests = expected()
+        val copy = GalleryCopy(row.uri.toString(), digests.sha256, size, name, digests.sha1)
         if (row.ready) return verify(context, copy)
         // A crash before prepare_gallery leaves an owned pending row without
         // evidence. The next attempt treats its name as taken and inserts again;
@@ -165,7 +181,7 @@ internal object MediaPublisher {
         val copied = source.inputStream().use { input ->
             checkNotNull(resolver.openOutputStream(uri, "wt")).use { output -> hash(input, copy.size) { buffer, count -> output.write(buffer, 0, count) } }
         }
-        check(copied.first == copy.sha256 && copied.second == copy.size) { "gallery_copy_changed" }
+        check(copied.matches(copy)) { "gallery_copy_changed" }
         MediaDates.stampPending(context, uri, captured)
         check(resolver.update(uri, MediaDates.values(captured).apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) == 1) { "publication_failed" }
         return verify(context, copy)

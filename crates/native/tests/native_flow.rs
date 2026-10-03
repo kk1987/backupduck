@@ -680,3 +680,39 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
     assert!(codes.contains(&"originals_reclaimed"));
     assert!(!codes.contains(&"receiver_started"));
 }
+
+#[tokio::test]
+async fn check_pairing_records_the_cloud_audit_capability() {
+    let t = Temp::new();
+    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 10000)
+        .await
+        .unwrap();
+    let queue = t.0.join("sender");
+    let call = |value: serde_json::Value| -> serde_json::Value {
+        let output: serde_json::Value =
+            serde_json::from_str(&backupduck_native::call(&value.to_string())).unwrap();
+        assert_eq!(output["ok"], true, "{output}");
+        output["value"].clone()
+    };
+    call(serde_json::json!({"op":"open_sender","root":queue}));
+    let pairing = r.pairing.clone();
+    let checked = tokio::task::spawn_blocking(move || {
+        call(serde_json::json!({"op":"check_pairing","pairing":pairing}))
+    })
+    .await
+    .unwrap();
+    assert_eq!(checked["cloud_audit"], true);
+    let db = rusqlite::Connection::open_with_flags(
+        queue.join("sender.sqlite3"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let (cloud, bundle): (bool, bool) = db
+        .query_row(
+            "SELECT cloud_audit,bundle_upload FROM receiver_features WHERE receiver_id=?1",
+            [&r.pairing.receiver_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert!(cloud && bundle);
+}

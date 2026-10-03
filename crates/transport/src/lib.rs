@@ -108,6 +108,8 @@ pub fn shared_router_observed(
         .route("/v2/assets/{id}", get(status))
         .route("/v2/assets/{id}/commit", post(commit))
         .route("/v2/assets/{id}/resources/{hash}", put(upload))
+        .route("/v2/publications", get(cloud_due))
+        .route("/v2/cloud-observations", post(observe_cloud))
         .layer(DefaultBodyLimit::max(MAX_CHUNK_BYTES))
         .layer(middleware::from_fn_with_state(state.clone(), authorize))
         .with_state(state))
@@ -258,6 +260,47 @@ async fn upload(
     body: Bytes,
 ) -> std::result::Result<Json<AssetStatus>, ApiError> {
     with_receiver(s, move |r| r.append(&id, &hash, q.offset, &body, &q.sha256)).await
+}
+fn unix_ms() -> Result<i64> {
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| Error::Storage("system clock before epoch".into()))?;
+    i64::try_from(elapsed.as_millis()).map_err(|_| Error::Storage("system clock overflow".into()))
+}
+#[derive(Deserialize)]
+struct CloudQuery {
+    cloud: String,
+    #[serde(default)]
+    after: String,
+    #[serde(default = "default_cloud_limit")]
+    limit: u32,
+}
+fn default_cloud_limit() -> u32 {
+    MAX_CLOUD_ITEMS as u32
+}
+async fn cloud_due(
+    axum::Extension(s): axum::Extension<ServerState>,
+    Query(q): Query<CloudQuery>,
+) -> std::result::Result<Json<CloudDuePage>, ApiError> {
+    let all = match q.cloud.as_str() {
+        "due" => false,
+        "all" => true,
+        _ => return Err(Error::Invalid("cloud filter".into()).into()),
+    };
+    let now = unix_ms()?;
+    with_receiver(s, move |r| r.cloud_due(&q.after, q.limit, now, all)).await
+}
+async fn observe_cloud(
+    axum::Extension(s): axum::Extension<ServerState>,
+    body: Bytes,
+) -> std::result::Result<Json<CloudSummary>, ApiError> {
+    if body.len() > MAX_CLOUD_OBSERVATION_BYTES {
+        return Err(Error::Invalid("cloud observation size".into()).into());
+    }
+    let request: CloudObservations = serde_json::from_slice(&body).map_err(Error::from)?;
+    request.validate()?;
+    let now = unix_ms()?;
+    with_receiver(s, move |r| r.observe_cloud(&request.observations, now)).await
 }
 
 #[derive(Clone)]
@@ -462,6 +505,56 @@ impl Client {
             self.http
                 .post(format!("{}/v2/assets/{id}/commit", self.base))
                 .bearer_auth(&self.token)
+                .send()
+                .await
+                .map_err(network)?,
+        )
+        .await
+    }
+    /// Published gallery copies for an external cloud auditor (`cloud_audit`).
+    pub async fn cloud_due(
+        &self,
+        after: Option<&str>,
+        limit: u32,
+        all: bool,
+    ) -> Result<CloudDuePage> {
+        if after.is_some_and(|id| !valid_digest(id))
+            || limit == 0
+            || limit as usize > MAX_CLOUD_ITEMS
+        {
+            return Err(Error::Invalid("cloud query".into()));
+        }
+        let mut query = vec![
+            ("cloud", if all { "all" } else { "due" }.to_string()),
+            ("limit", limit.to_string()),
+        ];
+        if let Some(after) = after {
+            query.push(("after", after.into()));
+        }
+        Self::decode(
+            self.http
+                .get(format!("{}/v2/publications", self.base))
+                .bearer_auth(&self.token)
+                .query(&query)
+                .send()
+                .await
+                .map_err(network)?,
+        )
+        .await
+    }
+    pub async fn post_cloud_observations(
+        &self,
+        observations: &[CloudObservation],
+    ) -> Result<CloudSummary> {
+        let request = CloudObservations {
+            observations: observations.to_vec(),
+        };
+        request.validate()?;
+        Self::decode(
+            self.http
+                .post(format!("{}/v2/cloud-observations", self.base))
+                .bearer_auth(&self.token)
+                .json(&request)
                 .send()
                 .await
                 .map_err(network)?,

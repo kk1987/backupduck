@@ -167,6 +167,8 @@ class ReceiverInstrumentation : Instrumentation() {
                     val copy = MediaPublisher.publish(targetContext, item)
                     publishedCopies += android.net.Uri.parse(copy.locator)
                     publishedLocators += copy.locator
+                    val evidence = (NativeBridge.request(JSONObject().put("op", "gallery_evidence").put("id", id)) as JSONObject).getJSONObject("copy")
+                    check(evidence.optString("sha1").matches(Regex("[0-9a-f]{40}")) && evidence.getString("sha1") == copy.sha1) { "gallery_sha1_missing" }
                     if (legacy != null) check(copy.locator == legacy.toString()) { "legacy_pending_copy_duplicated" }
                     val (actualName, actualMime) = checkNotNull(targetContext.contentResolver.query(android.net.Uri.parse(copy.locator),
                         arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE), null, null, null)?.use { cursor ->
