@@ -95,6 +95,9 @@
 <string name="receiver_motion_conversion_switch">Allow compatibility conversion</string>
 <string name="receiver_motion_conversion_note">Off by default. BackupDuck first tries to keep the original image and video. If it cannot package a Live Photo, turning this on lets it create a new JPEG and MP4 copy. This can take longer and change quality; the received originals are kept.</string>
 <string name="receiver_motion_conversion_recovery">The original photo and video are safe on this phone, but this Live Photo cannot be added to the gallery without conversion. Turn on “Allow compatibility conversion” in Settings, then tap “Retry failed processing” in Transfers.</string>
+<string name="receiver_burst_settings">Burst photos</string>
+<string name="receiver_burst_jpeg_switch">Convert HEIC bursts to JPEG</string>
+<string name="receiver_burst_jpeg_note">Off by default. HEIC burst photos keep their original image, HDR and metadata. Turn this on only if you need JPEG burst copies; conversion re-encodes the image and can lose HDR and some metadata.</string>
 <string name="receiver_item_conversion_required">Received · Compatibility conversion needed</string>
 <string name="receiver_thermal_switch">Pause receiving when the phone is hot</string>
 <string name="receiver_thermal_note">On by default. Pauses at the chosen battery temperature or when Android reports severe heat; resumes after cooling.</string>

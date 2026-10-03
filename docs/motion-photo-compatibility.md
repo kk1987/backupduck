@@ -36,6 +36,20 @@ Interrupted publications resume through their stored MediaStore URI, and
 confirmed copies retain it; this change does not rewrite existing gallery files
 or cloud items.
 
+## HEIC bursts
+
+Burst frames use the same primary-XMP rewrite without the Motion Photo parts:
+`GCamera:BurstID` and `GCamera:BurstPrimary` are merged into the existing
+primary XMP item, or a new one is added, and no `mpvd` box or SEF footer is
+appended. Image, gain-map and other item payloads are copied byte-for-byte. An
+input that already carries the same burst values is returned unchanged; other
+GCamera or Container metadata, a different burst value and unsupported layouts
+are reported as `unsupported`, and the receiver then publishes the decoded JPEG
+copy. The **Convert HEIC bursts to JPEG** setting skips the HEIC path. HEIC
+date writing is limited to 64 MiB; the date writer reports a larger undated
+frame as `unsupported` too, so it is published through the JPEG path. Google
+Photos cloud grouping of HEIC bursts is unverified.
+
 ## Regression and playback evidence
 
 Regression tests follow the primary item's metadata reference and extent,

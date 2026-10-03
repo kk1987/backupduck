@@ -105,6 +105,8 @@ class ReceiverInstrumentation : Instrumentation() {
                 photo.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it)) }; bitmap.recycle()
                 val movie = File(root, "fixture.mp4")
                 context.assets.open("motion.mp4").use { input -> movie.outputStream().use { input.copyTo(it) } }
+                val heicStill = File(root, "fixture.HEIC")
+                context.assets.open("dates.heic").use { input -> heicStill.outputStream().use { input.copyTo(it) } }
                 val pairing = NativeBridge.request(JSONObject().put("op", "start_receiver").put("root", File(root, "receiver").path)
                     .put("listen", "127.0.0.1:38484").put("capacity", 32 * 1024 * 1024)) as JSONObject
                 NativeBridge.request(JSONObject().put("op", "open_sender").put("root", File(root, "sender").path))
@@ -128,16 +130,19 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(profile(receiverDirectory).getJSONArray("peers").getJSONObject(0).getJSONObject("profile").getString("name") == "Kitchen Mac") { "rename_not_propagated" }
                 // Every fixture shares the name fixture.jpg or fixture.mp4, so publication
                 // exercises collision variants. "twin" is a separate asset with the same
-                // name; "heic" declares a HEIC name for JPEG bytes.
-                val kinds = listOf("photo", "video", "motion", "burst-primary", "burst-secondary", "twin", "heic")
+                // name; "heic" declares a HEIC name for JPEG bytes. The burst-heic pair
+                // is a second burst group of real HEIC frames, published without re-encoding.
+                val kinds = listOf("photo", "video", "motion", "burst-primary", "burst-secondary", "twin", "heic", "burst-heic-primary", "burst-heic-secondary")
+                fun burstIdentifier(kind: String) = if (kind.startsWith("burst-heic-")) "${root.name}-heic" else root.name
                 for (kind in kinds) {
                     val resources = JSONArray()
                     fun resource(file: File, role: String, mime: String, name: String = file.name) = JSONObject().put("role", role).put("filename", name).put("media_type", mime).put("path", file.path)
                     if (kind == "video") resources.put(resource(movie, "video", "video/mp4"))
                     else if (kind == "heic") resources.put(resource(photo, "photo", "image/heic", "fixture.HEIC"))
+                    else if (kind.startsWith("burst-heic-")) resources.put(resource(heicStill, "photo", "image/heic"))
                     else resources.put(resource(photo, "photo", "image/jpeg"))
                     if (kind == "motion") resources.put(resource(movie, "paired_video", "video/mp4"))
-                    val metadata = if (kind.startsWith("burst-")) NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", root.name).put("primary", kind == "burst-primary")) as JSONObject else JSONObject()
+                    val metadata = if (kind.startsWith("burst-")) NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", burstIdentifier(kind)).put("primary", kind.endsWith("-primary"))) as JSONObject else JSONObject()
                     metadata.put("created_at_ms", "1786761701000")
                     val assetKind = when (kind) { "video", "motion" -> kind; else -> "photo" }
                     NativeBridge.request(JSONObject().put("op", "enqueue").put("receiver_id", pairing.getString("receiver_id"))
@@ -176,6 +181,7 @@ class ReceiverInstrumentation : Instrumentation() {
                     if (legacy != null) check(actualName == GalleryNaming.legacyName(item)) { "legacy_name_changed" }
                     else check(actualName.startsWith("fixture")) { "original_name_missing" }
                     if (kind == "heic") check(actualName.endsWith(".jpg") && actualMime == "image/jpeg") { "heic_named_jpeg_mislabelled" }
+                    if (kind.startsWith("burst-heic-")) check(actualMime == "image/heic" && actualName.endsWith(".HEIC")) { "heic_burst_reencoded:$actualName:$actualMime" }
                     publishedNames += actualName
                     namesByKind[kind] = actualName
                     // Publication replay must find the same MediaStore row and name.
@@ -200,7 +206,10 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(total == kinds.size) { "publication_duplicate_or_missing" }
                 var burstFrames = 0
                 var primaryFrames = 0
+                var heicBurstFrames = 0
+                var heicPrimaryFrames = 0
                 val expectedBurst = NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", root.name).put("primary", true)) as JSONObject
+                val expectedHeicBurst = NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", "${root.name}-heic").put("primary", true)) as JSONObject
                 val images = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 targetContext.contentResolver.query(images, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
                     "${MediaStore.MediaColumns.RELATIVE_PATH}=?", arrayOf("DCIM/BackupDuck/"), null)?.use { cursor ->
@@ -215,9 +224,16 @@ class ReceiverInstrumentation : Instrumentation() {
                                 if (xmp.contains("GCamera:BurstPrimary=\"1\"")) primaryFrames++
                             }
                         }
+                        // ExifInterface does not expose HEIF XMP items on every API level; read the stored bytes.
+                        val stored = String(checkNotNull(targetContext.contentResolver.openInputStream(uri)).use { it.readBytes() }, Charsets.ISO_8859_1)
+                        if (stored.contains("GCamera:BurstID=\"${expectedHeicBurst.getString("burst_group_ref")}\"")) {
+                            heicBurstFrames++
+                            if (stored.contains("GCamera:BurstPrimary=\"1\"")) heicPrimaryFrames++
+                        }
                     }
                 }
                 check(burstFrames == 2 && primaryFrames == 1) { "burst_metadata_missing_or_ambiguous" }
+                check(heicBurstFrames == 2 && heicPrimaryFrames == 1) { "heic_burst_metadata_missing_or_ambiguous" }
 
                 val gallery = GalleryInventory.read(targetContext)
                 check(gallery.readyCount == galleryBefore.readyCount + kinds.size && gallery.readyBytes > galleryBefore.readyBytes) { "gallery_usage_missing_or_duplicate" }
@@ -234,7 +250,7 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(GalleryInventory.read(targetContext) == gallery) { "gallery_removal_not_reflected" }
                 val receiverRoot = File(root, "receiver").path
                 val originalUsage = NativeBridge.request(JSONObject().put("op", "receiver_storage_usage").put("root", receiverRoot)) as JSONObject
-                check(originalUsage.getLong("ready_bytes") == photo.length() + movie.length() && originalUsage.getLong("partial_bytes") == 0L) { "original_usage_not_deduplicated" }
+                check(originalUsage.getLong("ready_bytes") == photo.length() + movie.length() + heicStill.length() && originalUsage.getLong("partial_bytes") == 0L) { "original_usage_not_deduplicated" }
                 NativeBridge.request(JSONObject().put("op", "stop_receiver"))
                 check(!(NativeBridge.request(JSONObject().put("op", "receiver_status")) as JSONObject).getBoolean("running"))
                 // The aborted listener releases its writer on the next runtime turn.
@@ -269,7 +285,7 @@ class ReceiverInstrumentation : Instrumentation() {
                 check((NativeBridge.request(JSONObject().put("op", "receiver_overview")) as JSONObject).getInt("received") == kinds.size)
                 check(NativeBridge.request(JSONObject().put("op", "run_sender").put("pairing", pairing)) == JSONObject.NULL) { "received_items_requeued" }
                 checkRelayRetention(root, photo, movie, restarted, publishedCopies)
-                results.putString("result", "PASS: opt-in relay, verified derived copies, changed/missing copy preservation and durable receipts; original/gallery space separation, deduplicated originals, pending publication and reclamation; two grouped burst frames, one primary, original retention; durable names, bidirectional profile exchange, rename and invalid-name rejection; offline verified archive, tamper rejection, original reclamation, receipt retention; Kotlin JNI, paired TLS, photo/video/motion receipt, codec publication and dedupe")
+                results.putString("result", "PASS: opt-in relay, verified derived copies, changed/missing copy preservation and durable receipts; original/gallery space separation, deduplicated originals, pending publication and reclamation; two grouped JPEG and two grouped lossless HEIC burst frames, one primary each, original retention; durable names, bidirectional profile exchange, rename and invalid-name rejection; offline verified archive, tamper rejection, original reclamation, receipt retention; Kotlin JNI, paired TLS, photo/video/motion receipt, codec publication and dedupe")
             }
             resultCode = Activity.RESULT_OK
         } catch (error: Throwable) {

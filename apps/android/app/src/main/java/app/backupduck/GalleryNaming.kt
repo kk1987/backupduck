@@ -31,7 +31,7 @@ internal object GalleryNaming {
     private fun extension(item: JSONObject, outputMime: String? = null): String {
         val asset = item.getJSONObject("asset")
         if (asset.getString("kind") == "motion") return if (outputMime == "image/heic") ".heic" else ".jpg"
-        if (asset.optJSONObject("metadata")?.has("burst_group_ref") == true) return ".jpg"
+        if (asset.optJSONObject("metadata")?.has("burst_group_ref") == true) return if (outputMime == "image/heic") ".heic" else ".jpg"
         val resource = asset.getJSONArray("resources").getJSONObject(0)
         val raw = resource.getString("filename").substringAfterLast('.', "")
         if (raw.isEmpty()) return ""

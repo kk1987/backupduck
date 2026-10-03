@@ -95,6 +95,9 @@
 <string name="receiver_motion_conversion_switch">允许兼容转换</string>
 <string name="receiver_motion_conversion_note">默认关闭。优先保留原始照片和视频；只有无法直接封装时，开启此项才会生成新的 JPEG 照片和 MP4 视频，可能更耗时、影响画质。已接收的原文件会保留。</string>
 <string name="receiver_motion_conversion_recovery">原始照片和视频已安全接收，但这张实况需要转换才能加入手机相册。请在设置中开启“允许兼容转换”，然后到传输记录点“重试处理”。</string>
+<string name="receiver_burst_settings">连拍照片</string>
+<string name="receiver_burst_jpeg_switch">将 HEIC 连拍转换为 JPEG</string>
+<string name="receiver_burst_jpeg_note">默认关闭。HEIC 连拍照片会保留原始图像、HDR 和元数据。只有需要 JPEG 连拍副本时才开启；转换会重新编码图像，可能丢失 HDR 和部分元数据。</string>
 <string name="receiver_item_conversion_required">原件已接收 · 需要兼容转换</string>
 <string name="receiver_thermal_switch">手机过热时暂停接收</string>
 <string name="receiver_thermal_note">默认开启。电池温度达到设定值或系统报告严重过热时暂停；降温后自动恢复。</string>

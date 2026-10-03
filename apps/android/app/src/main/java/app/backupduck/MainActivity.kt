@@ -274,6 +274,18 @@ class MainActivity : AppCompatActivity() {
             })
             label(body, getString(R.string.receiver_motion_conversion_note), 14, secondaryColor())
         }
+        section(panel, R.string.receiver_burst_settings)
+        card(panel) { body ->
+            body.addView(MaterialSwitch(this).apply {
+                setText(R.string.receiver_burst_jpeg_switch)
+                isChecked = BurstDeliverySettings.convertHeicToJpeg(this@MainActivity)
+                setOnCheckedChangeListener { _, checked ->
+                    BurstDeliverySettings.setConvertHeicToJpeg(this@MainActivity, checked)
+                }
+                minimumHeight = dp(56)
+            })
+            label(body, getString(R.string.receiver_burst_jpeg_note), 14, secondaryColor())
+        }
         section(panel, R.string.dashboard_section)
         card(panel) { body ->
             var changing = false
