@@ -1,5 +1,6 @@
 use backupduck_core::*;
 use backupduck_native::{ReceiverHost, SenderHost};
+mod common;
 use backupduck_sender::JobState;
 use backupduck_store::catalog::Catalog;
 use std::{
@@ -32,9 +33,7 @@ fn address() -> std::net::SocketAddr {
 #[tokio::test]
 async fn native_queue_transfers_over_paired_tls_and_preserves_originals() {
     let t = Temp::new();
-    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 100000)
-        .await
-        .unwrap();
+    let r = common::start_receiver(&t.0.join("receiver"), 100000).await;
     let sender = SenderHost::open(&t.0.join("sender")).unwrap();
     let photo = b"original photo bytes";
     let video = b"original paired video bytes";
@@ -159,12 +158,8 @@ async fn native_queue_transfers_over_paired_tls_and_preserves_originals() {
 #[tokio::test]
 async fn tls_rejects_a_different_receiver_certificate_and_bad_credentials() {
     let t = Temp::new();
-    let a = ReceiverHost::start(&t.0.join("a"), address(), 10000)
-        .await
-        .unwrap();
-    let b = ReceiverHost::start(&t.0.join("b"), address(), 10000)
-        .await
-        .unwrap();
+    let a = common::start_receiver(&t.0.join("a"), 10000).await;
+    let b = common::start_receiver(&t.0.join("b"), 10000).await;
     assert!(a.pairing.client().unwrap().capabilities().await.is_ok());
     let mut wrong = a.pairing.clone();
     wrong.certificate = b.pairing.certificate.clone();
@@ -189,9 +184,7 @@ async fn external_executor_recovers_lost_chunk_and_commit_receipts() {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use std::collections::BTreeSet;
     let t = Temp::new();
-    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 16 * 1024 * 1024)
-        .await
-        .unwrap();
+    let r = common::start_receiver(&t.0.join("receiver"), 16 * 1024 * 1024).await;
     let client = reqwest::Client::builder()
         .add_root_certificate(
             reqwest::Certificate::from_der(&STANDARD.decode(&r.pairing.certificate).unwrap())
@@ -533,7 +526,7 @@ async fn local_receiver_settings_work_before_network_and_survive_first_start() {
             .unwrap()
             .is_empty()
     );
-    let host = ReceiverHost::start(&root, address(), 10000).await.unwrap();
+    let host = common::start_receiver(&root, 10000).await;
     assert_eq!(
         host.receiver.lock().unwrap().overview().unwrap()["capacity_bytes"],
         13u64 << 30
@@ -684,9 +677,7 @@ fn offline_archive_preserves_originals_until_all_resources_verify() {
 #[tokio::test]
 async fn check_pairing_records_the_cloud_audit_capability() {
     let t = Temp::new();
-    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 10000)
-        .await
-        .unwrap();
+    let r = common::start_receiver(&t.0.join("receiver"), 10000).await;
     let queue = t.0.join("sender");
     let call = |value: serde_json::Value| -> serde_json::Value {
         let output: serde_json::Value =

@@ -6,6 +6,7 @@ use backupduck_native::{
     cloud::{CloudLookup, RunOptions, RunReport},
     ReceiverHost, SenderHost,
 };
+mod common;
 use backupduck_store::retention::GalleryCopy;
 use serde_json::{json, Value};
 use std::{
@@ -32,12 +33,6 @@ impl Drop for Temp {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
-}
-fn address() -> std::net::SocketAddr {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
 }
 
 /// Scripted Google library: SHA-1 -> (media key, takes up space).
@@ -178,9 +173,7 @@ const RUN: RunOptions = RunOptions {
 #[tokio::test]
 async fn audit_posts_verdicts_and_mirrors_them_on_jobs() {
     let t = Temp::new();
-    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 100000)
-        .await
-        .unwrap();
+    let r = common::start_receiver(&t.0.join("receiver"), 100000).await;
     let sender = SenderHost::open(&t.0.join("sender")).unwrap();
     let free = publish(&t, &r, &sender, "free", 'a').await;
     let quota = publish(&t, &r, &sender, "quota", 'b').await;
@@ -306,9 +299,7 @@ async fn audit_posts_verdicts_and_mirrors_them_on_jobs() {
 #[tokio::test]
 async fn other_senders_copies_are_reported_but_not_mirrored() {
     let t = Temp::new();
-    let r = ReceiverHost::start(&t.0.join("receiver"), address(), 100000)
-        .await
-        .unwrap();
+    let r = common::start_receiver(&t.0.join("receiver"), 100000).await;
     let sender = SenderHost::open(&t.0.join("sender")).unwrap();
     sender
         .set_cloud_audit(&r.pairing.receiver_id, true)
@@ -374,13 +365,7 @@ fn call(v: Value) -> Value {
 fn ffi_status_and_error_codes() {
     let t = Temp::new();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let r = rt
-        .block_on(ReceiverHost::start(
-            &t.0.join("receiver"),
-            address(),
-            100000,
-        ))
-        .unwrap();
+    let r = rt.block_on(common::start_receiver(&t.0.join("receiver"), 100000));
     let pairing = serde_json::to_value(&r.pairing).unwrap();
     let receiver = r.pairing.receiver_id.clone();
     assert_eq!(

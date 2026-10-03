@@ -1,5 +1,5 @@
 use backupduck_core::*;
-use backupduck_native::ReceiverHost;
+mod common;
 use backupduck_store::devices::DeviceDirectory;
 use std::{
     collections::BTreeMap,
@@ -68,10 +68,7 @@ async fn authenticated_profile_exchange_keeps_multiple_peers_and_media_identity(
     let root = temp.0.join("receiver");
     let receiver_devices = DeviceDirectory::open(&root.join("store"), "zh").unwrap();
     receiver_devices.rename("琥珀水獭").unwrap();
-    let bind = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = bind.local_addr().unwrap();
-    drop(bind);
-    let receiver = ReceiverHost::start(&root, address, 1 << 20).await.unwrap();
+    let receiver = common::start_receiver(&root, 1 << 20).await;
     let first = DeviceDirectory::open(&temp.0.join("first"), "en").unwrap();
     let second = DeviceDirectory::open(&temp.0.join("second"), "en").unwrap();
     let one = first.rename("Moonlit Cedar").unwrap();
