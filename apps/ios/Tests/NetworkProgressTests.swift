@@ -9,6 +9,39 @@ import Network
       certificate: "test", token: "test")
   }
 
+  func testFailedNewPairingDoesNotLabelTheSavedReceiverAsAuthenticationFailed() {
+    let model = BackupModel(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+    model.pairing = pairing
+    model.pairingError = "A different pairing attempt failed"
+    model.receiverConnection = .ready
+    let view = ReceiverStatusIndicator(model: model)
+    XCTAssertEqual(view.status.key, "receiver_indicator_paired")
+    model.receiverConnection = .authentication
+    XCTAssertEqual(view.status.key, "receiver_indicator_attention")
+    model.receiverConnection = .network; model.receiverUnavailable = true
+    XCTAssertEqual(view.status.key, "receiver_indicator_waiting")
+    model.receiverConnection = .ready; model.receiverUnavailable = false
+    XCTAssertEqual(view.status.key, "receiver_indicator_paired")
+  }
+
+  func testDiagnosticsKeepAuthenticationSeparateAndForceBypassesFailureCache() async {
+    XCTAssertEqual(ReceiverConnection.failure(Bridge.Failure(code: "authentication")), .authentication)
+    XCTAssertEqual(ReceiverConnection.failure(Bridge.Failure(code: "network")), .network)
+    XCTAssertEqual(ReceiverConnection.failure(Bridge.Failure(code: "storage")), .unavailable)
+    var probes = 0
+    var response = ReceiverConnection.authentication
+    let gate = ReceiverAvailability(monitorNetwork: false, diagnose: { _ in probes += 1; return response })
+    gate.networkChanged(allowed: true)
+    let first = await gate.diagnose(pairing)
+    XCTAssertEqual(first, .authentication)
+    response = .ready
+    let cached = await gate.diagnose(pairing)
+    XCTAssertEqual(cached, .authentication)
+    let forced = await gate.diagnose(pairing, force: true)
+    XCTAssertEqual(forced, .ready)
+    XCTAssertEqual(probes, 2)
+  }
+
   func testCellularAndUnreachableWifiBlockPreparationUntilReceiverReturns() async {
     var probes = 0
     var reachable = false

@@ -92,6 +92,13 @@ class ReceiverInstrumentation : Instrumentation() {
             })
             return
         }
+        if (arguments.getString("mode") == "dashboard_ui") {
+            val result = runCatching { checkDashboardCodeUI() }
+            finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
+                putString("result", result.getOrElse { "FAIL: ${it.javaClass.simpleName}: ${it.message}" })
+            })
+            return
+        }
         if (arguments.getString("mode") == "storage_ui") {
             val result = runCatching { checkStorageUI(arguments) }
             finish(if (result.isSuccess) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {

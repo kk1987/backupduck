@@ -26,7 +26,8 @@ internal class RetentionControls(private val activity: MainActivity, parent: Lin
                     MaterialAlertDialogBuilder(activity).setTitle(R.string.relay_confirm_title)
                         .setMessage(R.string.relay_confirm_note)
                         .setNegativeButton(R.string.receiver_close, null)
-                        .setPositiveButton(R.string.relay_enable) { _, _ -> save(true) }.show()
+                        .setNeutralButton(R.string.relay_new_only) { _, _ -> save(true, false) }
+                        .setPositiveButton(R.string.relay_include_history) { _, _ -> save(true, true) }.show()
                 } else save(false)
             }
         }
@@ -35,17 +36,20 @@ internal class RetentionControls(private val activity: MainActivity, parent: Lin
         if (saving) return
         applying = true; toggle.isChecked = enabled; applying = false
     }
-    private fun save(enabled: Boolean) {
+    private fun save(enabled: Boolean, includeHistory: Boolean = false) {
         saving = true; toggle.isEnabled = false
         activity.lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching {
                 val root = "${activity.filesDir}/receiver"
-                val state = NativeBridge.request(JSONObject().put("op", "receiver_settings").put("root", root)) as JSONObject
-                val settings = state.getJSONObject("settings").put("receiver_relay", enabled)
-                NativeBridge.request(JSONObject().put("op", "receiver_settings").put("root", root).put("settings", settings))
+                NativeBridge.request(JSONObject().put("op", "set_receiver_relay").put("root", root)
+                    .put("enabled", enabled).put("include_history", includeHistory))
             } }
             saving = false; toggle.isEnabled = true
             render(if (result.isSuccess) enabled else !enabled)
+            if (result.isSuccess) {
+                RelayMaintenance.cancelAutomatic()
+                if (enabled) RelayMaintenance.schedule(activity)
+            }
             Toast.makeText(activity, if (result.isSuccess) (if (enabled) R.string.relay_enabled else R.string.relay_disabled) else R.string.settings_failed, Toast.LENGTH_LONG).show()
         }
     }

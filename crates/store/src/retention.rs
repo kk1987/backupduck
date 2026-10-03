@@ -77,6 +77,40 @@ pub struct GalleryCandidate {
     pub confirmed: bool,
 }
 impl Receiver {
+    /// Snapshot received records, never capture dates or a wall-clock cutoff.
+    /// Pending receptions become eligible when they complete after this choice.
+    pub fn set_relay_history(&mut self, include_history: bool) -> Result<()> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db)?;
+        tx.execute("DELETE FROM relay_exclusions", []).map_err(db)?;
+        if !include_history {
+            tx.execute(
+                "INSERT INTO relay_exclusions SELECT id FROM assets WHERE received=1",
+                [],
+            )
+            .map_err(db)?;
+        }
+        tx.commit().map_err(db)
+    }
+    pub fn relay_eligible(&self, id: &str) -> Result<bool> {
+        self.conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM relay_exclusions WHERE asset_id=?1)",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(db)
+    }
+
+    /// Estimate physical bytes freed by this exact plan, accounting for blobs
+    /// still referenced by any retained asset outside the plan.
+    pub fn gallery_release_bytes(&self, ids: &[String]) -> Result<u64> {
+        let encoded = serde_json::to_string(ids)?;
+        let bytes: i64 = self.conn.query_row("SELECT COALESCE(SUM(size),0) FROM blobs WHERE ready=1 AND EXISTS (SELECT 1 FROM assets,json_each(assets.manifest,'$.resources') r WHERE assets.id IN (SELECT value FROM json_each(?1)) AND originals_released=0 AND json_extract(r.value,'$.sha256')=blobs.hash) AND NOT EXISTS (SELECT 1 FROM assets,json_each(assets.manifest,'$.resources') r WHERE originals_released=0 AND assets.id NOT IN (SELECT value FROM json_each(?1)) AND json_extract(r.value,'$.sha256')=blobs.hash)", [encoded], |r| r.get(0)).map_err(db)?;
+        Ok(bytes as u64)
+    }
     pub fn expected_gallery_copy(&self, id: &str) -> Result<Option<GalleryCopy>> {
         let value: Option<String> = self
             .conn
@@ -218,15 +252,44 @@ impl Receiver {
         self.conn.execute("UPDATE assets SET originals_released=1,release_reason='gallery' WHERE id=?1 AND originals_released=0",[id]).map_err(db)?;
         self.reclaim_unreferenced()
     }
-    /// Relay candidates when `relay` is on, plus confirmed copies whose
-    /// evidence predates SHA-1 and still needs a fresh read to add it.
-    pub fn gallery_candidates(&self, after: &str, relay: bool) -> Result<Vec<GalleryCandidate>> {
+    pub fn gallery_candidates(&self, after: &str) -> Result<Vec<GalleryCandidate>> {
+        self.gallery_candidates_scoped(after, false)
+    }
+    pub fn gallery_candidates_scoped(
+        &self,
+        after: &str,
+        manual: bool,
+    ) -> Result<Vec<GalleryCandidate>> {
+        self.candidates(after, true, manual, false)
+    }
+    /// Relay candidates (when `relay` or `manual`), plus confirmed copies whose
+    /// evidence predates SHA-1 and still needs a fresh read to add it. The
+    /// backfill rows appear even with relay off and never release originals by
+    /// themselves. A manual historical inspection gets relay rows only: it
+    /// treats every row as a release candidate.
+    pub fn gallery_candidates_with_backfill(
+        &self,
+        after: &str,
+        relay: bool,
+        manual: bool,
+    ) -> Result<Vec<GalleryCandidate>> {
+        self.candidates(after, relay || manual, manual, !manual)
+    }
+    fn candidates(
+        &self,
+        after: &str,
+        relay: bool,
+        manual: bool,
+        backfill: bool,
+    ) -> Result<Vec<GalleryCandidate>> {
         if !after.is_empty() && !valid_digest(after) {
             return Err(Error::Invalid("gallery cursor".into()));
         }
-        let mut query = self.conn.prepare("SELECT id FROM assets WHERE received=1 AND processing='complete' AND id>?1 AND ((?2 AND originals_released=0) OR (cloud_state='unknown' AND EXISTS(SELECT 1 FROM gallery_copies g WHERE g.asset_id=assets.id AND json_extract(g.copy,'$.sha1') IS NULL))) ORDER BY id LIMIT 4").map_err(db)?;
+        let mut query = self.conn.prepare("SELECT id FROM assets WHERE received=1 AND processing='complete' AND id>?1 AND ((?2 AND originals_released=0 AND (?3 OR NOT EXISTS(SELECT 1 FROM relay_exclusions WHERE asset_id=assets.id))) OR (?4 AND cloud_state='unknown' AND EXISTS(SELECT 1 FROM gallery_copies g WHERE g.asset_id=assets.id AND json_extract(g.copy,'$.sha1') IS NULL))) ORDER BY id LIMIT 4").map_err(db)?;
         let ids = query
-            .query_map(params![after, relay], |r| r.get::<_, String>(0))
+            .query_map(params![after, relay, manual, backfill], |r| {
+                r.get::<_, String>(0)
+            })
             .map_err(db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(db)?;

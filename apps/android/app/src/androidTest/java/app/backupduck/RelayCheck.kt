@@ -10,7 +10,7 @@ import java.io.File
 internal suspend fun Instrumentation.checkRelayRetention(root: File, photo: File, movie: File, pairing: JSONObject, publishedCopies: MutableList<Uri>) {
     val receiverRoot = File(root,"receiver").path
     fun settings() = (NativeBridge.request(JSONObject().put("op","receiver_settings").put("root",receiverRoot)) as JSONObject).getJSONObject("settings")
-    fun relay(enabled: Boolean) { NativeBridge.request(JSONObject().put("op","receiver_settings").put("root",receiverRoot).put("settings",settings().put("receiver_relay",enabled))) }
+    fun relay(enabled: Boolean, history: Boolean = true) { NativeBridge.request(JSONObject().put("op","set_receiver_relay").put("root",receiverRoot).put("enabled",enabled).put("include_history",history)) }
     check(!settings().getBoolean("receiver_relay")) { "relay_enabled_by_default" }
     fun resource(file: File, role: String, type: String) = JSONObject().put("path",file.path).put("role",role).put("filename",file.name).put("media_type",type)
     val ids=mutableListOf<String>(); val copies=mutableListOf<GalleryCopy>()
@@ -38,6 +38,13 @@ internal suspend fun Instrumentation.checkRelayRetention(root: File, photo: File
     fun history() = (NativeBridge.request(JSONObject().put("op","receiver_history").put("root",receiverRoot).put("state","all").put("kind","all")) as JSONObject).getJSONArray("items")
     fun released(id:String): Boolean { val h=history(); return (0 until h.length()).map(h::getJSONObject).first{it.getString("id")==id}.getBoolean("originals_released") }
     check(ids.none(::released)) { "disabled_relay_removed_originals" }
+    relay(true, false)
+    val scopedSweep = GalleryRetention(receiverRoot)
+    repeat(4) { scopedSweep.step(targetContext) }
+    check(ids.none(::released)) { "new_only_reclaimed_history" }
+    relay(false)
+    val preview = inspectRelay(targetContext, receiverRoot) { }
+    check(preview.candidates.size >= 5 && ids.none(::released)) { "preview_deleted_or_missed_history" }
     targetContext.contentResolver.openOutputStream(Uri.parse(copies[0].locator),"wt")!!.use { it.write(byteArrayOf(1,2,3)) }
     targetContext.contentResolver.delete(Uri.parse(copies[1].locator),null,null)
     check(runCatching { MediaPublisher.verify(targetContext,copies[0]) }.isFailure)
@@ -56,6 +63,10 @@ internal suspend fun Instrumentation.checkRelayRetention(root: File, photo: File
     // Restore only the synthetic photo. Disabled policy must still keep its source.
     targetContext.contentResolver.openOutputStream(Uri.parse(copies[0].locator),"wt")!!.use { out -> photo.inputStream().use { it.copyTo(out) } }
     MediaPublisher.verify(targetContext,copies[0]); sweep.step(targetContext); check(!released(ids[0]))
+    // Preview verification is stale now: the deleted video must stay retained.
+    val manual = reclaimRelay(targetContext, receiverRoot, preview) { }
+    check(manual.first >= 1 && released(ids[0]) && !released(ids[1]))
+    check(!settings().getBoolean("receiver_relay")) { "manual_cleanup_enabled_automatic_policy" }
     relay(true); repeat(4) { sweep.step(targetContext) }; check(released(ids[0]) && !released(ids[1]))
     NativeBridge.request(JSONObject().put("op","stop_receiver"))
     var restarted: JSONObject?=null

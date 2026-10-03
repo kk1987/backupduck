@@ -179,7 +179,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "axum",
  "backupduck-cloud-audit",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-cloud-audit"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "base64",
  "reqwest",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-core"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-folder-source"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "backupduck-core",
  "globset",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-native"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "axum",
  "axum-server",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-pixel"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "backupduck-core",
  "little_exif",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-sender"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "backupduck-core",
  "fs2",
@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-store"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "backupduck-core",
  "fs2",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "backupduck-transport"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.3"
 dependencies = [
  "axum",
  "backupduck-core",

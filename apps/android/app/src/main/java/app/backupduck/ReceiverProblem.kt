@@ -5,6 +5,8 @@ internal data class ReceiverProblem(val message: Int, val action: Int, val recov
 
 /** Presentation of fixed error categories only; never expose exception text. */
 internal fun receiverProblem(snapshot: ReceiverSnapshot): ReceiverProblem? = when (snapshot.error) {
+    "receiver_port_in_use" -> ReceiverProblem(R.string.recovery_port, R.string.help_connection_title, ReceiverRecovery.CONNECTION_HELP)
+    "receiver_interface_unavailable" -> ReceiverProblem(R.string.recovery_interface, R.string.recovery_network_action, ReceiverRecovery.NETWORK)
     "wifi_required" -> ReceiverProblem(R.string.recovery_wifi, R.string.recovery_network_action, ReceiverRecovery.NETWORK)
     "receiver_address_changed" -> ReceiverProblem(R.string.recovery_address, R.string.help_connection_title, ReceiverRecovery.CONNECTION_HELP)
     "system_time_limit", "foreground_start_blocked" -> ReceiverProblem(R.string.recovery_system_limit, R.string.receiver_start, ReceiverRecovery.RESUME)

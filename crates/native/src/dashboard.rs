@@ -1,5 +1,6 @@
-//! Opt-in, receiver-local browser management. The web credential is ephemeral
+//! Opt-in, receiver-local browser management. The web credential is private
 //! and never shares the transfer pairing token or exposes photo bytes.
+use super::dashboard_access::Access;
 use super::*;
 use axum::{
     extract::{DefaultBodyLimit, Query, Request, State},
@@ -11,7 +12,6 @@ use axum::{
 };
 use backupduck_store::catalog::Catalog;
 use serde::Serialize;
-use std::time::{Duration, Instant};
 
 const HTML: &str = include_str!("dashboard/index.html");
 const CSS: &str = include_str!("dashboard/style.css");
@@ -32,27 +32,25 @@ struct WebState {
     receiver: Arc<Mutex<Receiver>>,
     root: PathBuf,
     origin: String,
-    code: String,
-    session: String,
-    attempts: Arc<Mutex<(u8, Instant)>>,
+    access: Arc<Mutex<Access>>,
     device_status: Arc<Mutex<Option<DeviceStatus>>>,
 }
 
 pub(super) struct DashboardHost {
     address: SocketAddr,
-    code: String,
+    access: Arc<Mutex<Access>>,
     handle: axum_server::Handle,
     task: tokio::task::JoinHandle<()>,
     device_status: Arc<Mutex<Option<DeviceStatus>>>,
 }
 
-fn random_hex() -> Result<String> {
+pub(super) fn random_hex() -> Result<String> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|_| Error::Storage("dashboard random source".into()))?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn random_code() -> Result<String> {
+pub(super) fn random_code() -> Result<String> {
     let mut bytes = [0u8; 8];
     getrandom::fill(&mut bytes).map_err(|_| Error::Storage("dashboard random source".into()))?;
     Ok(format!(
@@ -61,7 +59,7 @@ fn random_code() -> Result<String> {
     ))
 }
 
-fn equal_secret(a: &str, b: &str) -> bool {
+pub(super) fn equal_secret(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -110,7 +108,7 @@ fn authorized(headers: &HeaderMap, state: &WebState) -> bool {
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|token| equal_secret(token, &state.session))
+        .is_some_and(|token| state.access.lock().is_ok_and(|a| a.authorized(token)))
 }
 
 async fn index() -> Html<&'static str> {
@@ -129,24 +127,30 @@ async fn js() -> ([(header::HeaderName, &'static str); 1], &'static str) {
 #[derive(Deserialize)]
 struct Login {
     code: String,
+    #[serde(default)]
+    remember: bool,
 }
 async fn login(State(state): State<WebState>, Json(input): Json<Login>) -> Response {
-    let mut attempts = match state.attempts.lock() {
-        Ok(value) => value,
+    let mut access = match state.access.lock() {
+        Ok(a) => a,
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    if attempts.1.elapsed() > Duration::from_secs(300) {
-        *attempts = (0, Instant::now());
+    match access.login(&input.code, input.remember) {
+        Ok(token) => Json(json!({"token":token})).into_response(),
+        Err(Error::Unauthorized) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(Error::Conflict(_)) => StatusCode::TOO_MANY_REQUESTS.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-    if attempts.0 >= 5 {
-        return StatusCode::TOO_MANY_REQUESTS.into_response();
+}
+async fn logout(State(state): State<WebState>, headers: HeaderMap) -> Response {
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    match token.and_then(|token| state.access.lock().ok().map(|mut a| a.logout(token))) {
+        Some(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-    if !equal_secret(&input.code, &state.code) {
-        attempts.0 += 1;
-        return StatusCode::UNAUTHORIZED.into_response();
-    }
-    *attempts = (0, Instant::now());
-    Json(json!({"token":state.session})).into_response()
 }
 
 async fn overview(State(state): State<WebState>, headers: HeaderMap) -> Response {
@@ -265,6 +269,7 @@ fn router(state: WebState) -> Router {
         .route("/style.css", get(css))
         .route("/app.js", get(js))
         .route("/api/login", post(login))
+        .route("/api/logout", post(logout))
         .route("/api/overview", get(overview))
         .route("/api/history", get(history))
         .route("/api/retry", post(retry))
@@ -285,14 +290,12 @@ impl DashboardHost {
         let listener = std::net::TcpListener::bind(listen)?;
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
-        let code = random_code()?;
+        let access = Arc::new(Mutex::new(Access::open(&root)?));
         let state = WebState {
             receiver,
             root,
             origin: format!("http://{address}"),
-            code: code.clone(),
-            session: random_hex()?,
-            attempts: Arc::new(Mutex::new((0, Instant::now()))),
+            access: access.clone(),
             device_status: Arc::new(Mutex::new(None)),
         };
         let device_status = state.device_status.clone();
@@ -303,7 +306,7 @@ impl DashboardHost {
         });
         Ok(Self {
             address,
-            code,
+            access,
             handle,
             task,
             device_status,
@@ -313,8 +316,18 @@ impl DashboardHost {
         *self.device_status.lock().map_err(lock)? = Some(status);
         Ok(())
     }
+    pub(super) fn change_access(
+        &self,
+        code: Option<String>,
+        reset: bool,
+        revoke: bool,
+    ) -> Result<Value> {
+        let mut access = self.access.lock().map_err(lock)?;
+        access.change(code, reset, revoke)?;
+        Ok(json!({"code":access.code()}))
+    }
     pub(super) fn info(&self) -> Value {
-        json!({"url":format!("http://{}",self.address),"code":self.code})
+        json!({"url":format!("http://{}",self.address),"code":self.access.lock().ok().map(|a| a.code().to_owned())})
     }
 }
 
@@ -328,6 +341,7 @@ impl Drop for DashboardHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn browser_access_requires_phone_code_and_separate_session() {
@@ -483,6 +497,52 @@ mod tests {
             .unwrap();
         assert_eq!(retry.status(), StatusCode::OK);
         assert_eq!(retry.json::<Value>().await.unwrap()["count"], 0);
+        assert_eq!(
+            client
+                .post(format!("{base}/api/logout"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            client
+                .get(format!("{base}/api/overview"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let new_token = client
+            .post(format!("{base}/api/login"))
+            .json(&json!({"code":code,"remember":true}))
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_ne!(token, new_token);
+        dashboard
+            .change_access(Some("0123456789".into()), false, false)
+            .unwrap();
+        assert_eq!(
+            client
+                .get(format!("{base}/api/overview"))
+                .bearer_auth(&new_token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
         drop(dashboard);
         // The aborted HTTP task can release its SQLite handles on the next runtime turn.
         // Windows does not permit unlinking a still-open database file.

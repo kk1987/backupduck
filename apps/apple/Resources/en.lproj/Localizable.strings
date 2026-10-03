@@ -659,3 +659,9 @@
 "error_cloud_cookies_invalid" = "The cookies file could not be read or contains no Google cookies. Export it again.";
 "error_cloud_rate_limited" = "Google Photos is limiting requests. The next check continues later.";
 "error_cloud_response_unrecognized" = "Google Photos returned a response this version does not understand. The check stopped.";
+"receiver_connection_check" = "Check connection";
+"receiver_connection_checking" = "Checking connection";
+"receiver_connection_unavailable" = "Check unavailable";
+"receiver_connection_authentication" = "The saved credentials were rejected. Pair this receiver again.";
+"receiver_connection_network" = "Could not reach the receiver. Check the same local network, its receiving service, and whether the VPN allows local connections. A timeout alone does not identify the cause.";
+"receiver_connection_unavailable_note" = "The connection check could not finish. Try again or review the activity log.";

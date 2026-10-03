@@ -4,7 +4,7 @@ use super::*;
 
 pub(super) fn with_store<T>(
     root: Option<&Path>,
-    operation: impl FnOnce(&mut Receiver, &maintenance::Maintenance) -> Result<T>,
+    operation: impl FnOnce(&mut Receiver, &mut maintenance::Maintenance) -> Result<T>,
 ) -> Result<T> {
     // Serialize against listener start/stop and reuse its writer when present.
     let hosts = HOSTS.lock().map_err(lock)?;
@@ -14,8 +14,8 @@ pub(super) fn with_store<T>(
         .filter(|h| root.is_none_or(|r| r == h.root))
     {
         let mut store = host.receiver.lock().map_err(lock)?;
-        let maintenance = host.maintenance.lock().map_err(lock)?;
-        return operation(&mut store, &maintenance);
+        let mut maintenance = host.maintenance.lock().map_err(lock)?;
+        return operation(&mut store, &mut maintenance);
     }
     let root = root.ok_or(Error::NotFound)?;
     // An empty, never-started receiver has nothing to archive. Do not create a
@@ -23,7 +23,7 @@ pub(super) fn with_store<T>(
     if !root.join("store/receiver.sqlite3").is_file() {
         return Err(Error::NotFound);
     }
-    let maintenance = maintenance::Maintenance::open(root)?;
+    let mut maintenance = maintenance::Maintenance::open(root)?;
     let mut store = Receiver::open(
         root.join("store"),
         maintenance.settings.receiver_budget_bytes,
@@ -33,7 +33,7 @@ pub(super) fn with_store<T>(
         maintenance.settings.min_free_bytes,
     )?;
     log_expired(&maintenance, store.expired_at_open())?;
-    operation(&mut store, &maintenance)
+    operation(&mut store, &mut maintenance)
 }
 
 pub(super) fn with_maintenance<T>(

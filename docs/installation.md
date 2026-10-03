@@ -35,8 +35,11 @@ official releases continue using the RC.2 certificate.
 
 ## iOS sender
 
-No App Store or TestFlight distribution is available yet. Build from source using
-Xcode, XcodeGen, Rust and the `aarch64-apple-ios` target:
+Install the iOS sender through [TestFlight](https://testflight.apple.com/join/wGBxuQKT).
+The current approved build remains available while newer builds are processing or under beta review.
+App Store distribution is not available yet.
+
+You can also build from source using Xcode, XcodeGen, Rust and the `aarch64-apple-ios` target:
 
 ```sh
 xcodegen generate --spec apps/ios/project.yml
