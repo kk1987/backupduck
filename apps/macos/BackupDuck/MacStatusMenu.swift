@@ -45,6 +45,7 @@ import SwiftUI
 struct MacStatusMenu: View {
   @ObservedObject var model: BackupModel
   @ObservedObject private var updater = AppUpdater.shared
+  @ObservedObject private var sleep = SleepAssertion.shared
   @Environment(\.openWindow) private var openWindow
   @State private var changingPause = false
 
@@ -57,6 +58,7 @@ struct MacStatusMenu: View {
       Text(String(format: NSLocalizedString("transfer_summary", comment: ""),
         model.summary.received, model.summary.total))
     }
+    if sleep.active { Label("menu_preventing_sleep", systemImage: "moon.zzz") }
     Divider()
     Button("menu_open") {
       openWindow(id: "main")
