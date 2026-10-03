@@ -57,3 +57,14 @@ Scan the receiver code on iPhone. For Mac, scan the computer's code using the
 Android receiver. Photos/local network permissions are needed. New-photo backup
 and existing-photo import are separate choices. iOS schedules background work;
 continuous execution while locked is not guaranteed. Avoid force-quitting the app.
+
+## Hidden photos in a whole-library migration
+
+The Apple senders include the Hidden album by default. If Photos protects the
+Hidden album with Touch ID, Face ID or a password, the system withholds those
+photos from every third-party app, so BackupDuck cannot back them up, and apps
+cannot read whether that protection is on. Settings shows how many hidden photos
+BackupDuck can currently see. If it shows 0 although you have hidden photos, turn
+the protection off for the duration of the migration (Mac: Photos → Settings →
+General; iOS: Settings → Photos). The count can take a while to update after the
+change; relaunching BackupDuck shows it right away.
