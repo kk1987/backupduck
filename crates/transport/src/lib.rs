@@ -55,6 +55,10 @@ impl IntoResponse for ApiError {
             Error::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             Error::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Error::Capacity => (StatusCode::INSUFFICIENT_STORAGE, "capacity"),
+            Error::ExceedsCapacity => (
+                StatusCode::INSUFFICIENT_STORAGE,
+                "receiver_budget_single_item",
+            ),
             Error::LowSpace => (StatusCode::INSUFFICIENT_STORAGE, "low_space"),
             Error::Integrity => (StatusCode::UNPROCESSABLE_ENTITY, "integrity"),
             Error::Unsupported(_) => (StatusCode::UNPROCESSABLE_ENTITY, "unsupported"),
@@ -386,6 +390,13 @@ impl Client {
                     .is_some_and(|v| v == "low_space") =>
                 {
                     Error::LowSpace
+                }
+                507 if response
+                    .headers()
+                    .get("x-backupduck-reason")
+                    .is_some_and(|v| v == "receiver_budget_single_item") =>
+                {
+                    Error::ExceedsCapacity
                 }
                 507 => Error::Capacity,
                 422 => Error::Integrity,

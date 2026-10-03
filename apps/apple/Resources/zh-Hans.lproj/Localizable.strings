@@ -156,6 +156,18 @@
 "event_low_space" = "接收端可用空间不足，空间恢复后会自动重试。";
 "event_local_free_space" = "本机可用空间不足，腾出空间后会自动继续准备原件。";
 "event_local_cache_budget" = "中转缓存预算不足，请等待传输校验完成，或在设置中提高预算。";
+"state_needs_attention" = "多次准备失败，已停止重试";
+"error_receiver_budget_single_item" = "该项目大于接收端的全部存储预算。请在接收端提高预算后重试。";
+"error_local_cache_budget_single_item" = "该项目大于中转缓存预算。请在设置中提高预算后重试。";
+"error_export_failed" = "“照片”无法导出原件。请稍后重试，或在“照片”中检查该项目。";
+"error_hidden_excluded" = "该项目已在“照片”中隐藏。取消隐藏后才能备份。";
+"error_photos_permission" = "当前的有限照片访问权限不包含此项目。请在设置中允许访问。";
+"error_other" = "准备原件失败，原因无法识别。";
+"event_source_needs_attention" = "一张照片多次准备失败，已停止重试，需要处理";
+"event_source_skipped" = "已将一张照片移出准备队列";
+"event_receiver_budget_single_item" = "该项目大于接收端的全部存储预算。请在接收端提高预算后重试。";
+"event_local_cache_budget_single_item" = "该项目大于中转缓存预算。请在设置中提高预算后重试。";
+"event_export_failed" = "“照片”无法导出原件。请稍后重试，或在“照片”中检查该项目。";
 "pairing_unlock_wait" = "正在读取已保存的配对。如 macOS 请求访问钥匙串，请在系统弹窗中完成授权。";
 
 "logs_job_id" = "任务 #%lld";

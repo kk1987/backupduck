@@ -370,6 +370,7 @@ impl Receiver {
         let mut reserved: i64 = tx
             .query_row("SELECT COALESCE(SUM(size), 0) FROM blobs", [], |r| r.get(0))
             .map_err(db)?;
+        let (mut fresh, mut exceeded) = (0u64, false);
         for r in &asset.resources {
             let size: Option<i64> = tx
                 .query_row("SELECT size FROM blobs WHERE hash=?1", [&r.sha256], |row| {
@@ -383,15 +384,22 @@ impl Receiver {
                 }
             } else {
                 reserved = reserved.checked_add(r.size as i64).ok_or(Error::Capacity)?;
-                if reserved > self.capacity as i64 {
-                    return Err(Error::Capacity);
-                }
+                fresh = fresh.saturating_add(r.size);
+                exceeded |= reserved > self.capacity as i64;
                 tx.execute(
                     "INSERT INTO blobs(hash,size) VALUES(?1,?2)",
                     params![r.sha256, r.size as i64],
                 )
                 .map_err(db)?;
             }
+        }
+        // Dropping the transaction rolls back the tentative reservations.
+        if exceeded {
+            return Err(if fresh > self.capacity {
+                Error::ExceedsCapacity
+            } else {
+                Error::Capacity
+            });
         }
         if let Some(free) = free {
             let pending: i64 = tx

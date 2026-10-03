@@ -8,6 +8,7 @@ import Photos
     let id: String
     var nextAttempt: Date = .distantPast
     var createdAtMS: Int64? = nil
+    var attempts = 0
   }
   struct State: Codable {
     var enabled = false
@@ -120,6 +121,19 @@ import Photos
     next.closingToken = nil
     try persist(next)
   }
+  static let attemptLimit = 5
+  private static func handOff(_ source: String, receiver: String?, reason: String?) async -> Bool {
+    guard let receiver else { return false }
+    var result: [String: Any] = [
+      "op": "source_result", "receiver_id": receiver, "source": source, "complete": false,
+    ]
+    if let reason { result["error"] = reason }
+    do {
+      _ = try await Bridge.call(["op": "schedule_sources", "receiver_id": receiver, "sources": [source]])
+      _ = try await Bridge.call(result)
+      return true
+    } catch { return false }
+  }
   nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
     Task { @MainActor in await BackupModel.shared.discoverPhotos() }
   }
@@ -189,14 +203,34 @@ import Photos
         guard version == revision, !model.paused, !Task.isCancelled else { break }
         let completed = await model.importAssets([pending.id], requestAuthorization: false)
         guard version == revision, !Task.isCancelled else { break }
+        let attempts = (state.pending.first { $0.id == pending.id }?.attempts ?? 0) + 1
+        // After the cap, the durable Rust queue owns the source: it keeps
+        // environmental retries going and parks item-specific failures.
+        var handedOff = false
+        if !completed && attempts >= Self.attemptLimit {
+          handedOff = await Self.handOff(
+            pending.id, receiver: state.receiverID, reason: model.preparationReason)
+        }
+        guard version == revision, !Task.isCancelled else { break }
         var next = state
-        if completed {
+        if completed || handedOff {
           next.pending.removeAll { $0.id == pending.id }
         } else if let index = next.pending.firstIndex(where: { $0.id == pending.id }) {
           next.pending[index].nextAttempt = Date().addingTimeInterval(300)
+          next.pending[index].attempts = attempts
         }
         try persist(next)
       }
     } catch { model.message = error.localizedDescription }
+  }
+}
+extension PhotoLibraryChanges.Pending {
+  // Files written before retry counting have no `attempts` key.
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    id = try values.decode(String.self, forKey: .id)
+    nextAttempt = try values.decodeIfPresent(Date.self, forKey: .nextAttempt) ?? .distantPast
+    createdAtMS = try values.decodeIfPresent(Int64.self, forKey: .createdAtMS)
+    attempts = try values.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
   }
 }

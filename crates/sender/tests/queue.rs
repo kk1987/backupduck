@@ -261,6 +261,36 @@ fn transient_failure_is_automatic_permanent_failure_requires_action() {
     assert!(s.claim("receiver-1", 20001).unwrap().is_some());
 }
 #[test]
+fn oversized_asset_capacity_is_parked_not_retried() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let id = add(&mut s).id;
+    // Shared budget pressure clears as other content is released.
+    let j = s.claim("receiver-1", 100).unwrap().unwrap();
+    s.fail(&j.attempt(), Failure::from_error(&Error::Capacity), 100)
+        .unwrap();
+    assert_eq!(s.job(id).unwrap().state, JobState::Waiting);
+    let due = s.job(id).unwrap().next_attempt_at;
+    let j = s.claim("receiver-1", due).unwrap().unwrap();
+    // An asset larger than the whole budget never fits on its own.
+    s.fail(
+        &j.attempt(),
+        Failure::from_error(&Error::ExceedsCapacity),
+        due,
+    )
+    .unwrap();
+    let parked = s.job(id).unwrap();
+    assert_eq!(parked.state, JobState::Failed);
+    assert_eq!(
+        parked.error_code.as_deref(),
+        Some("receiver_budget_single_item")
+    );
+    assert!(s.claim("receiver-1", i64::MAX).unwrap().is_none());
+    // Raising the budget is followed by an explicit retry.
+    s.retry(id).unwrap();
+    assert!(s.claim("receiver-1", due).unwrap().is_some());
+}
+#[test]
 fn native_task_survives_restart_and_lost_completion_queries_receiver() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();

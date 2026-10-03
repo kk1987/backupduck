@@ -76,11 +76,15 @@ pub enum Failure {
     Integrity,
     SourceUnavailable,
     Unsupported,
+    /// The receiver reported that this asset alone exceeds its budget.
+    /// Retrying cannot help until the budget is raised, so it needs action.
+    ReceiverBudgetSingleItem,
 }
 impl Failure {
     pub fn from_error(error: &Error) -> Self {
         match error {
             Error::Capacity => Self::Capacity,
+            Error::ExceedsCapacity => Self::ReceiverBudgetSingleItem,
             Error::LowSpace => Self::LowSpace,
             Error::Integrity => Self::Integrity,
             Error::Unsupported(_) | Error::Invalid(_) => Self::Unsupported,

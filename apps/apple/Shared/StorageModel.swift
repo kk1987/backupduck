@@ -408,17 +408,21 @@ final class BoundedExportWriter: @unchecked Sendable {
   private let reason: String
   private let path: String
   private let reserve: UInt64
+  private let budget: UInt64
+  private let staged: UInt64
   private var written: UInt64 = 0
   private var checked: UInt64 = 0
   private var failure: Error?
   private var request: PHAssetResourceDataRequestID?
-  init(url: URL, snapshot: StorageSnapshot) throws {
+  init(url: URL, snapshot: StorageSnapshot, staged: UInt64 = 0) throws {
     FileManager.default.createFile(atPath: url.path, contents: nil)
     file = try FileHandle(forWritingTo: url)
     path = url.deletingLastPathComponent().path
     allowance = snapshot.export_allowance
     reason = snapshot.limitingReason
     reserve = snapshot.settings.min_free_bytes
+    budget = snapshot.settings.cache_budget_bytes
+    self.staged = staged
   }
   func bind(_ id: PHAssetResourceDataRequestID) {
     lock.lock()
@@ -432,7 +436,11 @@ final class BoundedExportWriter: @unchecked Sendable {
     if failure == nil {
       do {
         guard UInt64(data.count) <= allowance - min(written, allowance) else {
-          throw Bridge.Failure(code: reason)
+          // Bytes already seen exceed the whole budget (less the request
+          // reserve), so reclaiming other cached exports can never help.
+          let needed = staged + written + UInt64(data.count)
+          let single = reason == "local_cache_budget" && needed > budget - min(budget, 8 << 20)
+          throw Bridge.Failure(code: single ? "local_cache_budget_single_item" : reason)
         }
         if written - checked >= 4 << 20 || written == 0 {
           let attributes = try FileManager.default.attributesOfFileSystem(forPath: path)

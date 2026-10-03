@@ -301,6 +301,8 @@ struct SourceBrowserItem: Decodable, Identifiable, Equatable {
   let state: String?
   var sort_value: Int64? = nil
   var created_at_ms: Int64? = nil
+  var error_code: String? = nil
+  var attempts: Int? = nil
   var id: String { source }
 }
 
@@ -412,6 +414,9 @@ struct SourceBrowserRow: View {
         HStack(spacing: 8) {
           Label(active ? "importing_originals" : LocalizedStringKey("state_" + state),
             systemImage: taskSymbol(state)).lineLimit(1)
+          if !active, state == "needs_attention", let code = item.error_code {
+            Text(LocalizedStringKey("error_" + code)).lineLimit(1)
+          }
           if active {
             if let progress { ProgressView(value: progress).frame(width: 100, height: 8) }
             else { ProgressView().controlSize(.mini).frame(width: 12, height: 12) }

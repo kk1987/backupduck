@@ -220,7 +220,8 @@ fn capacity_reservations_are_atomic_and_deduplicate_content() {
     let root = Scratch::new();
     let (a, bytes) = asset(true);
     let mut store = Receiver::open(&root.0, bytes[0].len() as u64).unwrap();
-    assert!(matches!(store.register(a), Err(Error::Capacity)));
+    // The motion asset alone can never fit; ordinary pressure stays retryable.
+    assert!(matches!(store.register(a), Err(Error::ExceedsCapacity)));
     let (photo, bytes) = asset(false);
     receive(&mut store, &photo, &bytes);
     let mut second = photo.clone();
@@ -277,8 +278,14 @@ fn pixel_output_is_optional_and_does_not_claim_an_unimplemented_converter() {
     );
 }
 async fn start(root: &Scratch) -> (String, tokio::task::JoinHandle<()>) {
+    start_with_capacity(root, 100_000_000).await
+}
+async fn start_with_capacity(
+    root: &Scratch,
+    capacity: u64,
+) -> (String, tokio::task::JoinHandle<()>) {
     let app = router(
-        Receiver::open(root.0.join("receiver"), 100_000_000).unwrap(),
+        Receiver::open(root.0.join("receiver"), capacity).unwrap(),
         TOKEN,
     )
     .unwrap();
@@ -348,6 +355,34 @@ async fn http_end_to_end_authentication_resume_and_repeat() {
     let _ = server.await;
 }
 #[tokio::test(flavor = "multi_thread")]
+async fn asset_larger_than_receiver_budget_is_reported_as_single_item() {
+    let root = Scratch::new();
+    let (a, _) = asset(false);
+    let (url, server) = start_with_capacity(&root, a.resources[0].size - 1).await;
+    let client = Client::new(&url, TOKEN).unwrap();
+    assert!(matches!(
+        client.register(&a).await,
+        Err(Error::ExceedsCapacity)
+    ));
+    // Background senders only see the raw response body.
+    let response = reqwest::Client::new()
+        .post(format!("{url}/v2/assets"))
+        .bearer_auth(TOKEN)
+        .json(&a)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 507);
+    assert_eq!(
+        response.headers()["x-backupduck-reason"],
+        "receiver_budget_single_item"
+    );
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "receiver_budget_single_item");
+    server.abort();
+    let _ = server.await;
+}
+#[tokio::test(flavor = "multi_thread")]
 async fn cancelled_and_oversized_requests_never_commit() {
     let root = Scratch::new();
     let (url, server) = start(&root).await;
@@ -391,7 +426,10 @@ fn storage_reserve_blocks_new_bytes_but_never_loses_receipts() {
     assert!(matches!(receiver.register(a.clone()), Err(Error::LowSpace)));
     assert_eq!(receiver.overview().unwrap()["reserved_bytes"], 0);
     receiver.configure_storage(1, 0).unwrap();
-    assert!(matches!(receiver.register(a.clone()), Err(Error::Capacity)));
+    assert!(matches!(
+        receiver.register(a.clone()),
+        Err(Error::ExceedsCapacity)
+    ));
     receiver.configure_storage(100000, 0).unwrap();
     let registered = receiver.register(a.clone()).unwrap();
     receiver.configure_storage(100000, 1 << 60).unwrap();
