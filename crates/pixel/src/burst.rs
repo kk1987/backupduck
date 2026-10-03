@@ -15,11 +15,18 @@ fn invalid() -> Error {
 fn rejected(reason: &'static str) -> Error {
     Error::Unsupported(reason.into())
 }
+/// The GCamera burst attributes, each preceded by a space.
+pub(crate) fn burst_attributes(burst: &BurstMetadata) -> String {
+    format!(
+        r#" GCamera:BurstID="{}" GCamera:BurstPrimary="{}""#,
+        burst.group_id,
+        u8::from(burst.primary)
+    )
+}
 fn description(burst: &BurstMetadata) -> String {
     format!(
-        r#"<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" GCamera:BurstID="{}" GCamera:BurstPrimary="{}"/>"#,
-        burst.group_id,
-        if burst.primary { 1 } else { 0 }
+        r#"<rdf:Description xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/"{}/>"#,
+        burst_attributes(burst)
     )
 }
 fn augment(xml: Option<&[u8]>, burst: &BurstMetadata) -> Result<Vec<u8>> {

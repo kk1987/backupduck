@@ -113,7 +113,10 @@ re-encoding. The XML parser resolves namespaces before inserting metadata; an
 existing matching packet is idempotent. Conflicting burst tags, extended XMP,
 malformed metadata and multi-picture JPEGs currently stop processing with the
 original retained, rather than damaging offsets or claiming successful grouping.
-HEIC and other native-decodable stills produce an oriented JPEG delivery copy with
+HEIC frames keep their HEIC payloads: the same fields are merged into the primary
+XMP item without re-encoding (see [HEIC bursts](motion-photo-compatibility.md#heic-bursts)).
+Unsupported HEIC layouts, other native-decodable stills, and HEIC frames when
+**Convert HEIC bursts to JPEG** is on produce an oriented JPEG delivery copy with
 selected EXIF fields, using the same codec path as motion photos. Such delivery
 copies are not byte-identical original archives. Motion packaging can also carry
 burst fields in its single XMP packet.
@@ -124,8 +127,10 @@ conflicting metadata, destination protection and unchanged motion-video tails.
 Pixel validation publishes five synthetic assets including two burst frames,
 reads their XMP back through Android ExifInterface, verifies a shared group and
 one primary, replays publication without duplicates, and completes verified
-original archive/reclamation. Google Photos UI grouping, native Apple burst
-selection and HEIC burst color/metadata fidelity remain unverified.
+original archive/reclamation. A second pair of HEIC frames must stay
+`image/heic` and carry the markers in their stored bytes. Google Photos UI
+grouping (including HEIC bursts) and native Apple burst selection remain
+unverified.
 
 Format references: [ExifTool Google camera tags](https://exiftool.org/TagNames/Google.html)
 and [quick-xml namespace-aware reader](https://docs.rs/quick-xml/0.38.4/quick_xml/reader/struct.NsReader.html).

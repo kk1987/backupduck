@@ -477,6 +477,11 @@ enum Command {
         output: PathBuf,
         metadata: BTreeMap<String, String>,
     },
+    PackageHeicBurst {
+        heic: PathBuf,
+        output: PathBuf,
+        metadata: BTreeMap<String, String>,
+    },
     DeviceStatus {
         root: PathBuf,
         #[serde(default)]
@@ -859,6 +864,18 @@ fn dispatch(command: Command) -> Result<Value> {
             let burst = BurstMetadata::from_fields(&metadata)?
                 .ok_or_else(|| Error::Invalid("missing burst metadata".into()))?;
             backupduck_pixel::write_jpeg_burst(&jpeg, &output, &burst)?;
+            Ok(json!({}))
+        }
+        // Unsupported layouts surface as "unsupported"; the host then falls
+        // back to the decoded JPEG copy.
+        Command::PackageHeicBurst {
+            heic,
+            output,
+            metadata,
+        } => {
+            let burst = BurstMetadata::from_fields(&metadata)?
+                .ok_or_else(|| Error::Invalid("missing burst metadata".into()))?;
+            backupduck_pixel::write_heic_burst(&heic, &output, &burst)?;
             Ok(json!({}))
         }
         Command::DeviceStatus {
@@ -1756,5 +1773,41 @@ mod burst_error_tests {
             error_code(Error::Unsupported("private filename".into())),
             "unsupported"
         );
+    }
+
+    #[test]
+    fn heic_burst_is_packaged_or_reports_unsupported() {
+        let root =
+            std::env::temp_dir().join(format!("backupduck-heic-burst-ffi-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let heic = root.join("frame.heic");
+        std::fs::write(
+            &heic,
+            include_bytes!("../../pixel/tests/fixtures/date.heic"),
+        )
+        .unwrap();
+        let jpeg = root.join("frame.jpg");
+        std::fs::write(&jpeg, [0xff, 0xd8, 0xff, 0xd9]).unwrap();
+        let metadata = BurstMetadata::from_identifier("ffi", true)
+            .unwrap()
+            .fields();
+        let request = |source: &std::path::Path, output: &str| {
+            json!({"op": "package_heic_burst", "heic": source, "output": root.join(output), "metadata": metadata})
+                .to_string()
+        };
+        assert_eq!(
+            call(&request(&heic, "out.heic")),
+            json!({"ok": true, "value": {}}).to_string()
+        );
+        assert!(
+            String::from_utf8_lossy(&std::fs::read(root.join("out.heic")).unwrap())
+                .contains("GCamera:BurstPrimary=\"1\"")
+        );
+        // MotionProcessor.isUnsupportedContainer and BurstProcessor rely on this code.
+        assert_eq!(
+            call(&request(&jpeg, "jpeg.heic")),
+            json!({"ok": false, "error": "unsupported"}).to_string()
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

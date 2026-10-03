@@ -18,8 +18,8 @@ without modifying the verified original or re-encoding its pixels:
 - The receiver stamps file modification time after writing the last byte and
   before clearing `IS_PENDING`. MediaStore milliseconds and seconds are handled
   separately.
-- Motion and burst JPEG dates are set before packaging, so later EXIF rewrites
-  cannot invalidate the motion video's XMP offsets.
+- Motion and burst dates (JPEG and HEIC) are set before packaging, so later
+  EXIF rewrites cannot invalidate the motion video's XMP offsets.
 - Publication verification uses the delivered copy's size and hash. Original
   transfer integrity and gallery-copy verification remain separate.
 
