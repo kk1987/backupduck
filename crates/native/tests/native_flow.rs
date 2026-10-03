@@ -819,3 +819,49 @@ fn expire_abandoned_op_logs_reclaimed_reservations() {
     assert_eq!(expired.len(), 1);
     assert_eq!(expired[0]["bytes"], bytes.len() as u64);
 }
+
+fn receiver_event_codes(root: &std::path::Path) -> Vec<String> {
+    let logs: serde_json::Value = serde_json::from_str(&backupduck_native::call(
+        &serde_json::json!({"op":"receiver_logs","root":root}).to_string(),
+    ))
+    .unwrap();
+    logs["value"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["code"].as_str().map(str::to_owned))
+        .collect()
+}
+
+#[tokio::test]
+async fn receiver_health_reports_a_listener_that_stopped_serving() {
+    let t = Temp::new();
+    let root = t.0.join("receiver");
+    let r = common::start_receiver(&root, 10000).await;
+    assert!(r.healthy());
+    r.close_listener_for_test();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while r.healthy() {
+        assert!(std::time::Instant::now() < deadline, "listener still up");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let codes = receiver_event_codes(&root);
+    assert!(
+        codes.iter().any(|c| c == "receiver_server_stopped"),
+        "{codes:?}"
+    );
+}
+
+#[tokio::test]
+async fn stopping_a_receiver_is_not_logged_as_a_server_failure() {
+    let t = Temp::new();
+    let root = t.0.join("receiver");
+    drop(common::start_receiver(&root, 10000).await);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let codes = receiver_event_codes(&root);
+    assert!(codes.iter().any(|c| c == "receiver_started"), "{codes:?}");
+    assert!(
+        !codes.iter().any(|c| c == "receiver_server_stopped"),
+        "{codes:?}"
+    );
+}
