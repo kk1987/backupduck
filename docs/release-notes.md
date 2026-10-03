@@ -8,6 +8,7 @@
 - Stop retrying photos that repeatedly fail preparation for the same item-specific reason. After five attempts they are marked as needing attention instead of retrying every five minutes; network, storage-budget and receiver-availability waits still retry automatically. Changing storage settings gives parked photos another chance.
 - An item larger than the receiver's entire storage budget, or larger than the local staging cache budget, now fails with a specific reason instead of waiting indefinitely.
 - Hidden photos and items outside limited photo access are reported separately from missing originals.
+- Raise the default staging cache from 5 GB to 20 GB and the Android receiver's first-start budget from 6 GB to 10 GB, so migrating a whole library does not stall on small budgets. Saved settings are kept; existing receivers keep their budget. The Mac offers a one-time "Apply 20 GB cache" preset in Settings.
 - Scan library again and re-selection no longer upload a second copy of photos that were already backed up. Favorite, location, date and Photos edits no longer count as new content; a new "Back up edited photos again" setting (off by default) re-checks edited photos, and identical originals are still never published twice. Use "Back up already received items again" to force another copy.
 
 # RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)

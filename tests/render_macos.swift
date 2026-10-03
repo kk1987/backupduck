@@ -404,7 +404,12 @@ import SwiftUI
           "Scan completion must not report pending preparation as complete")
         try await capture("history-scanned", view: AnyView(Form { HistoricalImportSettings(model: model) }.formStyle(.grouped)), output: output,
           size: NSSize(width: 620, height: 480))
-        print("Rendered 12 fixture screens; settings, device rename and historical-scan state checks passed.")
+        UserDefaults.standard.removeObject(forKey: "migrationPresetSeen")
+        UserDefaults.standard.set(MacSettingsSection.backup.rawValue, forKey: "macSettingsSection")
+        try await capture("settings-migration-preset", view: AnyView(MacPreferences(model: model)),
+          output: output, size: NSSize(width: 620, height: 580))
+        precondition(model.storage!.settings.cache_budget_bytes == 2 << 30)
+        print("Rendered 13 fixture screens; settings, device rename and historical-scan state checks passed.")
         try FileManager.default.removeItem(at: store)
         app.terminate(nil)
       } catch {

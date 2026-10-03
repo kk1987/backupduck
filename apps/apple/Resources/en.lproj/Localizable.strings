@@ -169,6 +169,10 @@
 "event_receiver_budget_single_item" = "This item is larger than the receiver's entire storage budget. Raise the budget on the receiver, then retry.";
 "event_local_cache_budget_single_item" = "This item is larger than the staging cache budget. Raise the budget in settings, then retry.";
 "event_export_failed" = "Photos could not export the original. Retry later or check the item in Photos.";
+"migration_preset_title" = "Migrating a whole library?";
+"migration_preset_body" = "Apply a 20 GB staging cache on this Mac. The Mac cannot change the phone's budget: on the phone, set Storage limits > Original storage budget to 10 GB.";
+"migration_preset_apply" = "Apply 20 GB cache";
+"migration_preset_dismiss" = "Dismiss";
 "pairing_unlock_wait" = "Loading saved pairing. If macOS asks for Keychain access, complete authorization in the system dialog.";
 
 "logs_job_id" = "Task #%lld";

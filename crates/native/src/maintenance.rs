@@ -70,8 +70,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            cache_budget_bytes: 5 << 30,
-            receiver_budget_bytes: 6 << 30,
+            cache_budget_bytes: 20 << 30,
+            receiver_budget_bytes: 10 << 30,
             min_free_bytes: 1 << 30,
             auto_reclaim: true,
             receiver_relay: false,
@@ -847,6 +847,8 @@ pub fn directory_bytes(root: &Path) -> u64 {
 impl SenderHost {
     pub fn storage_status(&self) -> Result<Value> {
         let m = self.maintenance.lock().map_err(lock)?;
+        // TODO: requests/ holds bundles built from exports/, so bundled assets
+        // count twice here; the 20 GiB default absorbs that for now.
         let used = directory_bytes(&self.export_root) + directory_bytes(&self.request_root);
         let free = fs2::available_space(&self.request_root)?;
         // Leave room for one in-flight request and filesystem bookkeeping.

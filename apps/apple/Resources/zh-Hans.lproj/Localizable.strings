@@ -169,6 +169,10 @@
 "event_receiver_budget_single_item" = "该项目大于接收端的全部存储预算。请在接收端提高预算后重试。";
 "event_local_cache_budget_single_item" = "该项目大于中转缓存预算。请在设置中提高预算后重试。";
 "event_export_failed" = "“照片”无法导出原件。请稍后重试，或在“照片”中检查该项目。";
+"migration_preset_title" = "要迁移整个图库吗？";
+"migration_preset_body" = "为这台 Mac 应用 20 GB 中转缓存。Mac 无法修改手机的预算：请在手机的“空间预算 > 原件存储预算”中设为 10 GB。";
+"migration_preset_apply" = "应用 20 GB 缓存";
+"migration_preset_dismiss" = "关闭";
 "pairing_unlock_wait" = "正在读取已保存的配对。如 macOS 请求访问钥匙串，请在系统弹窗中完成授权。";
 
 "logs_job_id" = "任务 #%lld";
