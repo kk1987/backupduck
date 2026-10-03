@@ -192,6 +192,10 @@ impl ReceiverHost {
             maintenance.settings.min_free_bytes,
         )?;
         maintenance.log("receiver_started", None, None)?;
+        log_expired(
+            &maintenance,
+            receiver.lock().map_err(lock)?.expired_at_open(),
+        )?;
         let config = axum_server::tls_rustls::RustlsConfig::from_pem(
             ident.cert_pem.into_bytes(),
             ident.key_pem.into_bytes(),
@@ -389,6 +393,15 @@ impl SenderHost {
         self.record_result(&result);
         Ok(Some(result))
     }
+}
+fn log_expired(
+    maintenance: &maintenance::Maintenance,
+    expired: backupduck_store::ExpiredSummary,
+) -> Result<()> {
+    if expired.assets > 0 {
+        maintenance.log("abandoned_reservations_expired", None, Some(expired.bytes))?;
+    }
+    Ok(())
 }
 fn lock<T>(_: std::sync::PoisonError<T>) -> Error {
     Error::Storage("host lock unavailable".into())
@@ -609,6 +622,9 @@ enum Command {
         root: Option<PathBuf>,
         ids: Vec<String>,
         verified: std::collections::BTreeSet<String>,
+    },
+    ExpireAbandoned {
+        root: Option<PathBuf>,
     },
     OpenSender {
         root: PathBuf,
@@ -1159,6 +1175,16 @@ fn dispatch(command: Command) -> Result<Value> {
             maintenance.log("originals_reclaimed", None, Some(bytes))?;
             Ok(json!({"bytes":bytes}))
         }),
+        Command::ExpireAbandoned { root } => {
+            receiver_storage::with_store(root.as_deref(), |store, maintenance| {
+                let expired = store.expire_abandoned(
+                    now().saturating_mul(1000),
+                    backupduck_store::ABANDONED_TTL_MS,
+                )?;
+                log_expired(maintenance, expired)?;
+                Ok(serde_json::to_value(expired)?)
+            })
+        }
         Command::StorageStatus { receiver: false } => sender()?.storage_status(),
         Command::StorageStatus { receiver: true } => {
             let hosts = HOSTS.lock().map_err(lock)?;

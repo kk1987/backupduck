@@ -32,6 +32,7 @@ pub(super) fn with_store<T>(
         maintenance.settings.receiver_budget_bytes,
         maintenance.settings.min_free_bytes,
     )?;
+    log_expired(&maintenance, store.expired_at_open())?;
     operation(&mut store, &maintenance)
 }
 

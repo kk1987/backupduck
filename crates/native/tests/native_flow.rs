@@ -716,3 +716,115 @@ async fn check_pairing_records_the_cloud_audit_capability() {
         .unwrap();
     assert!(cloud && bundle);
 }
+
+#[test]
+fn expired_receiver_asset_makes_the_native_sender_register_again() {
+    let t = Temp::new();
+    let s = SenderHost::open(&t.0.join("sender")).unwrap();
+    let path = t.0.join("photo.jpg");
+    std::fs::write(&path, b"photo bytes").unwrap();
+    let hash = digest(b"photo bytes");
+    let a = Asset {
+        version: PROTOCOL_VERSION,
+        source_id: "expired-test".into(),
+        revision: "1".into(),
+        kind: AssetKind::Photo,
+        metadata: BTreeMap::new(),
+        resources: vec![Resource {
+            role: ResourceRole::Photo,
+            filename: "photo.jpg".into(),
+            media_type: "image/jpeg".into(),
+            size: 11,
+            sha256: hash.clone(),
+        }],
+    };
+    let asset_id = a.id().unwrap();
+    let id = s
+        .enqueue(
+            "receiver",
+            a,
+            BTreeMap::from([(hash.clone(), path.to_str().unwrap().into())]),
+        )
+        .unwrap()
+        .id;
+    let register = s.prepare_native("receiver").unwrap().unwrap();
+    assert_eq!(register.path, "/v2/assets");
+    s.bind_native(&register.attempt, "register").unwrap();
+    let receiving = AssetStatus {
+        asset_id,
+        receipt: ReceiptState::Receiving,
+        processing: ProcessingState::NotRequested,
+        processing_error: None,
+        cloud_state: None,
+        resources: vec![ResourceStatus {
+            sha256: hash,
+            offset: 0,
+            complete: false,
+        }],
+    };
+    let body = serde_json::to_string(&receiving).unwrap();
+    s.finish_native(&register.attempt, "register", 200, &body, None, false)
+        .unwrap();
+    let upload = s.prepare_native("receiver").unwrap().unwrap();
+    assert_eq!(upload.method, "PUT");
+    s.bind_native(&upload.attempt, "upload").unwrap();
+    // The receiver expired the reservation in between: 404 is a network retry
+    // that drops the checkpoint, so the next attempt registers from scratch.
+    let job = s
+        .finish_native(&upload.attempt, "upload", 404, "{}", None, false)
+        .unwrap();
+    assert_eq!(job.state, JobState::Waiting);
+    assert_eq!(job.error_code.as_deref(), Some("network"));
+    s.retry(id).unwrap();
+    let again = s.prepare_native("receiver").unwrap().unwrap();
+    assert_eq!(again.method, "POST");
+    assert_eq!(again.path, "/v2/assets");
+}
+
+#[test]
+fn expire_abandoned_op_logs_reclaimed_reservations() {
+    let t = Temp::new();
+    let root = t.0.join("receiver");
+    let call = |value: serde_json::Value| -> serde_json::Value {
+        serde_json::from_str(&backupduck_native::call(&value.to_string())).unwrap()
+    };
+    let expire = || call(serde_json::json!({"op":"expire_abandoned","root":root}));
+    assert_eq!(expire()["ok"], false);
+    let bytes = b"abandoned".as_slice();
+    {
+        let mut receiver = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+        let asset = Asset {
+            version: PROTOCOL_VERSION,
+            source_id: "abandoned".into(),
+            revision: "1".into(),
+            kind: AssetKind::Photo,
+            metadata: BTreeMap::new(),
+            resources: vec![Resource {
+                role: ResourceRole::Photo,
+                filename: "photo.jpg".into(),
+                media_type: "image/jpeg".into(),
+                size: bytes.len() as u64,
+                sha256: digest(bytes),
+            }],
+        };
+        receiver.register(asset).unwrap();
+    }
+    let result = expire();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["value"], serde_json::json!({"assets":0,"bytes":0}));
+    // Age the reservation past the TTL; the next store open expires and logs it.
+    rusqlite::Connection::open(root.join("store/receiver.sqlite3"))
+        .unwrap()
+        .execute("UPDATE assets SET last_activity_ms=1", [])
+        .unwrap();
+    assert_eq!(expire()["ok"], true);
+    let logs = call(serde_json::json!({"op":"receiver_logs","root":root}));
+    let expired: Vec<_> = logs["value"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["code"] == "abandoned_reservations_expired")
+        .collect();
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0]["bytes"], bytes.len() as u64);
+}

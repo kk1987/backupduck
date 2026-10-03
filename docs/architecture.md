@@ -29,8 +29,9 @@ IDs. Each claim receives a generation. Acknowledgements from superseded attempts
 are rejected. Foreground attempts left running on process exit are requeued;
 OS-managed attempts stay attached until the native host reconciles its task list.
 Unknown OS tasks are returned for cancellation. Missing tasks query receiver state
-before uploading again. Network, capacity and busy errors retry with capped
-backoff; authentication, integrity and source-access failures require attention.
+before uploading again. Network and capacity errors retry with capped exponential
+backoff; busy replies retry every 60 s (±10 s) without growing or spending an
+attempt. Authentication, integrity and source-access failures require attention.
 
 The iOS host executes immutable file-backed requests through background URLSession.
 Rust prepares register/chunk/commit operations and atomically records each reply
@@ -104,8 +105,13 @@ not evidence that a source should automatically upload again.
 Capacity is a reservation budget for original resource bytes, including unfinished
 uploads. It is not a physical disk-free-space guarantee. Filesystem exhaustion
 returns an error without committing the asset. Native receivers must also expose
-actual space/temperature constraints. Reservation cancellation and orphan garbage
-collection are intentionally absent from this first milestone.
+actual space/temperature constraints. An unreceived asset with no register, chunk
+or commit for 7 days is abandoned: the receiver deletes its row and frees any
+reserved blob and partial file no retained asset references. This runs when the
+store opens and hourly from the Android receiver, and is logged as
+`abandoned_reservations_expired`. A sender resuming an expired asset gets 404,
+which is a network retry that drops its checkpoint, so it registers again from
+offset zero. There is no explicit reservation cancellation.
 
 The Android receiver reads battery temperature and Android's thermal status while
 running. Temperature protection is on by default at 40°C (adjustable from 35–45°C,
@@ -113,8 +119,9 @@ or off). At the threshold or severe system thermal status it holds admission of
 new assets and subsequent upload chunks. It resumes after cooling below the
 threshold by 2°C and after the system status falls below moderate. The hold is
 combined with Google Photos cleanup holds, so one guard cannot clear the other.
-Sender busy responses retry from receiver-confirmed offsets; the original bytes
-and receipts are retained. The setting controls BackupDuck's receiver, not
+Senders get 409 busy while it holds and retry about once a minute (60 s ±10 s,
+not exponential), so transfers resume within roughly a minute of cooling, from
+receiver-confirmed offsets; the original bytes and receipts are retained. The setting controls BackupDuck's receiver, not
 Android's own thermal management.
 
 ## Receipt and target processing
