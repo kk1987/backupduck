@@ -84,7 +84,7 @@ check, capped at one day. `cloud=all` lists every published copy with SHA-1
 evidence, regardless of state or timing.
 
 `POST /v2/cloud-observations` takes at most 100 observations in at most 64 KiB:
-`{"observations":[{"asset_id":ID,"sha1":HEX,"result":"free"|"counts_against_quota"|"not_found","media_key":S?,"device_model":S?}]}`.
+`{"observations":[{"asset_id":ID,"sha1":HEX,"result":"free"|"counts_against_quota"|"not_found","media_key":S?,"device_model":S?}]}`. `device_model` is the EXIF camera model Google Photos reports for the item (for example `iPhone 17 Pro` for an iPhone original pushed through the Pixel), not the uploading device; only `result` carries the quota verdict.
 Optional strings are at most 64 bytes without control characters. Malformed input
 returns 400. An observation is rejected, not applied, when the asset is unknown or
 unpublished, or its SHA-1 differs from the stored copy (a stale verdict). `free`

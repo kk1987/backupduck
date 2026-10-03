@@ -41,7 +41,7 @@ backupduck cloud-audit lookup --cookies cookies.txt [--account N] FILE...
 `--account N` selects `photos.google.com/u/N/` in a multi-login session.
 `status` prints the account index and whether the session is valid; it never
 prints the account email. `lookup` prints one JSON object per file: SHA-1,
-whether a library item has that hash, media key, camera model, the quota flags
+whether a library item has that hash, media key, camera model (EXIF make/model of the photo, not the uploading device), the quota flags
 and a verdict (`free`, `counts_against_quota`, `not_found`, `unknown`).
 
 ## macOS app
