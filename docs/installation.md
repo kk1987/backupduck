@@ -15,8 +15,11 @@ Updates pause and persist transfer work before replacing the application.
 ## Android receiver
 
 Download the arm64 APK on Android 10 or later. Allow your browser to install it
-when Android asks. Start reception and pair your sender. If you use Google Photos,
-enable backup for the BackupDuck device folder separately.
+when Android asks. Start reception and pair your sender. If you use Google Photos:
+with Google Photos 7.94 on Android 10, items in `DCIM/BackupDuck` were backed up
+together with Camera without a separate folder setting. If BackupDuck items are
+not being backed up, enable backup for the BackupDuck device folder in Google
+Photos.
 Settings → App updates checks new releases. The app verifies the downloaded file,
 package ID, increasing build number and signing certificate before opening the
 system installer. Installation requires your confirmation. Automatic checks run
