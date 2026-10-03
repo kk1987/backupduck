@@ -3,6 +3,8 @@
 
 The receiver database must be a consistent local snapshot. Optional cloud JSON
 contains visible Google Photos UI observations: url, label, filename, detail_date.
+Gallery copies keep original filenames, so an optional Pixel receipt export
+maps those names to asset IDs; legacy BD_<asset-id> names match directly.
 No credentials, private Google APIs, uploads, date edits or deletions are used.
 """
 import argparse
@@ -16,19 +18,35 @@ import sqlite3
 from zoneinfo import ZoneInfo
 
 ASSET = re.compile(r'^BD_([0-9a-f]{64})(?:[_.]|$)', re.I)
+ASSET_ID = re.compile(r'^[0-9a-f]{64}$')
 UTC = dt.timezone.utc
 
 def iso(milliseconds, zone):
     return dt.datetime.fromtimestamp(milliseconds / 1000, zone).isoformat() if milliseconds else None
 
-def read_media(path):
+def read_receipt(path):
+    """Display name -> asset ID from a Pixel receipt export; reused names are ambiguous (None)."""
+    names = {}
+    if not path: return names
+    for item in json.loads(Path(path).read_text()).get('items', []):
+        name, aid = item.get('name'), str(item.get('id', '')).lower()
+        if not name or not ASSET_ID.match(aid): continue
+        names[name] = aid if names.get(name, aid) == aid else None
+    return names
+
+def asset_id(filename, names=None):
+    match = ASSET.match(filename or '')
+    if match: return match[1].lower()
+    return (names or {}).get(filename or '')
+
+def read_media(path, names=None):
     rows = []
     if not path: return rows
     for line in Path(path).read_text().splitlines():
         fields = dict(re.findall(r'(?:^Row: \d+ |, )([^=]+)=([^,]*)', line))
-        match = ASSET.match(fields.get('_display_name', ''))
-        if not match: continue
-        row = {'asset_id': match[1].lower(), 'filename': fields['_display_name']}
+        aid = asset_id(fields.get('_display_name', ''), names)
+        if not aid: continue
+        row = {'asset_id': aid, 'filename': fields['_display_name']}
         for key in ('_id', 'datetaken', 'date_added', 'date_modified'):
             value = fields.get(key, '')
             row[key] = int(value) if re.fullmatch(r'-?\d+', value) else None
@@ -51,13 +69,12 @@ def cloud_instant(item):
         return int(clock.replace(tzinfo=dt.timezone(dt.timedelta(minutes=minutes))).timestamp() * 1000)
     except ValueError: return None
 
-def classify_cloud(item, assets):
+def classify_cloud(item, assets, names=None):
     if not item.get('filename'):
         return {**item, 'status': 'unreadable', 'reason': 'Cloud information panel did not load'}
-    match = ASSET.match(item.get('filename') or '')
-    if not match or match[1].lower() not in assets:
-        return {**item, 'status': 'unmatched', 'reason': 'No unique BackupDuck asset ID in the visible filename'}
-    aid = match[1].lower()
+    aid = asset_id(item.get('filename'), names)
+    if not aid or aid not in assets:
+        return {**item, 'status': 'unmatched', 'reason': 'No unique BackupDuck asset for the visible filename'}
     expected = assets[aid]['capture_ms']
     actual = cloud_instant(item)
     common = {**item, 'asset_id': aid, 'expected_ms': expected, 'observed_ms': actual}
@@ -67,7 +84,7 @@ def classify_cloud(item, assets):
         return {**common, 'status': 'correct', 'reason': 'Same instant after timezone conversion'}
     return {**common, 'status': 'date_mismatch', 'reason': 'Cloud date differs from source capture time', 'difference_seconds': (actual - expected) // 1000}
 
-def audit(database, media, cloud, zone, since, until):
+def audit(database, media, cloud, zone, since, until, names=None):
     with sqlite3.connect(Path(database).resolve().as_uri() + '?mode=ro', uri=True) as conn:
         if conn.execute('pragma quick_check').fetchone()[0] != 'ok': raise ValueError('Invalid database snapshot')
         assets = {}
@@ -90,7 +107,7 @@ def audit(database, media, cloud, zone, since, until):
         if capture and since <= modified < until and not since <= capture < until:
             flags.append('historical_capture_with_recent_file_time')
         if flags: local.append({**row, **asset, 'flags': flags, 'expected_date': iso(capture, zone)})
-    checked = [classify_cloud(item, assets) for item in cloud]
+    checked = [classify_cloud(item, assets, names) for item in cloud]
     counts = collections.Counter(row['status'] for row in checked)
     media_times = [r['date_added'] for r in media if r['date_added']]
     capture_days = collections.Counter(iso(a['capture_ms'], zone)[:10] for a in assets.values() if a['capture_ms'] and since <= a['capture_ms'] < until)
@@ -101,6 +118,7 @@ def main():
     parser.add_argument('--receiver-db',required=True)
     parser.add_argument('--media-index')
     parser.add_argument('--cloud-json')
+    parser.add_argument('--receipt-json',help='Pixel gallery receipt export; maps original filenames to assets')
     parser.add_argument('--since',required=True,help='Inclusive local date, YYYY-MM-DD')
     parser.add_argument('--until',required=True,help='Exclusive local date, YYYY-MM-DD')
     parser.add_argument('--timezone',default='UTC')
@@ -110,7 +128,8 @@ def main():
     end=int(dt.datetime.fromisoformat(args.until).replace(tzinfo=zone).timestamp()*1000)
     if end<=start: parser.error('--until must be after --since')
     cloud=json.loads(Path(args.cloud_json).read_text()) if args.cloud_json else []
-    report=audit(args.receiver_db,read_media(args.media_index),cloud,zone,start,end)
+    names=read_receipt(args.receipt_json)
+    report=audit(args.receiver_db,read_media(args.media_index,names),cloud,zone,start,end,names)
     output=Path(args.output);output.mkdir(parents=True,exist_ok=True)
     (output/'audit.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     with (output/'cloud-repair-review.csv').open('w',newline='') as f:

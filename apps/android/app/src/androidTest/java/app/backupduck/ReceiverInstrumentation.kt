@@ -126,27 +126,37 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(profile(senderDirectory, "Kitchen Mac").getJSONObject("device").getString("id") == senderProfile.getString("id")) { "rename_changed_identity" }
                 NativeBridge.request(JSONObject().put("op", "exchange_device").put("pairing", pairing))
                 check(profile(receiverDirectory).getJSONArray("peers").getJSONObject(0).getJSONObject("profile").getString("name") == "Kitchen Mac") { "rename_not_propagated" }
-                for (kind in listOf("photo", "video", "motion", "burst-primary", "burst-secondary")) {
+                // Every fixture shares the name fixture.jpg or fixture.mp4, so publication
+                // exercises collision variants. "twin" is a separate asset with the same
+                // name; "heic" declares a HEIC name for JPEG bytes.
+                val kinds = listOf("photo", "video", "motion", "burst-primary", "burst-secondary", "twin", "heic")
+                for (kind in kinds) {
                     val resources = JSONArray()
-                    fun resource(file: File, role: String, mime: String) = JSONObject().put("role", role).put("filename", file.name).put("media_type", mime).put("path", file.path)
+                    fun resource(file: File, role: String, mime: String, name: String = file.name) = JSONObject().put("role", role).put("filename", name).put("media_type", mime).put("path", file.path)
                     if (kind == "video") resources.put(resource(movie, "video", "video/mp4"))
+                    else if (kind == "heic") resources.put(resource(photo, "photo", "image/heic", "fixture.HEIC"))
                     else resources.put(resource(photo, "photo", "image/jpeg"))
                     if (kind == "motion") resources.put(resource(movie, "paired_video", "video/mp4"))
                     val metadata = if (kind.startsWith("burst-")) NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", root.name).put("primary", kind == "burst-primary")) as JSONObject else JSONObject()
                     metadata.put("created_at_ms", "1786761701000")
+                    val assetKind = when (kind) { "video", "motion" -> kind; else -> "photo" }
                     NativeBridge.request(JSONObject().put("op", "enqueue").put("receiver_id", pairing.getString("receiver_id"))
-                        .put("source_id", "fixture-$kind-${root.name}").put("revision", "1").put("kind", if (kind.startsWith("burst-")) "photo" else kind).put("metadata", metadata).put("resources", resources))
+                        .put("source_id", "fixture-$kind-${root.name}").put("revision", "1").put("kind", assetKind).put("metadata", metadata).put("resources", resources))
                     val job = NativeBridge.request(JSONObject().put("op", "run_sender").put("pairing", pairing)) as JSONObject
                     check(job.getString("state") == "received") { "receipt_missing" }
                 }
-                val items = NativeBridge.request(JSONObject().put("op", "publications")) as JSONArray
-                check(items.length() == 5) { "asset_count" }
+                val pending = NativeBridge.request(JSONObject().put("op", "publications")) as JSONArray
+                check(pending.length() == kinds.size) { "asset_count" }
+                fun fixtureKind(item: JSONObject) = item.getJSONObject("asset").getString("source_id").removeSuffix("-${root.name}").removePrefix("fixture-")
+                // Publish in fixture order so the twin and HEIC-named items meet taken names.
+                val items = (0 until pending.length()).map(pending::getJSONObject).sortedBy { kinds.indexOf(fixtureKind(it)) }
                 var legacyInjected = false
-                for (index in 0 until items.length()) {
-                    val item = items.getJSONObject(index)
+                val publishedLocators = mutableSetOf<String>()
+                val namesByKind = mutableMapOf<String, String>()
+                for (item in items) {
                     val id = item.getString("id")
-                    val legacy = if (!legacyInjected && item.getJSONObject("asset").getString("kind") == "photo" &&
-                        item.getJSONObject("asset").optJSONObject("metadata")?.has("burst_group_ref") != true) targetContext.contentResolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                    val kind = fixtureKind(item)
+                    val legacy = if (kind == "photo") targetContext.contentResolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
                         android.content.ContentValues().apply {
                             put(MediaStore.MediaColumns.DISPLAY_NAME, GalleryNaming.legacyName(item))
                             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
@@ -156,32 +166,44 @@ class ReceiverInstrumentation : Instrumentation() {
                     if (legacy != null) legacyInjected = true
                     val copy = MediaPublisher.publish(targetContext, item)
                     publishedCopies += android.net.Uri.parse(copy.locator)
+                    publishedLocators += copy.locator
                     if (legacy != null) check(copy.locator == legacy.toString()) { "legacy_pending_copy_duplicated" }
-                    val actualName = targetContext.contentResolver.query(android.net.Uri.parse(copy.locator),
-                        arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) cursor.getString(0) else null
-                    }
-                    check(actualName == (if (legacy == null) GalleryNaming.name(item) else GalleryNaming.legacyName(item))) { "delivery_name_mismatch" }
-                    if (legacy == null) check(actualName!!.startsWith("BD_20260815_024141Z_")) { "delivery_date_missing" }
-                    publishedNames += actualName!!
-                    // Publication replay must find the same MediaStore row.
-                    MediaPublisher.publish(targetContext, item)
+                    val (actualName, actualMime) = checkNotNull(targetContext.contentResolver.query(android.net.Uri.parse(copy.locator),
+                        arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getString(0) to cursor.getString(1) else null
+                    }) { "delivery_row_missing" }
+                    check(actualName == copy.displayName) { "delivery_name_not_recorded" }
+                    if (legacy != null) check(actualName == GalleryNaming.legacyName(item)) { "legacy_name_changed" }
+                    else check(actualName.startsWith("fixture")) { "original_name_missing" }
+                    if (kind == "heic") check(actualName.endsWith(".jpg") && actualMime == "image/jpeg") { "heic_named_jpeg_mislabelled" }
+                    publishedNames += actualName
+                    namesByKind[kind] = actualName
+                    // Publication replay must find the same MediaStore row and name.
+                    val replay = MediaPublisher.publish(targetContext, item)
+                    check(replay.locator == copy.locator && replay.displayName == copy.displayName) { "replay_changed_publication" }
                     NativeBridge.request(JSONObject().put("op", "processed").put("id", id).put("success", true))
                 }
                 check(legacyInjected) { "legacy_fixture_missing" }
+                check(publishedNames.size == kinds.size && publishedLocators.size == kinds.size) { "delivery_names_not_distinct" }
+                check(publishedNames.count { it.endsWith("_MP.jpg") } == 1) { "motion_suffix_missing_or_repeated" }
+                val variant = Regex("^fixture \\(\\d+\\)\\.jpg$")
+                check(publishedNames.any(variant::matches)) { "collision_variant_missing" }
+                check(variant.matches(namesByKind.getValue("twin"))) { "twin_name_not_varied" }
                 check((NativeBridge.request(JSONObject().put("op", "publications")) as JSONArray).length() == 0) { "processing_incomplete" }
                 var total = 0
                 for (collection in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)) {
-                    targetContext.contentResolver.query(collection, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    targetContext.contentResolver.query(collection, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+                        "${MediaStore.MediaColumns.RELATIVE_PATH}=?", arrayOf("DCIM/BackupDuck/"), null)?.use { cursor ->
                         while (cursor.moveToNext()) if (cursor.getString(1) in publishedNames) total++
                     }
                 }
-                check(total == 5) { "publication_duplicate_or_missing" }
+                check(total == kinds.size) { "publication_duplicate_or_missing" }
                 var burstFrames = 0
                 var primaryFrames = 0
                 val expectedBurst = NativeBridge.request(JSONObject().put("op", "burst_metadata").put("identifier", root.name).put("primary", true)) as JSONObject
                 val images = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                targetContext.contentResolver.query(images, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                targetContext.contentResolver.query(images, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+                    "${MediaStore.MediaColumns.RELATIVE_PATH}=?", arrayOf("DCIM/BackupDuck/"), null)?.use { cursor ->
                     while (cursor.moveToNext()) if (cursor.getString(1) in publishedNames) {
                         val uri = android.content.ContentUris.withAppendedId(images, cursor.getLong(0))
                         targetContext.contentResolver.openInputStream(uri)?.use { input ->
@@ -198,7 +220,7 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(burstFrames == 2 && primaryFrames == 1) { "burst_metadata_missing_or_ambiguous" }
 
                 val gallery = GalleryInventory.read(targetContext)
-                check(gallery.readyCount == galleryBefore.readyCount + 5 && gallery.readyBytes > galleryBefore.readyBytes) { "gallery_usage_missing_or_duplicate" }
+                check(gallery.readyCount == galleryBefore.readyCount + kinds.size && gallery.readyBytes > galleryBefore.readyBytes) { "gallery_usage_missing_or_duplicate" }
                 val pendingID = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "")
                 val pendingURI = checkNotNull(targetContext.contentResolver.insert(images, android.content.ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, "BD_${pendingID}.jpg")
@@ -226,16 +248,16 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(archiveReady) { "offline_archive_unavailable" }
                 val archiveFile = File(root, "originals.zip")
                 val archive = OriginalArchive.export(targetContext, android.net.Uri.fromFile(archiveFile), receiverRoot)
-                check(archive.ids.size == 5) { "archive_count" }
+                check(archive.ids.size == kinds.size) { "archive_count" }
                 archiveFile.writeBytes(byteArrayOf(0, 1, 2))
                 check(runCatching { OriginalArchive.verify(targetContext, archive) }.isFailure) { "tampered_archive_accepted" }
-                check((NativeBridge.request(JSONObject().put("op", "archive_batch").put("root", receiverRoot)) as JSONArray).length() == 5) { "premature_reclamation" }
+                check((NativeBridge.request(JSONObject().put("op", "archive_batch").put("root", receiverRoot)) as JSONArray).length() == kinds.size) { "premature_reclamation" }
                 val verified = OriginalArchive.export(targetContext, android.net.Uri.fromFile(archiveFile), receiverRoot)
                 val released = NativeBridge.request(JSONObject().put("op", "release_archived").put("root", verified.receiverRoot).put("ids", JSONArray(verified.ids)).put("verified", JSONArray(verified.resources.toList()))) as JSONObject
                 check(released.getLong("bytes") > 0) { "reclamation_missing" }
                 check((NativeBridge.request(JSONObject().put("op", "archive_batch").put("root", receiverRoot)) as JSONArray).length() == 0)
                 val overview = NativeBridge.request(JSONObject().put("op", "receiver_settings").put("root", receiverRoot)) as JSONObject
-                check(overview.getJSONObject("counts").getInt("received") == 5 && overview.getLong("used_bytes") == 0L) { "receipt_or_budget_lost" }
+                check(overview.getJSONObject("counts").getInt("received") == kinds.size && overview.getLong("used_bytes") == 0L) { "receipt_or_budget_lost" }
                 val afterReclaim = NativeBridge.request(JSONObject().put("op", "receiver_storage_usage").put("root", receiverRoot)) as JSONObject
                 check(afterReclaim.getLong("ready_bytes") == 0L && afterReclaim.getLong("partial_bytes") == 0L) { "reclaimed_usage_retained" }
                 check(GalleryInventory.read(targetContext) == gallery) { "original_reclamation_changed_gallery" }
@@ -244,7 +266,7 @@ class ReceiverInstrumentation : Instrumentation() {
                 check(restarted.getString("receiver_id") == pairing.getString("receiver_id")) { "identity_changed_after_archive" }
                 check(profile(receiverDirectory).getJSONObject("device").toString() == receiverProfile.toString()) { "profile_changed_after_restart" }
                 check(profile(senderDirectory).getJSONArray("peers").getJSONObject(0).getJSONObject("profile").getString("name") == "Amber Otter") { "offline_peer_lost" }
-                check((NativeBridge.request(JSONObject().put("op", "receiver_overview")) as JSONObject).getInt("received") == 5)
+                check((NativeBridge.request(JSONObject().put("op", "receiver_overview")) as JSONObject).getInt("received") == kinds.size)
                 check(NativeBridge.request(JSONObject().put("op", "run_sender").put("pairing", pairing)) == JSONObject.NULL) { "received_items_requeued" }
                 checkRelayRetention(root, photo, movie, restarted, publishedCopies)
                 results.putString("result", "PASS: opt-in relay, verified derived copies, changed/missing copy preservation and durable receipts; original/gallery space separation, deduplicated originals, pending publication and reclamation; two grouped burst frames, one primary, original retention; durable names, bidirectional profile exchange, rename and invalid-name rejection; offline verified archive, tamper rejection, original reclamation, receipt retention; Kotlin JNI, paired TLS, photo/video/motion receipt, codec publication and dedupe")
@@ -273,25 +295,37 @@ private fun checkGalleryNaming(): String {
         return JSONObject().put("id", id).put("asset", JSONObject().put("kind", kind).put("metadata", metadata)
             .put("resources", JSONArray().put(JSONObject().put("filename", filename))))
     }
-    check(GalleryNaming.name(item("photo", "IMG_1234.HEIC")) == "BD_20260815_024141Z_a1b2.HEIC")
-    check(GalleryNaming.name(item("photo", "IMG_1234.HEIC")) !=
-        GalleryNaming.name(item("photo", "IMG_1234.HEIC").put("id", "f".repeat(64))))
-    val collision = item("photo", "IMG_1234.HEIC").put("id", "a1b2" + "f".repeat(60))
-    check(GalleryNaming.name(collision) == GalleryNaming.name(item("photo", "IMG_1234.HEIC")))
-    check(GalleryNaming.name(collision, 8) != GalleryNaming.name(item("photo", "IMG_1234.HEIC"), 8))
-    check(GalleryNaming.name(item("video", "clip.mov")) == "BD_20260815_024141Z_a1b2.mov")
+    val photo = item("photo", "IMG_1234.HEIC")
+    check(GalleryNaming.preferred(photo, "image/heic") == "IMG_1234.HEIC")
+    check(GalleryNaming.preferred(photo, "image/jpeg") == "IMG_1234.jpg")
+    check(GalleryNaming.preferred(photo, "image/heic", variant = 1) == "IMG_1234 (1).HEIC")
+    check(GalleryNaming.preferred(item("photo", "IMG_1234.JPEG"), "image/jpeg") == "IMG_1234.JPEG")
     val motion = item("motion", "IMG_1234.HEIC")
-    check(GalleryNaming.name(motion) == "BD_20260815_024141Z_a1b2_MP.jpg")
-    check(GalleryNaming.name(motion, outputMime = "image/heic") == "BD_20260815_024141Z_a1b2_MP.heic")
-    check(GalleryNaming.candidates(motion, "image/heic").first() == GalleryNaming.name(motion, outputMime = "image/heic"))
-    check("BD_20260815_024141Z_a1b2.heic" in GalleryNaming.candidates(motion, "image/heic"))
-    check(GalleryInventory.isDeliveryName(GalleryNaming.name(motion, outputMime = "image/heic")))
-    check(GalleryInventory.isDeliveryName("BD_20260815_024141Z_a1b2.heic"))
-    check(GalleryNaming.name(item("photo", "IMG_1234.HEIC", burst = true)).endsWith(".jpg"))
+    check(GalleryNaming.preferred(motion, "image/heic") == "IMG_1234_MP.HEIC")
+    check(GalleryNaming.preferred(motion, "image/jpeg") == "IMG_1234_MP.jpg")
+    check(GalleryNaming.preferred(motion, "image/heic", variant = 2) == "IMG_1234 (2)_MP.HEIC")
+    check(GalleryNaming.preferred(item("photo", "IMG_1235.HEIC", burst = true), "image/heic") == "IMG_1235.HEIC")
+    check(GalleryNaming.preferred(item("photo", "IMG_1235.HEIC", burst = true), "image/jpeg") == "IMG_1235.jpg")
+    check(GalleryNaming.preferred(item("video", "clip.mov"), "video/quicktime") == "clip.mov")
+    check(GalleryNaming.preferred(item("photo", "照片 2024.HEIC"), "image/heic") == "照片 2024.HEIC")
+    check(GalleryNaming.preferred(item("photo", "scan.tiff"), "image/tiff") == "scan.tiff")
+    check(GalleryNaming.preferred(item("photo", "a:b?.HEIC"), "image/heic") == "a_b_.HEIC")
+    check(GalleryNaming.preferred(item("photo", ".."), "image/jpeg") == "BD_a1b2c3d4.jpg")
+    check(GalleryNaming.preferred(item("photo", ".HEIC"), "image/heic") == "BD_a1b2c3d4.HEIC")
+    // Four-byte code points: truncation must stay on code point boundaries.
+    val long = item("motion", "\uD83D\uDCF7".repeat(300) + ".HEIC")
+    val variants = (0..GalleryNaming.MAX_COLLISION_VARIANTS).map { GalleryNaming.preferred(long, "image/heic", it) }
+    check(variants.all { it.toByteArray(Charsets.UTF_8).size <= 255 && it.endsWith("_MP.HEIC") }) { "name_too_long" }
+    check(variants.distinct().size == variants.size) { "variants_not_distinct" }
+    check(variants[0] == "\uD83D\uDCF7".repeat(60) + "_MP.HEIC") { "truncation_not_maximal" }
+    check(variants.all { name -> name.indices.all { index ->
+        !name[index].isHighSurrogate() || index + 1 < name.length && name[index + 1].isLowSurrogate() } }) { "split_code_point" }
+    val resume = GalleryNaming.resumeCandidates(motion, "image/heic")
+    check(resume.first() == "IMG_1234_MP.HEIC" && "IMG_1234 (20)_MP.HEIC" in resume)
+    check(GalleryNaming.legacyName(motion, "image/heic") in resume && GalleryNaming.name(motion, 4, "image/heic") in resume)
+    check("BD_20260815_024141Z_a1b2.heic" in resume) { "motion_name_without_mp_missing" }
+    check(GalleryNaming.name(photo) == "BD_20260815_024141Z_a1b2.HEIC")
     check(GalleryNaming.name(item("photo", "IMG_1234.HEIC", captured = null)).startsWith("BD_undated_"))
-    check(GalleryNaming.legacyName(item("photo", "IMG_1234.HEIC")) == "BD_${id}.HEIC")
-    check(GalleryInventory.isDeliveryName(GalleryNaming.name(item("photo", "IMG_1234.HEIC"))))
-    check(GalleryInventory.isDeliveryName(GalleryNaming.legacyName(item("photo", "IMG_1234.HEIC"))))
-    check(!GalleryInventory.isDeliveryName("IMG_1234.HEIC"))
-    return "PASS: deterministic dated names, format conversions, undated fallback and legacy names"
+    check(GalleryNaming.legacyName(photo) == "BD_${id}.HEIC")
+    return "PASS: original names, output-format extensions, motion suffixes, collision variants, UTF-8 limits and fallback names"
 }

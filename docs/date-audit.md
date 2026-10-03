@@ -14,6 +14,7 @@ python3 scripts/audit-capture-dates.py \
   --receiver-db /path/to/receiver.sqlite3 \
   --media-index /path/to/media-index.txt \
   --cloud-json /path/to/cloud-observations.json \
+  --receipt-json /path/to/gallery-receipts.json \
   --since 2026-09-12 --until 2026-09-15 \
   --timezone Asia/Shanghai --output /path/to/private-report
 ```
@@ -29,8 +30,11 @@ photo's `GMT+08:00` or other explicit offset. A collector may instead supply
 `observed_iso`, an ISO 8601 timestamp retaining that explicit offset. Without the offset the result is
 unknown; a cloud photo may use a different timezone from the auditing computer.
 
-`BD_<asset-id>` filenames allow an exact match to a receiver manifest. Unknown
-filenames or missing source dates are not guessed. The report distinguishes
+Legacy `BD_<asset-id>` filenames match a receiver manifest directly. Newer
+gallery copies keep the original Apple Photos filename, so pass the Pixel's
+gallery receipt export with `--receipt-json` to map each published name to its
+asset. A name the receipt lists for more than one asset is treated as
+unmatched. Unknown filenames or missing source dates are not guessed. The report distinguishes
 correct dates, mismatches, unmatched photos and unreadable metadata. MediaStore
 suspects are only leads, not proof of cloud-date errors. Only supplied cloud
 observations are covered; the script does not claim complete cloud enumeration.

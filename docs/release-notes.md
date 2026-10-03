@@ -1,3 +1,8 @@
+# Unreleased
+
+- Pixel gallery copies keep their original Apple Photos filenames, such as `IMG_1234.HEIC`, instead of `BD_<date>_<id>` names. The extension follows the saved format, Motion Photos end in `_MP`, and each burst frame keeps its own name. Taken names get ` (1)` through ` (20)` before falling back to the dated `BD_` name. Existing gallery copies are not renamed.
+- The capture-date audit script accepts the Pixel gallery receipt export (`--receipt-json`) to match original filenames to received assets.
+
 # RC 2 — BackupDuck Android signing identity (0.2.0-rc.2)
 
 - Use a dedicated Android release certificate named BackupDuck. The old certificate is no longer used for new releases.

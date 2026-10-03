@@ -47,6 +47,18 @@ iOS 17+ is available from source; there is no App Store/TestFlight release yet.
 Windows, NAS and hosted receivers are not shipped. Native hosts own platform media,
 UI and background execution; the Rust core owns transfer and durable state.
 
+## Gallery file names
+
+The Pixel receiver saves each photo and video in `DCIM/BackupDuck` under its
+original Apple Photos filename, such as `IMG_1234.HEIC` or `clip.MOV`. The
+extension follows the format actually written, so a still converted to JPEG
+becomes `IMG_1234.jpg`. Motion Photos add `_MP` before the extension
+(`IMG_1234_MP.HEIC`), and each burst frame keeps its own name. When a name is
+already taken, the receiver uses `IMG_1234 (1).HEIC` up to `(20)`, then falls
+back to a dated `BD_<date>_<id>` name. Copies published by earlier versions keep
+their `BD_` names. The gallery receipt export in Settings maps every saved name
+to its asset.
+
 ## Brand transition
 
 BackupDuck is the new name of BackupDuck. New platform installs use `app.backupduck` and must be installed manually and paired again. Existing apps and originals are not automatically removed. See [the transition guide](docs/brand-transition.md).
