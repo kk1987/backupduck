@@ -2,21 +2,16 @@ package app.backupduck
 
 import android.app.Instrumentation
 import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Bundle
 import org.json.JSONObject
 import java.io.File
-import java.net.Inet4Address
 import java.util.UUID
 
 /** Synthetic receiver advertised for cross-platform discovery acceptance. */
 internal fun Instrumentation.checkReceiverDiscovery(): String {
     check(targetContext.packageName.endsWith(".validation"))
     val connectivity = targetContext.getSystemService(ConnectivityManager::class.java)
-    val network = connectivity.activeNetwork
-    check(connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true)
-    val ip = connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.filterIsInstance<Inet4Address>()?.firstOrNull()?.hostAddress
-        ?: error("wifi_required")
+    val ip = ReceiverWifiAddress.read(connectivity)
     val root = File(targetContext.filesDir, "discovery-${UUID.randomUUID()}").apply { mkdirs() }
     val fixture = File(targetContext.cacheDir, "receiver-discovery-fixture.json")
     var advertisement: ReceiverAdvertisement? = null

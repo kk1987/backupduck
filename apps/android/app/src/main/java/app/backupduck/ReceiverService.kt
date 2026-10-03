@@ -3,7 +3,6 @@ package app.backupduck
 import android.app.*
 import android.content.Intent
 import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import kotlinx.coroutines.*
@@ -14,7 +13,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.Inet4Address
 
 internal data class RecentTransfer(val id: String, val filename: String, val kind: String, val totalBytes: Long,
     val confirmedBytes: Long, val receipt: String, val processing: String)
@@ -135,7 +133,7 @@ class ReceiverService : Service() {
                             }
                         }
                         while (isActive) {
-                            val currentAddress = runCatching { wifiAddress() }.getOrNull()
+                            val currentAddress = runCatching { wifiAddress(address) }.getOrNull()
                             if (currentAddress != address) {
                                 ReceiverState.mutable.update { it.copy(error = if (currentAddress == null) "wifi_required" else "receiver_address_changed") }
                                 break
@@ -220,15 +218,8 @@ class ReceiverService : Service() {
             ReceiverState.mutable.update { it.copy(processingName = null) }
         }
     }
-    private fun wifiAddress(): String {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        val network = manager.activeNetwork
-        val capabilities = manager.getNetworkCapabilities(network)
-        check(capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) { "wifi_required" }
-        return manager.getLinkProperties(network)?.linkAddresses?.map { it.address }
-            ?.filterIsInstance<Inet4Address>()?.firstOrNull { !it.isLoopbackAddress }?.hostAddress
-            ?: error("wifi_required")
-    }
+    private fun wifiAddress(preferred: String? = null): String =
+        ReceiverWifiAddress.read(getSystemService(ConnectivityManager::class.java), preferred)
     private fun publishDashboardDeviceStatus(reading: ThermalReading, held: Boolean) {
         runCatching { NativeBridge.request(JSONObject().put("op", "dashboard_device_status")
             .put("temperature_deci_celsius", reading.deciCelsius ?: JSONObject.NULL)
