@@ -499,10 +499,15 @@ enum Bridge {
     for index in 0..<hidden.count { reasons[hidden.object(at: index).localIdentifier] = "hidden_excluded" }
     return reasons
   }
+  /// Opt-in: sources received under an older revision are prepared again.
+  static var rebackupEdited: Bool { UserDefaults.standard.bool(forKey: "rebackupEdited") }
+  /// `received_previous` (an older revision was received) counts as done
+  /// unless the selection explicitly asked for a repeat backup.
   static func shouldSkipSource(_ state: String?, rebackupReceived: Bool) -> Bool {
     guard let state else { return false }
-    return state != "failed" && !(rebackupReceived && state == "received")
+    return state != "failed" && !(rebackupReceived && receivedStates.contains(state))
   }
+  private static let receivedStates: Set<String> = ["received", "received_previous"]
   @discardableResult func importAssets(_ identifiers: [String], requestAuthorization: Bool = true,
     rebackupReceived: Bool = false)
     async -> Bool
@@ -580,9 +585,11 @@ enum Bridge {
         // Check the source revision before downloading originals, including
         // manual selection and metadata replay after a historical-scan restart.
         let existingData = try await Bridge.call(["op": "source_states", "receiver_id": target.receiverID,
+          "include_previous_receipts": !Self.rebackupEdited,
           "sources": [[sourceID, PhotoLibraryModel.revision(asset)]]])
         let existing = try JSONDecoder().decode([String: String].self, from: existingData)
-        let rebackupThisSource = rebackupReceived && existing[sourceID] == "received"
+        let rebackupThisSource = rebackupReceived
+          && existing[sourceID].map { Self.receivedStates.contains($0) } == true
         if Self.shouldSkipSource(existing[sourceID], rebackupReceived: rebackupReceived) {
           _ = try await Bridge.call(["op": "source_result", "receiver_id": target.receiverID,
             "source": sourceID, "complete": true])

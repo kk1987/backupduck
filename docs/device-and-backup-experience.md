@@ -195,6 +195,12 @@ late batches. Existing queued/received revisions are omitted from preparation.
 Apple also checks the durable source-revision index before any original download,
 covering manual selection and replay. Failed jobs remain eligible for preparation
 so missing staged originals can be repaired by the existing queue behavior.
+Scan library again does not re-upload photos that were already received under
+an earlier revision (for example after a favorite, location or edit change);
+the "Back up edited photos again" toggle beside the scan control opts in to
+re-checking them. Even then, byte-identical originals return the existing
+received job instead of a second gallery copy. A manual "Back up already
+received items again" selection is the only way to force another copy.
 
 A PhotoKit fetch result is an in-process metadata snapshot. Its numerical offset
 is never reused against a different snapshot: after app restart, metadata starts

@@ -68,6 +68,24 @@ failed task that needs a manual retry after the budget is raised, instead of
 waiting forever like ordinary capacity pressure. Older receivers report plain
 capacity, which keeps the automatic retry.
 
+## Rescan and content identity
+
+Gallery metadata (favorite, location, capture date, burst fields) is part of the
+asset ID, and the PhotoKit revision changes with every edit. Exact
+source/revision matching alone would therefore publish a second gallery copy
+after a rescan or a metadata-only edit. Two rules prevent that. A source that
+was received under any earlier revision counts as known: `history_batch` and the
+Apple pre-download check treat `received_previous` like `received` unless the
+user enabled "Back up edited photos again" (`rebackup_edited`) or explicitly
+asked to back up a selection again. Independently, `Sender::enqueue` returns
+the existing received job when the same receiver already holds the same source
+with the same kind and identical `(role, sha256)` resources, logging
+`transfer_deduplicated` instead of inserting. A `backupduck_rebackup_id` in the
+metadata bypasses this check. Apple senders export original resources, so edits
+made in Photos never change these digests; folder sources deduplicate a touched
+but unchanged file the same way. Receiver-side content indexing across sources
+is not implemented.
+
 ## Receiver durability
 
 The receiver has a single writer lock for its root. SQLite stores assets and

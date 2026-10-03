@@ -99,6 +99,56 @@ fn explicit_rebackup_creates_a_new_job_without_changing_source_revision() {
 }
 
 #[test]
+fn identical_content_reenqueue_returns_received_job() {
+    let t = Temp::new();
+    let mut sender = Sender::open(&t.0).unwrap();
+    let first = add(&mut sender);
+    let running = sender.claim("receiver-1", 0).unwrap().unwrap();
+    sender
+        .acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    let enqueue = |s: &mut Sender, a: Asset| {
+        let sources = BTreeMap::from([(a.resources[0].sha256.clone(), "new-export".into())]);
+        s.enqueue("receiver-1", a, sources).unwrap()
+    };
+
+    // Metadata-only edit: new revision and asset id, same bytes.
+    let mut edited = asset();
+    edited.revision = "2".into();
+    edited.metadata.insert("favorite".into(), "true".into());
+    assert_ne!(edited.id().unwrap(), first.asset.id().unwrap());
+    let same = enqueue(&mut sender, edited.clone());
+    assert_eq!(same.id, first.id);
+    assert_eq!(same.state, JobState::Received);
+    assert_eq!(same.sources, first.sources);
+    assert_eq!(sender.summary("receiver-1").unwrap()["total"], 1);
+
+    // Another receiver has no receipt for these bytes.
+    let sources = BTreeMap::from([(edited.resources[0].sha256.clone(), "x".into())]);
+    let other = sender
+        .enqueue("receiver-2", edited.clone(), sources)
+        .unwrap();
+    assert_ne!(other.id, first.id);
+
+    // Changed bytes are new content.
+    let mut changed = edited.clone();
+    changed.resources[0].sha256 = digest(b"edited-bytes");
+    let new = enqueue(&mut sender, changed);
+    assert_ne!(new.id, first.id);
+    assert_eq!(new.state, JobState::Queued);
+
+    // An explicit repeat backup always creates a distinct asset.
+    let mut repeat = edited;
+    repeat
+        .metadata
+        .insert("backupduck_rebackup_id".into(), "manual-request-1".into());
+    let repeated = enqueue(&mut sender, repeat);
+    assert_ne!(repeated.id, first.id);
+    assert_ne!(repeated.id, new.id);
+    assert_eq!(sender.summary("receiver-1").unwrap()["total"], 3);
+}
+
+#[test]
 fn gallery_failure_stays_visible_and_retry_never_requeues_original_bytes() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();

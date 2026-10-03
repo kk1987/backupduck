@@ -173,7 +173,8 @@ extension BackupModel {
       guard !Task.isCancelled, !paused, version == historyControlRevision,
         pairing?.receiverID == target.receiverID else { return }
       let data = try await Bridge.call(["op": "history_batch", "receiver_id": target.receiverID,
-        "run": status.run, "sources": sources, "finished": end == cursor.ids.count])
+        "run": status.run, "sources": sources, "finished": end == cursor.ids.count,
+        "rebackup_edited": Self.rebackupEdited])
       guard version == historyControlRevision, pairing?.receiverID == target.receiverID else { return }
       historicalImport = try JSONDecoder().decode(HistoricalImportStatus.self, from: data)
       try cursor.advance(to: end) // Replay after a crash is idempotent in Rust.
@@ -190,6 +191,7 @@ extension BackupModel {
 
 struct HistoricalImportSettings: View {
   @ObservedObject var model: BackupModel
+  @AppStorage("rebackupEdited") private var rebackupEdited = false
   var title: LocalizedStringKey = "history_title"
   var explanation: LocalizedStringKey = "history_explanation"
   var body: some View {
@@ -208,6 +210,8 @@ struct HistoricalImportSettings: View {
       } else {
         Button("history_start") { Task { await model.controlHistoricalImport("start") } }
       }
+      Toggle("rebackup_edited_toggle", isOn: $rebackupEdited)
+      Text("rebackup_edited_help").foregroundStyle(.secondary)
       if model.paused, model.historicalImport?.state == "scanning" {
         Text("history_backup_paused").foregroundStyle(.secondary)
         Button("resume_backup") { Task { await model.setPaused(false); await model.scanHistoricalImport() } }
