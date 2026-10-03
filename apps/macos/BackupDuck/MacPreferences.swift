@@ -34,6 +34,7 @@ struct MacPreferences: View {
             Text("error_history_unavailable").foregroundStyle(.orange)
           }
         } header: { Text("mac_nav_library") }
+        LibraryScopeSettingsSection()
         HistoricalImportSettings(model: model, title: "mac_library_existing", explanation: "mac_library_existing_note")
         Section("mac_nav_sources") {
           Text("mac_folder_settings_note").foregroundStyle(.secondary)

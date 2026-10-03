@@ -161,7 +161,7 @@
 "error_receiver_budget_single_item" = "This item is larger than the receiver's entire storage budget. Raise the budget on the receiver, then retry.";
 "error_local_cache_budget_single_item" = "This item is larger than the staging cache budget. Raise the budget in settings, then retry.";
 "error_export_failed" = "Photos could not export the original. Retry later or check the item in Photos.";
-"error_hidden_excluded" = "This item is hidden in Photos. Unhide it to back it up.";
+"error_hidden_excluded" = "This item is hidden in Photos and hidden photos are excluded. Turn on Include Hidden Photos in Settings, or unhide it, then retry.";
 "error_photos_permission" = "Limited photo access does not include this item. Allow access in Settings.";
 "error_other" = "Original preparation failed for an unrecognized reason.";
 "event_source_needs_attention" = "A photo stopped retrying preparation and needs attention";
@@ -276,6 +276,8 @@
 "history_explanation" = "This run backs up photos, videos, Live Photos and burst members already in your accessible library when you start it. Photos added later need automatic backup of new photos or another scan. Pausing stops discovery; queued transfers continue. Scan finished does not mean backup complete.";
 "rebackup_edited_toggle" = "Back up edited photos again";
 "rebackup_edited_help" = "Off by default: once a photo is backed up, later edits to it are not uploaded again, even when you check existing photos again. BackupDuck backs up original files, so with this on an edited photo is checked again and uploaded as a new copy only if its original file changed. To force another copy, select the photo and use \"Back up already received items again\".";
+"include_hidden_photos" = "Include Hidden Photos";
+"include_hidden_photos_explanation" = "On by default, so the Hidden album is backed up with the rest of the library. Turned off, hidden photos and videos are not backed up. A scan already running keeps the photos it found when it started; after changing this, use \"Check existing photos again\".";
 "error_history_snapshot_unavailable" = "This scan's saved photo list is unavailable. Start a new scan to include the current library; already queued transfers remain.";
 "history_operation_failed" = "The library scan could not continue. Your progress is saved; try again.";
 "event_history_scan_started" = "Existing-library scan started";

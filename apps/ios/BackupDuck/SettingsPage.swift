@@ -73,6 +73,7 @@ private struct IOSBackupPreferences: View {
         Text("auto_backup_explanation")
       }
       TransferConcurrencySettings(model: model)
+      LibraryScopeSettingsSection()
       HistoricalImportSettings(model: model)
       Section {
         Toggle("keep_screen_awake_during_backup", isOn: $keepScreenAwake)

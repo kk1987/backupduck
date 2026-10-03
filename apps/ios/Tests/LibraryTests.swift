@@ -7,6 +7,35 @@ import XCTest
 
 /// Run only on a disposable simulator; fixtures remain available for UI checks.
 @MainActor final class LibraryTests: XCTestCase {
+  func testHiddenScopeFollowsSetting() async throws {
+    #if !targetEnvironment(simulator)
+      throw XCTSkip("Synthetic library acceptance is simulator-only")
+    #endif
+    let access = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+    guard access == .authorized else { throw XCTSkip("Photos authorization required") }
+    // Restore the default for later tests.
+    addTeardownBlock { UserDefaults.standard.removeObject(forKey: LibraryScopeSettings.includeHiddenKey) }
+    UserDefaults.standard.removeObject(forKey: LibraryScopeSettings.includeHiddenKey)
+    XCTAssertTrue(LibraryScopeSettings.includeHidden)
+    let ids = try await createPhotos(count: 1, date: Date())
+    let id = try XCTUnwrap(ids.first)
+    let asset = try XCTUnwrap(PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject)
+    try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: asset).isHidden = true }
+    func count() -> Int { PHAsset.fetchAssets(with: photoLibraryFetchOptions()).count }
+    let included = count()
+    XCTAssertEqual(PHAsset.fetchAssets(withLocalIdentifiers: [id], options: photoLibraryFetchOptions()).count, 1)
+    UserDefaults.standard.set(false, forKey: LibraryScopeSettings.includeHiddenKey)
+    XCTAssertEqual(PHAsset.fetchAssets(withLocalIdentifiers: [id], options: photoLibraryFetchOptions()).count, 0)
+    // Earlier runs may have left other hidden fixtures; this one must be among the difference.
+    let excluded = count()
+    XCTAssertGreaterThanOrEqual(included - excluded, 1)
+    let hiddenOnly = PHFetchOptions()
+    hiddenOnly.includeAllBurstAssets = true
+    hiddenOnly.includeHiddenAssets = true
+    hiddenOnly.predicate = NSPredicate(format: "isHidden == YES")
+    XCTAssertEqual(included - excluded, PHAsset.fetchAssets(with: hiddenOnly).count)
+  }
+
   func testBackupCaptureOrderIgnoresIdentifierAndSelectionOrder() async throws {
     #if !targetEnvironment(simulator)
       throw XCTSkip("Synthetic library acceptance is simulator-only")

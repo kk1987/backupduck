@@ -486,7 +486,8 @@ enum Bridge {
     }
     return "export_failed"
   }
-  /// Default fetches omit hidden assets; distinguish them from deleted ones.
+  /// With hidden photos excluded from the library scope, distinguish them
+  /// from deleted ones.
   static func missingSourceReasons(_ missing: [String], authorization: PHAuthorizationStatus)
     -> [String: String]
   {
@@ -563,7 +564,6 @@ enum Bridge {
     catch { message = error.localizedDescription; return false }
     if assets.count != identifiers.count {
       succeeded = false
-      message = NSLocalizedString("photos_permission_needed", comment: "")
       let found = Set((0..<assets.count).map { assets.object(at: $0).localIdentifier })
       let missing = identifiers.filter { !found.contains($0) }
       let reasons = Self.missingSourceReasons(missing, authorization: authorization)
@@ -573,7 +573,14 @@ enum Bridge {
           "complete": false, "error": reasons[source] ?? "source_unavailable",
         ])
       }
-      preparationReason = "source_unavailable"
+      // Hidden items excluded by the library scope are not a permission problem.
+      if missing.allSatisfy({ reasons[$0] == "hidden_excluded" }) {
+        message = NSLocalizedString("error_hidden_excluded", comment: "")
+        preparationReason = "hidden_excluded"
+      } else {
+        message = NSLocalizedString("photos_permission_needed", comment: "")
+        preparationReason = "source_unavailable"
+      }
     }
     for index in 0..<assets.count {
       guard !Task.isCancelled, pairing?.receiverID == target.receiverID else { return false }
