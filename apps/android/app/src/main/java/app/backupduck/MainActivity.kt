@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         delegate.localNightMode = getSharedPreferences("appearance", MODE_PRIVATE).getInt("mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         super.onCreate(savedInstanceState)
+        RelayMaintenance.schedule(this)
         devicePanels = DevicePanels(this)
         selectedPage = savedInstanceState?.getInt("page", 1) ?: 1
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -285,6 +286,8 @@ class MainActivity : AppCompatActivity() {
             body.addView(switch)
             label(body, getString(R.string.dashboard_note), 14, secondaryColor())
             action(body, R.string.dashboard_access) { showDashboardAccess() }
+            action(body, R.string.dashboard_manage_code) { manageDashboardCode() }
+            action(body, R.string.dashboard_revoke) { revokeDashboardLogins() }
             switch.setOnCheckedChangeListener { _, checked ->
                 if (changing) return@setOnCheckedChangeListener
                 switch.isEnabled = false
@@ -345,7 +348,7 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.dashboard_copy_address) { _, _ ->
                         (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                             .setPrimaryClip(ClipData.newPlainText("BackupDuck", url))
-                    }.show()
+                    }.create().apply { window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE); show() }
             }.onFailure { Toast.makeText(this@MainActivity, R.string.dashboard_start_receiver, Toast.LENGTH_LONG).show() }
         }
     }
@@ -374,7 +377,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (enabled && state.phase == "waiting" && state.error != null) {
-            receiverProblem(state)?.let { Toast.makeText(this, it.message, Toast.LENGTH_LONG).show() }
+            showReceiverFailure()
             return
         }
         pendingPairingAction = action
@@ -419,7 +422,7 @@ class MainActivity : AppCompatActivity() {
             pendingPairingAction = null
         if (pendingPairingAction != null && state.phase == "waiting" && state.error != null) {
             pendingPairingAction = null
-            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+            showReceiverFailure()
         }
         val pending = pendingPairingAction
         if (pending != null && enabled && state.phase == "idle") startReceiverService()
@@ -451,7 +454,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun submitDesktopPairing(contents: String) {
         val pairing = ReceiverState.pairing ?: run {
-            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+            showReceiverFailure()
             return
         }
         lifecycleScope.launch {
@@ -468,9 +471,19 @@ class MainActivity : AppCompatActivity() {
                 Toast.LENGTH_LONG).show()
         }
     }
+    private var lastFailureAt = 0L
+    private var lastFailureCode: String? = null
+    private fun showReceiverFailure() {
+        val state = ReceiverState.snapshot.value
+        val time = SystemClock.elapsedRealtime()
+        if (state.error == lastFailureCode && time - lastFailureAt < 5_000) return
+        lastFailureCode = state.error; lastFailureAt = time
+        Toast.makeText(this, receiverProblem(state)?.message ?: R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+    }
     private fun showPairing() {
+        if (ReceiverState.snapshot.value.phase != "ready") { showReceiverFailure(); return }
         val payload = ReceiverState.pairing ?: run {
-            Toast.makeText(this, R.string.receiver_pair_start_failed, Toast.LENGTH_LONG).show()
+            showReceiverFailure()
             return
         }
         runCatching {

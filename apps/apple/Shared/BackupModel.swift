@@ -104,15 +104,25 @@ enum Bridge {
   @Published var savingConcurrency = false
   @Published var transferProgress: [Int64: TransferProgress] = [:]
   @Published var receiverUnavailable = false
+  @Published var receiverConnection = ReceiverConnection.unknown
+  @Published var checkingConnection = false
   private var activeExport: BoundedExportWriter?
   private lazy var availability = ReceiverAvailability(changed: { [weak self] in
     self?.receiverUnavailable = true
+    self?.receiverConnection = .unknown
     self?.activeExport?.cancel()
   })
   func canPrepareForReceiver() async -> Bool {
     guard !paused, let target = pairing else { return false }
-    let available = await availability.check(target)
-    guard pairing?.receiverID == target.receiverID, pairing?.endpoint == target.endpoint else { return false }
+    return await checkReceiverConnection(target) && !paused
+  }
+  private func checkReceiverConnection(_ target: Pairing, force: Bool = false) async -> Bool {
+    let result = await availability.diagnose(target, force: force)
+    guard pairing?.receiverID == target.receiverID, pairing?.endpoint == target.endpoint,
+      pairing?.token == target.token, pairing?.certificate == target.certificate else { return false }
+    guard result != .unknown else { return false }
+    let available = result == .ready
+    receiverConnection = result
     let recovered = receiverUnavailable && available
     receiverUnavailable = !available
     if recovered {
@@ -120,6 +130,13 @@ enum Bridge {
     }
     if !available { activeExport?.cancel() }
     return available && !paused
+  }
+  func checkConnection() async {
+    guard let target = pairing, !checkingConnection else { return }
+    checkingConnection = true
+    defer { checkingConnection = false }
+    _ = await checkReceiverConnection(target, force: true)
+    if receiverConnection == .ready && !paused { await BackgroundTransfer.shared.kick() }
   }
   #if os(iOS)
     func recoverBackgroundReceiverRoute() async {
@@ -290,6 +307,8 @@ enum Bridge {
       }
       try await Keychain.saveAsync(try JSONEncoder().encode(parsed))
       pairing = parsed
+      receiverConnection = .ready
+      receiverUnavailable = false
       historyControlRevision += 1
       historicalImport = nil
       historicalCursor = nil

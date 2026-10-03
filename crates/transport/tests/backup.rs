@@ -820,3 +820,67 @@ async fn request_diagnostics_preserve_upload_bytes_and_ignore_private_headers() 
     assert_eq!(events.len(), 6);
     host.abort();
 }
+
+#[test]
+fn relay_scope_snapshots_received_ids_survives_restart_and_estimates_shared_blobs() {
+    use backupduck_store::retention::GalleryCopy;
+    let t = Scratch::new();
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    let (old, bytes) = asset(false);
+    let mut pending = old.clone();
+    pending.source_id = "pending-at-enable".into();
+    let old_id = old.id().unwrap();
+    let pending_id = pending.id().unwrap();
+    receive(&mut receiver, &old, &bytes);
+    receiver.register(pending.clone()).unwrap();
+    let copy = GalleryCopy {
+        locator: "content://media/11".into(),
+        sha256: digest(&bytes[0]),
+        size: bytes[0].len() as u64,
+        display_name: None,
+    };
+    receiver.record_gallery_copy(&old_id, &copy).unwrap();
+    receiver.set_relay_history(false).unwrap();
+    assert!(!receiver.relay_eligible(&old_id).unwrap());
+    assert!(receiver.relay_eligible(&pending_id).unwrap());
+    assert!(receiver.gallery_candidates("").unwrap().is_empty());
+    assert_eq!(
+        receiver.gallery_candidates_scoped("", true).unwrap().len(),
+        1
+    );
+    assert_eq!(
+        receiver
+            .gallery_release_bytes(std::slice::from_ref(&old_id))
+            .unwrap(),
+        0
+    );
+    drop(receiver);
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    assert!(!receiver.relay_eligible(&old_id).unwrap());
+    receive(&mut receiver, &pending, &bytes);
+    receiver.record_gallery_copy(&pending_id, &copy).unwrap();
+    assert_eq!(
+        receiver.gallery_candidates("").unwrap()[0].publication.id,
+        pending_id
+    );
+    assert_eq!(
+        receiver
+            .gallery_release_bytes(&[old_id.clone(), pending_id.clone()])
+            .unwrap(),
+        bytes[0].len() as u64
+    );
+    receiver.set_relay_history(false).unwrap();
+    assert!(!receiver.relay_eligible(&pending_id).unwrap());
+    receiver.set_relay_history(true).unwrap();
+    assert_eq!(receiver.gallery_candidates("").unwrap().len(), 2);
+    assert_eq!(
+        receiver.release_gallery_copy(&old_id, &copy, true).unwrap(),
+        0
+    );
+    assert_eq!(
+        receiver
+            .release_gallery_copy(&pending_id, &copy, true)
+            .unwrap(),
+        bytes[0].len() as u64
+    );
+}

@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const en = !navigator.language.toLowerCase().startsWith("zh");
 const w = en ? {
   brand:"Receiver admin", section:"Workspace", navOverview:"Overview", navTransfers:"Transfers", local:"Private Wi-Fi only", breadcrumb:"Receiver", topLocal:"Local dashboard",
-  loginTitle:"Connect to your Pixel", loginHelp:"Find the access code in BackupDuck on your Pixel under Settings → Browser management. It changes each time you enable the page.", code:"10-digit access code", enter:"Open dashboard",
+  loginTitle:"Connect to your Pixel", loginHelp:"Find the access code in BackupDuck on your Pixel under Settings → Browser management. It stays the same after restarting.", remember:"Remember this browser for 30 days", logout:"Sign out", code:"10-digit access code", enter:"Open dashboard",
   eyebrow:"PIXEL RECEIVER", title:"Receiver overview", description:"Track files received, added to the phone gallery, and needing attention.", live:"Receiver online",
   received:"Received", receivedHint:"Confirmed on this Pixel", published:"In phone gallery", publishedHint:"Phone media processing complete", waiting:"Waiting", waitingHint:"Received, not yet in gallery", failed:"Failed", failedHint:"Retry from the list below",
   deviceTitle:"Phone status", deviceNote:"Live readings from the Pixel", temperatureLabel:"Battery temperature", batteryLabel:"Battery", freeLabel:"Available space", reservedLabel:"BackupDuck originals", spaceDetail:(total,minimum)=>`Total ${size(total)} · minimum free ${size(minimum)}`, originalsDetail:"Excludes gallery copies", threshold:value=>`Battery pause at ${value} °C`, thermalPaused:"Heat pause active", thermalOff:"Temperature pause is off", waitingReading:"Waiting for reading", charging:"Charging", notCharging:"Not charging", transfers:"Transfer history", tableNote:"Open a file for full details.", retry:"Retry failed",
@@ -15,7 +15,7 @@ const w = en ? {
   detailTitle:"Transfer details", close:"Close details", senders:"Sending device", progress:"Receive progress", originals:"Originals", error:"Processing note", originalsReceiving:"Still receiving", originalsRetained:"Not cleared from the Pixel", originalsReleased:"Originals cleared from the receiver", conversion:"Enable compatibility conversion on the Pixel, then retry", unsupported:"This media format cannot be processed on the Pixel", burstMpf:"Burst JPEG contains MPF multi-picture metadata", burstExtendedXmp:"Burst JPEG contains extended XMP", burstMultipleXmp:"Burst JPEG contains multiple standard XMP packets", burstXmpConflict:"Burst JPEG already has conflicting burst metadata", burstXmp:"Burst JPEG has unsupported XMP structure", burstStructure:"Burst JPEG has unsupported marker structure", retryHelp:"Try again on the Pixel; if it fails again, check receiver diagnostics", cloud:"Phone gallery completion does not confirm Google Photos cloud backup."
 } : {
   brand:"接收端管理", section:"工作台", navOverview:"概览", navTransfers:"传输记录", local:"仅在当前局域网访问", breadcrumb:"接收端", topLocal:"本地管理页",
-  loginTitle:"连接你的 Pixel", loginHelp:"在 Pixel 的 BackupDuck「设置 → 浏览器管理」中查看访问码。每次开启都会更换。", code:"10 位访问码", enter:"进入管理页",
+  loginTitle:"连接你的 Pixel", loginHelp:"在 Pixel 的 BackupDuck「设置 → 浏览器管理」中查看访问码。重启后保持不变。", remember:"记住此浏览器 30 天", logout:"退出登录", code:"10 位访问码", enter:"进入管理页",
   eyebrow:"PIXEL RECEIVER", title:"接收概览", description:"查看接收、加入手机相册和待处理的文件。", live:"接收端在线",
   received:"已接收", receivedHint:"手机已确认收到的文件", published:"已加入相册", publishedHint:"手机媒体库处理完成", waiting:"等待处理", waitingHint:"已接收，尚未加入相册", failed:"处理失败", failedHint:"可在下方重试",
   deviceTitle:"手机状态", deviceNote:"来自接收端的实时读数", temperatureLabel:"电池温度", batteryLabel:"电量", freeLabel:"可用空间", reservedLabel:"BackupDuck 原件", spaceDetail:(total,minimum)=>`总容量 ${size(total)} · 最低可用 ${size(minimum)}`, originalsDetail:"不含相册副本", threshold:value=>`电池达到 ${value} °C 暂停`, thermalPaused:"高温暂停接收", thermalOff:"温控已关闭", waitingReading:"等待读数", charging:"充电中", notCharging:"未充电", transfers:"传输记录", tableNote:"点击文件名查看完整信息。", retry:"重试失败项",
@@ -39,7 +39,10 @@ $("details-close").setAttribute("aria-label",w.close);
 for (const [id,options] of Object.entries({"state-filter":{all:"allStates",receiving:"receiving",processing:"processing",published:"publishedFilter",failed:"failedFilter"},"kind-filter":{all:"allKinds",photo:"photo",video:"video",motion:"motion",burst:"burst"}})) {
   for (const [value,key] of Object.entries(options)) $(id).querySelector(`option[value="${value}"]`).textContent = w[key];
 }
-let token = sessionStorage.getItem("backupduck-dashboard-token") || "";
+const tokenKey = "backupduck-dashboard-token";
+function clearToken() { token = ""; sessionStorage.removeItem(tokenKey); localStorage.removeItem(tokenKey); }
+let token = localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey) || "";
+$("remember-label").textContent = w.remember; $("logout").textContent = w.logout;
 let currentPage = 1;
 let totalPages = 1;
 let historyVersion = 0;
@@ -71,7 +74,7 @@ async function api(path, options = {}) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(path, {...options, headers, cache:"no-store"});
   if (response.status === 401 && path !== "/api/login") {
-    token = ""; sessionStorage.removeItem("backupduck-dashboard-token");
+    clearToken();
     $("login-panel").hidden = false; $("dashboard").hidden = true;
     throw new Error("login");
   }
@@ -213,9 +216,13 @@ $("login-form").addEventListener("submit",async event => {
   event.preventDefault();
   const code = $("code").value.trim(); if (!/^[0-9]{10}$/.test(code)) return;
   try {
-    const result = await api("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
-    token = result.token; sessionStorage.setItem("backupduck-dashboard-token",token); $("code").value = ""; show();
+    const result = await api("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code,remember:$("remember").checked})});
+    clearToken(); token = result.token; ($( "remember").checked ? localStorage : sessionStorage).setItem(tokenKey,token); $("code").value = ""; show();
   } catch (error) { $("login-help").textContent = error.message === "429" ? w.locked : w.loginError; }
+});
+$("logout").addEventListener("click", async () => {
+  try { await api("/api/logout", {method:"POST"}); clearToken(); $("login-panel").hidden = false; $("dashboard").hidden = true; }
+  catch (_) { message(w.connectionError); }
 });
 $("state-filter").addEventListener("change",() => loadHistory(1));
 $("kind-filter").addEventListener("change",() => loadHistory(1));

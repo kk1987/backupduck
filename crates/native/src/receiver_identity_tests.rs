@@ -155,3 +155,24 @@ fn discovery_changes_only_a_valid_local_route() {
         json!({"endpoint":null})
     );
 }
+
+#[tokio::test]
+async fn occupied_receiving_port_has_a_specific_error_and_recovers_when_released() {
+    let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = occupied.local_addr().unwrap();
+    let root = Scratch::new();
+    let error = match ReceiverHost::start(&root.0, addr, 10000).await {
+        Err(error) => error,
+        Ok(_) => panic!("occupied port accepted"),
+    };
+    assert_eq!(error_code(error), "receiver_port_in_use");
+    drop(occupied);
+    let receiver = ReceiverHost::start(&root.0, addr, 10000).await.unwrap();
+    receiver
+        .pairing
+        .client()
+        .unwrap()
+        .capabilities()
+        .await
+        .unwrap();
+}

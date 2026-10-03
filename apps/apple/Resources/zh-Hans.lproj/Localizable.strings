@@ -598,3 +598,10 @@
 "brand_name" = "备份鸭";
 
 "brand_name" = "备份鸭";
+
+"receiver_connection_check" = "检查连接";
+"receiver_connection_checking" = "正在检查连接";
+"receiver_connection_unavailable" = "检查未完成";
+"receiver_connection_authentication" = "接收端拒绝了已保存的认证信息，请重新配对此设备。";
+"receiver_connection_network" = "暂时无法连接接收端。请检查是否在同一局域网、接收服务是否运行，以及 VPN 是否允许局域网连接。仅凭超时不能确定具体原因。";
+"receiver_connection_unavailable_note" = "连接检查未能完成，请重试或查看运行记录。";

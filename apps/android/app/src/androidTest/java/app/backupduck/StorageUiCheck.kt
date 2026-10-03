@@ -45,7 +45,7 @@ internal fun Instrumentation.checkStorageUI(args: Bundle): String {
             if (ready) break
             Thread.sleep(100)
         }
-        check(ready) { "storage_snapshot_not_rendered" }
+        check(ready) { "storage_snapshot_not_rendered: " + visibleViews().filterIsInstance<TextView>().joinToString(" | ") { it.text.toString() } }
         waitForIdleSync(); screenshot("top")
         runOnMainSync { visibleViews().filterIsInstance<TextView>().first { it.text.toString() == text(R.string.storage_limits) }.performClick() }
         waitForIdleSync(); Thread.sleep(700)
@@ -72,7 +72,7 @@ internal fun Instrumentation.checkStorageUI(args: Bundle): String {
         check(!config().getBoolean("receiver_relay")) { "cancelled_relay_enabled" }
         runOnMainSync { relaySwitch.performClick() }
         waitForIdleSync(); Thread.sleep(700)
-        val enable = uiAutomation.rootInActiveWindow.findAccessibilityNodeInfosByText(text(R.string.relay_enable)).first { it.isClickable && it.className.toString().endsWith("Button") }
+        val enable = uiAutomation.rootInActiveWindow.findAccessibilityNodeInfosByText(text(R.string.relay_include_history)).first { it.isClickable && it.className.toString().endsWith("Button") }
         check(enable.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
         var enabled = false
         for (attempt in 0 until 50) { enabled = config().getBoolean("receiver_relay"); if (enabled) break; Thread.sleep(100) }

@@ -189,3 +189,5 @@ tbody tr:hover{background:#223243}
 .status-badge.failed{background:#4b2829;color:#ffaaa0}
 .status-badge.receiving{background:#1b3e63;color:#b3d8ff}
 }
+
+.remember-choice{display:flex;align-items:center;gap:10px;margin:12px 0}.remember-choice input{width:auto}#logout{float:right}

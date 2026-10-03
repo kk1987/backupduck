@@ -10,7 +10,7 @@
 <body>
   <div class="shell">
     <aside class="sidebar" aria-label="BackupDuck">
-      <div class="brand"><span class="brand-mark">PB</span><div><strong>BackupDuck</strong><small id="brand-subtitle">接收端管理</small></div></div>
+      <div class="brand"><span class="brand-mark">BD</span><div><strong>BackupDuck</strong><small id="brand-subtitle">接收端管理</small></div></div>
       <div class="side-section" id="side-section">工作台</div>
       <a class="side-link active" href="#overview-section"><span class="side-icon">◫</span><span id="nav-overview">概览</span></a>
       <a class="side-link" href="#transfers-section"><span class="side-icon">⇅</span><span id="nav-transfers">传输记录</span></a>
@@ -22,10 +22,11 @@
         <section id="login-panel" class="login-card card">
           <div class="login-symbol">↗</div>
           <h1 id="login-title">连接你的 Pixel</h1>
-          <p id="login-help">在 Pixel 的 BackupDuck「设置 → 浏览器管理」中查看访问码。每次开启都会更换。</p>
-          <form id="login-form"><label id="code-label" for="code">10 位访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><button id="login-button" class="primary" type="submit">进入管理页</button></form>
+          <p id="login-help">在 Pixel 的 BackupDuck「设置 → 浏览器管理」中查看访问码。重启后保持不变。</p>
+          <form id="login-form"><label id="code-label" for="code">10 位访问码</label><input id="code" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="one-time-code" required><label class="remember-choice"><input id="remember" type="checkbox"><span id="remember-label">记住此浏览器 30 天</span></label><button id="login-button" class="primary" type="submit">进入管理页</button></form>
         </section>
         <div id="dashboard" hidden>
+          <button id="logout" type="button">退出登录</button>
           <div class="page-heading"><div><p class="eyebrow" id="eyebrow">PIXEL RECEIVER</p><h1 id="page-title">接收概览</h1><p id="page-description">查看接收、加入手机相册和待处理的文件。</p></div><div class="live-chip"><span class="online-dot"></span><span id="live-text">接收端在线</span></div></div>
           <section id="overview-section" class="overview-grid" aria-label="接收概览">
             <div class="card metric"><div class="metric-top"><span id="label-received">已接收</span><span class="metric-icon blue">⇩</span></div><strong id="received">—</strong><small id="received-hint">手机已确认收到的文件</small></div>

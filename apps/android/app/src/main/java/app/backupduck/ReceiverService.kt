@@ -153,7 +153,14 @@ class ReceiverService : Service() {
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (error: Exception) {
-                        ReceiverState.mutable.update { it.copy(phase = "waiting", error = safeError(error)) }
+                        val code = safeError(error)
+                        runCatching { NativeBridge.request(JSONObject().put("op", "record_event").put("receiver", true)
+                            .put("root", "$filesDir/receiver").put("code", when (code) {
+                                "receiver_port_in_use" -> "receiver_start_port_in_use"
+                                "receiver_interface_unavailable", "wifi_required" -> "receiver_start_network_unavailable"
+                                else -> "receiver_start_failed"
+                            })) }
+                        ReceiverState.mutable.update { it.copy(phase = "waiting", error = code) }
                     } finally {
                         withContext(NonCancellable + Dispatchers.IO) {
                             advertisement?.close()

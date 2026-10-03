@@ -598,3 +598,10 @@
 "brand_name" = "BackupDuck";
 
 "brand_name" = "BackupDuck";
+
+"receiver_connection_check" = "Check connection";
+"receiver_connection_checking" = "Checking connection";
+"receiver_connection_unavailable" = "Check unavailable";
+"receiver_connection_authentication" = "The saved credentials were rejected. Pair this receiver again.";
+"receiver_connection_network" = "Could not reach the receiver. Check the same local network, its receiving service, and whether the VPN allows local connections. A timeout alone does not identify the cause.";
+"receiver_connection_unavailable_note" = "The connection check could not finish. Try again or review the activity log.";
