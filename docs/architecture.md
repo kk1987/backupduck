@@ -29,8 +29,9 @@ IDs. Each claim receives a generation. Acknowledgements from superseded attempts
 are rejected. Foreground attempts left running on process exit are requeued;
 OS-managed attempts stay attached until the native host reconciles its task list.
 Unknown OS tasks are returned for cancellation. Missing tasks query receiver state
-before uploading again. Network, capacity and busy errors retry with capped
-backoff; authentication, integrity and source-access failures require attention.
+before uploading again. Network and capacity errors retry with capped exponential
+backoff; busy replies retry every 60 s (±10 s) without growing or spending an
+attempt. Authentication, integrity and source-access failures require attention.
 
 The iOS host executes immutable file-backed requests through background URLSession.
 Rust prepares register/chunk/commit operations and atomically records each reply
@@ -118,8 +119,9 @@ or off). At the threshold or severe system thermal status it holds admission of
 new assets and subsequent upload chunks. It resumes after cooling below the
 threshold by 2°C and after the system status falls below moderate. The hold is
 combined with Google Photos cleanup holds, so one guard cannot clear the other.
-Sender busy responses retry from receiver-confirmed offsets; the original bytes
-and receipts are retained. The setting controls BackupDuck's receiver, not
+Senders get 409 busy while it holds and retry about once a minute (60 s ±10 s,
+not exponential), so transfers resume within roughly a minute of cooling, from
+receiver-confirmed offsets; the original bytes and receipts are retained. The setting controls BackupDuck's receiver, not
 Android's own thermal management.
 
 ## Receipt and target processing

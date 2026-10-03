@@ -767,3 +767,37 @@ fn cloud_verdicts_mirror_onto_received_jobs() {
     );
     assert_eq!(s.job(job.id).unwrap().cloud.as_deref(), Some("verified"));
 }
+
+#[test]
+fn busy_retries_steadily_while_network_backs_off() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let id = add(&mut s).id;
+    let mut now = 1000;
+    let fail = |s: &mut Sender, failure: Failure, now: &mut i64| -> i64 {
+        let j = s.claim("receiver-1", *now).unwrap().unwrap();
+        assert_eq!(j.id, id);
+        s.fail(&j.attempt(), failure, *now).unwrap();
+        let job = s.job(id).unwrap();
+        assert_eq!(job.state, JobState::Waiting);
+        let delay = job.next_attempt_at - *now;
+        *now = job.next_attempt_at;
+        delay
+    };
+    // A long thermal hold: the wait never grows and attempts are not spent.
+    for _ in 0..6 {
+        let delay = fail(&mut s, Failure::Busy, &mut now);
+        assert!((50..=70).contains(&delay), "busy delay {delay}");
+    }
+    assert_eq!(s.job(id).unwrap().attempts, 0);
+    assert_eq!(s.job(id).unwrap().error_code.as_deref(), Some("busy"));
+    // Network failures after the hold start from the base delay and double.
+    let delays: Vec<_> = (0..6)
+        .map(|_| fail(&mut s, Failure::Network, &mut now))
+        .collect();
+    let jitter = id.rem_euclid(7);
+    assert_eq!(
+        delays,
+        [5, 10, 20, 40, 80, 160].map(|d| d + jitter).to_vec()
+    );
+}

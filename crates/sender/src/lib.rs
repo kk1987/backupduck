@@ -65,6 +65,8 @@ pub struct Attempt {
     pub job_id: i64,
     pub generation: i64,
 }
+/// Receiver-busy retry delay, jittered by up to ten seconds either way.
+pub const BUSY_RETRY_SECONDS: i64 = 60;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Failure {
@@ -832,17 +834,24 @@ impl Sender {
     pub fn fail(&mut self, a: &Attempt, failure: Failure, now: i64) -> Result<()> {
         let job = self.current(a)?;
         self.clear_checkpoint(a.job_id)?;
-        // Stable per-job jitter, capped exponential backoff; no sleeping in core.
-        let base = if matches!(failure, Failure::Capacity | Failure::LowSpace) {
-            60i64
+        let busy = failure == Failure::Busy;
+        let delay = if busy {
+            // Receiver holds (thermal, maintenance) clear on their own. Poll at a
+            // steady pace so a long hold never stretches the wait toward the cap.
+            BUSY_RETRY_SECONDS + (job.id.wrapping_mul(31) + job.generation).rem_euclid(21) - 10
         } else {
-            5
+            // Stable per-job jitter, capped exponential backoff; no sleeping in core.
+            let base = if matches!(failure, Failure::Capacity | Failure::LowSpace) {
+                60i64
+            } else {
+                5
+            };
+            (base * (1i64 << job.attempts.saturating_sub(1).min(8))).min(900) + job.id.rem_euclid(7)
         };
-        let delay = (base * (1i64 << job.attempts.saturating_sub(1).min(8))).min(900)
-            + job.id.rem_euclid(7);
         let due = now.max(0).saturating_add(delay);
         let code = serde_json::to_value(&failure)?.as_str().unwrap().to_owned();
-        self.conn.execute("UPDATE jobs SET state=?1,next_attempt_at=?2,error_code=?3,native_task_id=NULL WHERE id=?4",params![if failure.automatic(){"waiting"}else{"failed"},due,code,a.job_id]).map_err(db)?;
+        // A busy reply does not count as an attempt, so it never inflates later backoff.
+        self.conn.execute("UPDATE jobs SET state=?1,next_attempt_at=?2,error_code=?3,native_task_id=NULL,attempts=CASE WHEN ?5 THEN MAX(attempts-1,0) ELSE attempts END WHERE id=?4",params![if failure.automatic(){"waiting"}else{"failed"},due,code,a.job_id,busy]).map_err(db)?;
         Ok(())
     }
     /// Pause/cancel completion is not a failure and never resets received assets.
