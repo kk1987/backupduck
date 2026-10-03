@@ -29,7 +29,7 @@ impl Maintenance {
             .map_err(database)?;
         run.map(|(run,state)| {
             let checked = self.conn.query_row("SELECT COUNT(*) FROM history_members WHERE receiver=?1", [receiver], |r|r.get(0)).map_err(database)?;
-            let pending = self.conn.query_row("SELECT COUNT(*) FROM history_members h JOIN pending_sources p ON p.receiver=h.receiver AND p.source=h.source WHERE h.receiver=?1", [receiver], |r|r.get(0)).map_err(database)?;
+            let pending = self.conn.query_row("SELECT COUNT(*) FROM history_members h JOIN pending_sources p ON p.receiver=h.receiver AND p.source=h.source WHERE h.receiver=?1 AND p.state='pending'", [receiver], |r|r.get(0)).map_err(database)?;
             Ok(HistoryStatus {run,state,checked,pending})
         }).transpose()
     }
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(m.history_status("a").unwrap().unwrap().state, "paused");
         assert!(m.history_status("b").unwrap().is_none());
         m.history_control("a", HistoryAction::Resume).unwrap();
-        m.source_result("a", "one", true).unwrap();
+        m.source_result("a", "one", true, None).unwrap();
         let known = BTreeMap::from([
             ("one".into(), "queued".into()),
             ("already-received".into(), "received".into()),

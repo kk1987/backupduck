@@ -90,6 +90,7 @@ pub struct Maintenance {
 #[serde(default, deny_unknown_fields)]
 pub struct EventContext {
     pub publication_error: Option<PublicationError>,
+    pub preparation_error: Option<PreparationError>,
     pub queued: Option<u64>,
     pub running: Option<u64>,
     pub waiting: Option<u64>,
@@ -188,6 +189,88 @@ impl PublicationError {
         }
     }
 }
+/// Pending sources that fail this many times for an item-specific reason are
+/// parked as `needs_attention` instead of retrying every five minutes.
+pub const PREPARATION_ATTEMPT_LIMIT: i64 = 5;
+/// Fixed vocabulary for pre-queue failures; caller text is never stored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreparationError {
+    // Item-specific: retrying the same original is unlikely to help.
+    SourceUnavailable,
+    Unsupported,
+    ExportFailed,
+    LocalCacheBudgetSingleItem,
+    ReceiverBudgetSingleItem,
+    PhotosPermission,
+    HiddenExcluded,
+    // Environmental: clears on its own, so never capped.
+    LocalCacheBudget,
+    LocalFreeSpace,
+    Network,
+    Capacity,
+    LowSpace,
+    Busy,
+    ReceiverUnavailable,
+    Cancelled,
+    Other,
+}
+impl PreparationError {
+    pub fn from_code(code: Option<&str>) -> Self {
+        match code {
+            Some("source_unavailable") => Self::SourceUnavailable,
+            Some("unsupported") => Self::Unsupported,
+            Some("export_failed") => Self::ExportFailed,
+            Some("local_cache_budget_single_item") => Self::LocalCacheBudgetSingleItem,
+            Some("receiver_budget_single_item") => Self::ReceiverBudgetSingleItem,
+            Some("photos_permission") => Self::PhotosPermission,
+            Some("hidden_excluded") => Self::HiddenExcluded,
+            Some("local_cache_budget") => Self::LocalCacheBudget,
+            Some("local_free_space") => Self::LocalFreeSpace,
+            Some("network") => Self::Network,
+            Some("capacity") => Self::Capacity,
+            Some("low_space") => Self::LowSpace,
+            Some("busy") => Self::Busy,
+            Some("receiver_unavailable") => Self::ReceiverUnavailable,
+            Some("cancelled") => Self::Cancelled,
+            _ => Self::Other,
+        }
+    }
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::SourceUnavailable => "source_unavailable",
+            Self::Unsupported => "unsupported",
+            Self::ExportFailed => "export_failed",
+            Self::LocalCacheBudgetSingleItem => "local_cache_budget_single_item",
+            Self::ReceiverBudgetSingleItem => "receiver_budget_single_item",
+            Self::PhotosPermission => "photos_permission",
+            Self::HiddenExcluded => "hidden_excluded",
+            Self::LocalCacheBudget => "local_cache_budget",
+            Self::LocalFreeSpace => "local_free_space",
+            Self::Network => "network",
+            Self::Capacity => "capacity",
+            Self::LowSpace => "low_space",
+            Self::Busy => "busy",
+            Self::ReceiverUnavailable => "receiver_unavailable",
+            Self::Cancelled => "cancelled",
+            Self::Other => "other",
+        }
+    }
+    /// Unknown codes count toward the cap so a new failure mode cannot loop forever.
+    pub fn is_item_specific(self) -> bool {
+        !matches!(
+            self,
+            Self::LocalCacheBudget
+                | Self::LocalFreeSpace
+                | Self::Network
+                | Self::Capacity
+                | Self::LowSpace
+                | Self::Busy
+                | Self::ReceiverUnavailable
+                | Self::Cancelled
+        )
+    }
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferMode {
@@ -247,6 +330,27 @@ impl Maintenance {
             )
             .map_err(database)?;
         }
+        // Retry bookkeeping for capped preparation; old rows start fresh.
+        for (column, definition) in [
+            ("attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("error_code", "TEXT"),
+            ("state", "TEXT NOT NULL DEFAULT 'pending'"),
+        ] {
+            let present: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('pending_sources') WHERE name=?1)",
+                    [column],
+                    |r| r.get(0),
+                )
+                .map_err(database)?;
+            if !present {
+                conn.execute(
+                    &format!("ALTER TABLE pending_sources ADD COLUMN {column} {definition}"),
+                    [],
+                )
+                .map_err(database)?;
+            }
+        }
         let history_date: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('history_members') WHERE name='created_at_ms')", [], |r|r.get(0)).map_err(database)?;
         if !history_date {
             conn.execute(
@@ -293,8 +397,14 @@ impl Maintenance {
         }
         self.conn.execute("INSERT INTO configuration VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET value=excluded.value", [serde_json::to_string(&settings)?]).map_err(database)?;
         self.settings = settings;
+        // New settings (for example a larger cache budget) may resolve parked
+        // items, so give everything a fresh cap. A parked item that still fails
+        // costs at most another PREPARATION_ATTEMPT_LIMIT exports.
         self.conn
-            .execute("UPDATE pending_sources SET retry_at=0", [])
+            .execute(
+                "UPDATE pending_sources SET retry_at=0,attempts=0,state='pending'",
+                [],
+            )
             .map_err(database)?;
         self.log("settings_changed", None, None)?;
         self.prune()
@@ -362,15 +472,21 @@ impl Maintenance {
         }
         let mut query = self
             .conn
-            .prepare("SELECT COUNT(*) FROM pending_sources WHERE receiver=?1 AND source=?2")
+            .prepare("SELECT state FROM pending_sources WHERE receiver=?1 AND source=?2")
             .map_err(database)?;
         let mut result = std::collections::BTreeMap::new();
         for (id, _) in sources {
-            let count: i64 = query
+            let state: Option<String> = query
                 .query_row(params![receiver, id], |r| r.get(0))
+                .optional()
                 .map_err(database)?;
-            if count > 0 {
-                result.insert(id.clone(), "preparing".into());
+            if let Some(state) = state {
+                let label = if state == "needs_attention" {
+                    "needs_attention"
+                } else {
+                    "preparing"
+                };
+                result.insert(id.clone(), label.into());
             }
         }
         Ok(result)
@@ -393,10 +509,10 @@ impl Maintenance {
         let direction = if descending { "DESC" } else { "ASC" };
         let (count_sql, page_sql) = if history {
             ("SELECT COUNT(*) FROM history_members WHERE receiver=?1",
-             format!("SELECT h.rowid,h.source,h.revision,p.retry_at FROM history_members h LEFT JOIN pending_sources p ON p.receiver=h.receiver AND p.source=h.source WHERE h.receiver=?1 AND (?2=0 OR h.rowid{comparison}?2) ORDER BY h.rowid {direction} LIMIT 100"))
+             format!("SELECT h.rowid,h.source,h.revision,p.retry_at,p.state,p.error_code,p.attempts FROM history_members h LEFT JOIN pending_sources p ON p.receiver=h.receiver AND p.source=h.source WHERE h.receiver=?1 AND (?2=0 OR h.rowid{comparison}?2) ORDER BY h.rowid {direction} LIMIT 100"))
         } else {
-            ("SELECT COUNT(*) FROM pending_sources WHERE receiver=?1",
-             format!("SELECT rowid,source,'',retry_at FROM pending_sources WHERE receiver=?1 AND (?2=0 OR rowid{comparison}?2) ORDER BY rowid {direction} LIMIT 100"))
+            ("SELECT COUNT(*) FROM pending_sources WHERE receiver=?1 AND state='pending'",
+             format!("SELECT rowid,source,'',retry_at,state,error_code,attempts FROM pending_sources WHERE receiver=?1 AND state='pending' AND (?2=0 OR rowid{comparison}?2) ORDER BY rowid {direction} LIMIT 100"))
         };
         let total: i64 = tx
             .query_row(count_sql, [receiver], |r| r.get(0))
@@ -409,15 +525,16 @@ impl Maintenance {
             )
             .optional()
             .map_err(database)?;
-        let rows =
-            {
-                let mut query = tx.prepare(&page_sql).map_err(database)?;
-                let rows = query.query_map(params![receiver, after], |r| Ok(json!({
+        let rows = {
+            let mut query = tx.prepare(&page_sql).map_err(database)?;
+            let rows = query.query_map(params![receiver, after], |r| Ok(json!({
                 "cursor": r.get::<_,i64>(0)?, "source": r.get::<_,String>(1)?,
-                "revision": r.get::<_,String>(2)?, "retry_at": r.get::<_,Option<i64>>(3)?
+                "revision": r.get::<_,String>(2)?, "retry_at": r.get::<_,Option<i64>>(3)?,
+                "pending_state": r.get::<_,Option<String>>(4)?,
+                "error_code": r.get::<_,Option<String>>(5)?, "attempts": r.get::<_,Option<i64>>(6)?
             }))).map_err(database)?.collect::<std::result::Result<Vec<_>,_>>().map_err(database)?;
-                rows
-            };
+            rows
+        };
         tx.commit().map_err(database)?;
         Ok(json!({"total":total,"run":run,"items":rows}))
     }
@@ -471,10 +588,12 @@ impl Maintenance {
         } else {
             after_value.ok_or_else(|| Error::Invalid("sort cursor".into()))?
         };
+        // Parked sources are listed by NeedsAttention, not as delayed work.
+        let only_pending = if history { "" } else { " AND state='pending'" };
         let tx = self.conn.unchecked_transaction().map_err(database)?;
         let total: i64 = tx
             .query_row(
-                &format!("SELECT COUNT(*) FROM {table} WHERE receiver=?1"),
+                &format!("SELECT COUNT(*) FROM {table} WHERE receiver=?1{only_pending}"),
                 [receiver],
                 |r| r.get(0),
             )
@@ -488,42 +607,52 @@ impl Maintenance {
             .optional()
             .map_err(database)?;
         let revision = if history { "revision" } else { "''" };
-        let retry = if history {
-            "(SELECT retry_at FROM pending_sources p WHERE p.receiver=history_members.receiver AND p.source=history_members.source)"
-        } else {
-            "retry_at"
+        let pending = |column: &str| {
+            if history {
+                format!("(SELECT {column} FROM pending_sources p WHERE p.receiver=history_members.receiver AND p.source=history_members.source)")
+            } else {
+                column.to_owned()
+            }
         };
-        let sql=format!("SELECT rowid,source,{revision},{retry},created_at_ms,{value} FROM {table} WHERE receiver=?1 AND (?2=0 OR ({value},rowid){comparison}(?3,?2)) ORDER BY {value} {direction},rowid {direction} LIMIT 100");
+        let (retry, state, error, attempts) = (
+            pending("retry_at"),
+            pending("state"),
+            pending("error_code"),
+            pending("attempts"),
+        );
+        let sql=format!("SELECT rowid,source,{revision},{retry},created_at_ms,{value},{state},{error},{attempts} FROM {table} WHERE receiver=?1{only_pending} AND (?2=0 OR ({value},rowid){comparison}(?3,?2)) ORDER BY {value} {direction},rowid {direction} LIMIT 100");
         let rows = {
             let mut stmt = tx.prepare(&sql).map_err(database)?;
-            let rows=stmt.query_map(params![receiver,after,cursor],|r|Ok(json!({"cursor":r.get::<_,i64>(0)?,"source":r.get::<_,String>(1)?,"revision":r.get::<_,String>(2)?,"retry_at":r.get::<_,Option<i64>>(3)?,"created_at_ms":r.get::<_,Option<i64>>(4)?,"sort_value":r.get::<_,i64>(5)?}))).map_err(database)?.collect::<std::result::Result<Vec<_>,_>>().map_err(database)?;
+            let rows=stmt.query_map(params![receiver,after,cursor],|r|Ok(json!({"cursor":r.get::<_,i64>(0)?,"source":r.get::<_,String>(1)?,"revision":r.get::<_,String>(2)?,"retry_at":r.get::<_,Option<i64>>(3)?,"created_at_ms":r.get::<_,Option<i64>>(4)?,"sort_value":r.get::<_,i64>(5)?,"pending_state":r.get::<_,Option<String>>(6)?,"error_code":r.get::<_,Option<String>>(7)?,"attempts":r.get::<_,Option<i64>>(8)?}))).map_err(database)?.collect::<std::result::Result<Vec<_>,_>>().map_err(database)?;
             rows
         };
         tx.commit().map_err(database)?;
         Ok(json!({"total":total,"run":run,"items":rows}))
     }
     pub fn pending(&self, receiver: &str) -> Result<Value> {
-        let count: i64 = self
+        let (count, needs_attention): (i64, i64) = self
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM pending_sources WHERE receiver=?1",
+                "SELECT COALESCE(SUM(state='pending'),0),COALESCE(SUM(state='needs_attention'),0) FROM pending_sources WHERE receiver=?1",
                 [receiver],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .map_err(database)?;
-        let mut s=self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND retry_at<=?2 ORDER BY created_at_ms DESC,source LIMIT 5").map_err(database)?;
+        let mut s=self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND state='pending' AND retry_at<=?2 ORDER BY created_at_ms DESC,source LIMIT 5").map_err(database)?;
         let ids = s
             .query_map(params![receiver, now()], |r| r.get::<_, String>(0))
             .map_err(database)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(database)?;
-        let mut query = self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND created_at_ms IS NULL ORDER BY rowid LIMIT 200").map_err(database)?;
+        let mut query = self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND state='pending' AND created_at_ms IS NULL ORDER BY rowid LIMIT 200").map_err(database)?;
         let unordered = query
             .query_map([receiver], |r| r.get::<_, String>(0))
             .map_err(database)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(database)?;
-        Ok(json!({"count":count,"sources":ids,"unordered":unordered}))
+        Ok(
+            json!({"count":count,"sources":ids,"unordered":unordered,"needs_attention":needs_attention}),
+        )
     }
     /// Metadata-only backfill also orders queues created by older app versions.
     /// Missing or inaccessible dates sort last; no source membership is removed.
@@ -547,7 +676,13 @@ impl Maintenance {
         tx.commit().map_err(database)?;
         Ok(())
     }
-    pub fn source_result(&self, receiver: &str, source: &str, complete: bool) -> Result<()> {
+    pub fn source_result(
+        &self,
+        receiver: &str,
+        source: &str,
+        complete: bool,
+        error: Option<&str>,
+    ) -> Result<()> {
         if complete {
             self.conn
                 .execute(
@@ -555,15 +690,98 @@ impl Maintenance {
                     params![receiver, source],
                 )
                 .map_err(database)?;
-        } else {
-            self.conn
-                .execute(
-                    "UPDATE pending_sources SET retry_at=?3 WHERE receiver=?1 AND source=?2",
-                    params![receiver, source, now() + 300],
-                )
-                .map_err(database)?;
+            return Ok(());
+        }
+        let error = PreparationError::from_code(error);
+        // Only item-specific failures spend the cap; waiting for the network
+        // or cache space must not park a source on its next ordinary failure.
+        let parked: Option<bool> = self
+            .conn
+            .query_row(
+                "UPDATE pending_sources SET attempts=attempts+?5,error_code=?3,retry_at=?4,
+                   state=CASE WHEN ?5 AND attempts+1>=?6 THEN 'needs_attention' ELSE state END
+                 WHERE receiver=?1 AND source=?2
+                 RETURNING ?5 AND state='needs_attention' AND attempts=?6",
+                params![
+                    receiver,
+                    source,
+                    error.code(),
+                    now() + 300,
+                    error.is_item_specific(),
+                    PREPARATION_ATTEMPT_LIMIT
+                ],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(database)?;
+        if parked == Some(true) {
+            let context = EventContext {
+                preparation_error: Some(error),
+                ..Default::default()
+            };
+            self.log_context("source_needs_attention", None, None, Some(&context))?;
         }
         Ok(())
+    }
+    /// Receiver-scoped page of parked sources, oldest first.
+    pub fn needs_attention(&self, receiver: &str, after: i64) -> Result<Value> {
+        let tx = self.conn.unchecked_transaction().map_err(database)?;
+        let total: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM pending_sources WHERE receiver=?1 AND state='needs_attention'",
+                [receiver],
+                |r| r.get(0),
+            )
+            .map_err(database)?;
+        let items = {
+            let mut stmt = tx.prepare("SELECT rowid,source,error_code,attempts,created_at_ms FROM pending_sources WHERE receiver=?1 AND state='needs_attention' AND rowid>?2 ORDER BY rowid LIMIT 100").map_err(database)?;
+            let rows = stmt
+                .query_map(params![receiver, after], |r| {
+                    Ok(
+                        json!({"cursor":r.get::<_,i64>(0)?,"source":r.get::<_,String>(1)?,
+                    "error_code":r.get::<_,Option<String>>(2)?,"attempts":r.get::<_,i64>(3)?,
+                    "created_at_ms":r.get::<_,Option<i64>>(4)?}),
+                    )
+                })
+                .map_err(database)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(database)?;
+            rows
+        };
+        tx.commit().map_err(database)?;
+        Ok(json!({"total":total,"items":items}))
+    }
+    /// Returns a source to the regular preparation queue with a fresh cap.
+    pub fn retry_source(&self, receiver: &str, source: &str) -> Result<usize> {
+        self.conn
+            .execute(
+                "UPDATE pending_sources SET state='pending',attempts=0,retry_at=0 WHERE receiver=?1 AND source=?2",
+                params![receiver, source],
+            )
+            .map_err(database)
+    }
+    pub fn retry_all_needs_attention(&self, receiver: &str) -> Result<usize> {
+        self.conn
+            .execute(
+                "UPDATE pending_sources SET state='pending',attempts=0,retry_at=0 WHERE receiver=?1 AND state='needs_attention'",
+                [receiver],
+            )
+            .map_err(database)
+    }
+    /// Drops the source from preparation. A later history scan may schedule it
+    /// again because skipping is not a receipt.
+    pub fn skip_source(&self, receiver: &str, source: &str) -> Result<usize> {
+        let removed = self
+            .conn
+            .execute(
+                "DELETE FROM pending_sources WHERE receiver=?1 AND source=?2",
+                params![receiver, source],
+            )
+            .map_err(database)?;
+        if removed > 0 {
+            self.log("source_skipped", None, None)?;
+        }
+        Ok(removed)
     }
     pub fn events(&self) -> Result<Value> {
         self.event_update(None)
@@ -1203,13 +1421,13 @@ mod tests {
             m.schedule_sources("a", &["one".into(), "two".into(), "one".into()])
                 .unwrap();
             m.schedule_sources("b", &["one".into()]).unwrap();
-            m.source_result("a", "one", false).unwrap();
-            m.source_result("a", "two", true).unwrap();
+            m.source_result("a", "one", false, None).unwrap();
+            m.source_result("a", "two", true, None).unwrap();
         }
         let mut m = Maintenance::open(&t.0).unwrap();
         assert_eq!(
             m.pending("a").unwrap(),
-            json!({"count":1,"sources":[],"unordered":["one"]})
+            json!({"count":1,"sources":[],"unordered":["one"],"needs_attention":0})
         );
         assert_eq!(m.pending("b").unwrap()["sources"], json!(["one"]));
         let inputs = vec![("one".into(), "1".into()), ("two".into(), "1".into())];
@@ -1226,19 +1444,157 @@ mod tests {
         assert_eq!(m.pending("a").unwrap()["sources"], json!(["one"]));
     }
     #[test]
+    fn item_specific_failures_park_after_cap_and_can_be_retried_or_skipped() {
+        let t = Temp::new();
+        let mut m = Maintenance::open(&t.0).unwrap();
+        m.schedule_sources("a", &["broken".into(), "ok".into()])
+            .unwrap();
+        m.schedule_sources("b", &["broken".into()]).unwrap();
+        for attempt in 1..=PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "broken", false, Some("unsupported"))
+                .unwrap();
+            let parked = m.needs_attention("a", 0).unwrap()["total"]
+                .as_i64()
+                .unwrap();
+            assert_eq!(parked, i64::from(attempt == PREPARATION_ATTEMPT_LIMIT));
+        }
+        let pending = m.pending("a").unwrap();
+        assert_eq!(pending["count"], 1);
+        assert_eq!(pending["needs_attention"], 1);
+        m.conn
+            .execute("UPDATE pending_sources SET retry_at=0", [])
+            .unwrap();
+        assert_eq!(m.pending("a").unwrap()["sources"], json!(["ok"]));
+        let page = m.needs_attention("a", 0).unwrap();
+        assert_eq!(page["items"][0]["source"], "broken");
+        assert_eq!(page["items"][0]["error_code"], "unsupported");
+        assert_eq!(page["items"][0]["attempts"], PREPARATION_ATTEMPT_LIMIT);
+        assert_eq!(m.needs_attention("b", 0).unwrap()["total"], 0);
+        assert_eq!(m.pending("b").unwrap()["sources"], json!(["broken"]));
+        assert_eq!(m.events().unwrap()[0]["code"], "source_needs_attention");
+        assert_eq!(
+            m.events().unwrap()[0]["context"]["preparation_error"],
+            "unsupported"
+        );
+        // Parked rows leave delayed-work browsing but stay labelled in history.
+        assert_eq!(m.source_page("a", false, 0).unwrap()["total"], 1);
+        let sorted = m
+            .source_page_sorted("a", false, 0, None, "added", false)
+            .unwrap();
+        assert_eq!(sorted["total"], 1);
+        assert_eq!(sorted["items"][0]["source"], "ok");
+        let inputs = vec![("broken".into(), "1".into())];
+        assert_eq!(
+            m.pending_states("a", &inputs).unwrap()["broken"],
+            "needs_attention"
+        );
+        // Rescheduling never revives a parked row.
+        m.schedule_sources("a", &["broken".into()]).unwrap();
+        assert_eq!(m.pending("a").unwrap()["needs_attention"], 1);
+        assert_eq!(m.retry_source("a", "broken").unwrap(), 1);
+        let pending = m.pending("a").unwrap();
+        assert_eq!(pending["needs_attention"], 0);
+        assert_eq!(pending["sources"], json!(["broken", "ok"]));
+        for _ in 0..PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "broken", false, Some("hidden_excluded"))
+                .unwrap();
+        }
+        assert_eq!(m.retry_all_needs_attention("a").unwrap(), 1);
+        assert_eq!(m.pending("a").unwrap()["count"], 2);
+        for _ in 0..PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "broken", false, Some("private/path.jpg"))
+                .unwrap();
+        }
+        let page = m.needs_attention("a", 0).unwrap();
+        assert_eq!(page["items"][0]["error_code"], "other");
+        // Settings changes give parked work a fresh cap.
+        m.save(m.settings.clone()).unwrap();
+        assert_eq!(m.pending("a").unwrap()["needs_attention"], 0);
+        for _ in 0..PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "broken", false, None).unwrap();
+        }
+        assert_eq!(m.skip_source("a", "broken").unwrap(), 1);
+        assert_eq!(m.events().unwrap()[0]["code"], "source_skipped");
+        assert_eq!(m.pending("a").unwrap()["needs_attention"], 0);
+        assert_eq!(m.pending("b").unwrap()["count"], 1);
+    }
+    #[test]
+    fn environmental_failures_are_never_capped() {
+        let t = Temp::new();
+        let m = Maintenance::open(&t.0).unwrap();
+        m.schedule_sources("a", &["slow".into()]).unwrap();
+        for code in [
+            "network",
+            "local_cache_budget",
+            "local_free_space",
+            "capacity",
+            "low_space",
+            "busy",
+            "receiver_unavailable",
+            "cancelled",
+            "network",
+            "network",
+        ] {
+            m.source_result("a", "slow", false, Some(code)).unwrap();
+        }
+        let pending = m.pending("a").unwrap();
+        assert_eq!(pending["count"], 1);
+        assert_eq!(pending["needs_attention"], 0);
+        let row = &m.source_page("a", false, 0).unwrap()["items"][0];
+        assert_eq!(row["error_code"], "network");
+        assert_eq!(row["attempts"], 0);
+        assert!(row["retry_at"].as_i64().unwrap() > now());
+        // Environmental waits do not spend the item-specific budget.
+        for _ in 1..PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "slow", false, Some("source_unavailable"))
+                .unwrap();
+        }
+        assert_eq!(m.pending("a").unwrap()["needs_attention"], 0);
+        assert!(PreparationError::from_code(Some("export_failed")).is_item_specific());
+        assert!(PreparationError::from_code(None).is_item_specific());
+        assert!(!PreparationError::from_code(Some("local_cache_budget")).is_item_specific());
+        assert!(
+            PreparationError::from_code(Some("local_cache_budget_single_item")).is_item_specific()
+        );
+    }
+    #[test]
+    fn legacy_pending_rows_gain_retry_columns_and_stay_pending() {
+        let t = Temp::new();
+        let conn = Connection::open(t.0.join("maintenance.sqlite3")).unwrap();
+        conn.execute_batch("CREATE TABLE pending_sources(receiver TEXT NOT NULL,source TEXT NOT NULL,retry_at INTEGER NOT NULL DEFAULT 0,created_at_ms INTEGER,PRIMARY KEY(receiver,source));
+            INSERT INTO pending_sources VALUES('a','old',0,5);").unwrap();
+        drop(conn);
+        let m = Maintenance::open(&t.0).unwrap();
+        let pending = m.pending("a").unwrap();
+        assert_eq!(pending["sources"], json!(["old"]));
+        assert_eq!(pending["needs_attention"], 0);
+        for _ in 0..PREPARATION_ATTEMPT_LIMIT {
+            m.source_result("a", "old", false, Some("unsupported"))
+                .unwrap();
+        }
+        drop(m);
+        // Reopening is idempotent and keeps the parked state.
+        let m = Maintenance::open(&t.0).unwrap();
+        assert_eq!(m.pending("a").unwrap()["needs_attention"], 1);
+        assert_eq!(
+            m.needs_attention("a", 0).unwrap()["items"][0]["source"],
+            "old"
+        );
+    }
+    #[test]
     fn source_browser_paginates_delayed_work_and_history_by_receiver() {
         let t = Temp::new();
         let m = Maintenance::open(&t.0).unwrap();
         let sources = (0..205).map(|n| format!("asset-{n}")).collect::<Vec<_>>();
         m.schedule_sources("a", &sources).unwrap();
         m.schedule_sources("b", &["private-b".into()]).unwrap();
-        m.source_result("a", "asset-0", false).unwrap();
+        m.source_result("a", "asset-0", false, None).unwrap();
         let page = m.source_page("a", false, 0).unwrap();
         assert_eq!(page["total"], 205);
         assert_eq!(page["items"].as_array().unwrap().len(), 100);
         assert!(page["items"][0]["retry_at"].as_i64().unwrap() > now());
         let cursor = page["items"][99]["cursor"].as_i64().unwrap();
-        m.source_result("a", "asset-0", true).unwrap();
+        m.source_result("a", "asset-0", true, None).unwrap();
         let second = m.source_page("a", false, cursor).unwrap();
         assert_eq!(second["items"][0]["source"], "asset-100");
         let end = m
@@ -1314,7 +1670,7 @@ mod tests {
         let first = m.source_page_ordered("a", false, 0, true).unwrap();
         let cursor = first["items"][99]["cursor"].as_i64().unwrap();
         let source = first["items"][99]["source"].as_str().unwrap();
-        m.source_result("a", source, true).unwrap();
+        m.source_result("a", source, true, None).unwrap();
         let second = m.source_page_ordered("a", false, cursor, true).unwrap();
         assert_eq!(second["items"][0]["source"], "asset-104");
         assert_eq!(second["total"], 204);

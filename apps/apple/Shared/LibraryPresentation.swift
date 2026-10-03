@@ -53,7 +53,7 @@ struct LibraryGroup: Sendable {
     guard complete, !sources.isEmpty else { return nil }
     let known = sources.compactMap { states[$0.id] }
     // An active or failed member takes precedence over a completed cover photo.
-    for state in ["failed", "preparing", "running", "waiting", "paused", "queued", "scheduled"] {
+    for state in ["failed", "needs_attention", "preparing", "running", "waiting", "paused", "queued", "scheduled"] {
       if known.contains(state) { return state }
     }
     // `backed_up` is a received copy verified in Google Photos; mixed groups

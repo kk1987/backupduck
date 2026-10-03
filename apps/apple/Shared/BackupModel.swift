@@ -471,6 +471,34 @@ enum Bridge {
     if !allowed { message = NSLocalizedString("photos_permission_needed", comment: "") }
     return allowed
   }
+  /// Stable codes understood by Rust's preparation retry policy.
+  nonisolated static func preparationErrorCode(_ error: Error) -> String {
+    if let failure = error as? Bridge.Failure { return failure.code }
+    if error is CancellationError { return "cancelled" }
+    let error = error as NSError
+    if error.domain == NSURLErrorDomain { return "network" }
+    if error.domain == PHPhotosErrorDomain,
+      error.code == PHPhotosError.Code.networkAccessRequired.rawValue
+    {
+      return "network"
+    }
+    return "export_failed"
+  }
+  /// Default fetches omit hidden assets; distinguish them from deleted ones.
+  static func missingSourceReasons(_ missing: [String], authorization: PHAuthorizationStatus)
+    -> [String: String]
+  {
+    guard !missing.isEmpty else { return [:] }
+    if authorization == .limited {
+      return Dictionary(uniqueKeysWithValues: missing.map { ($0, "photos_permission") })
+    }
+    let options = photoLibraryFetchOptions()
+    options.includeHiddenAssets = true
+    let hidden = PHAsset.fetchAssets(withLocalIdentifiers: missing, options: options)
+    var reasons = Dictionary(uniqueKeysWithValues: missing.map { ($0, "source_unavailable") })
+    for index in 0..<hidden.count { reasons[hidden.object(at: index).localIdentifier] = "hidden_excluded" }
+    return reasons
+  }
   static func shouldSkipSource(_ state: String?, rebackupReceived: Bool) -> Bool {
     guard let state else { return false }
     return state != "failed" && !(rebackupReceived && state == "received")
@@ -529,10 +557,12 @@ enum Bridge {
       succeeded = false
       message = NSLocalizedString("photos_permission_needed", comment: "")
       let found = Set((0..<assets.count).map { assets.object(at: $0).localIdentifier })
-      for missing in identifiers where !found.contains(missing) {
+      let missing = identifiers.filter { !found.contains($0) }
+      let reasons = Self.missingSourceReasons(missing, authorization: authorization)
+      for source in missing {
         _ = try? await Bridge.call([
-          "op": "source_result", "receiver_id": target.receiverID, "source": missing,
-          "complete": false,
+          "op": "source_result", "receiver_id": target.receiverID, "source": source,
+          "complete": false, "error": reasons[source] ?? "source_unavailable",
         ])
       }
       preparationReason = "source_unavailable"
@@ -629,12 +659,13 @@ enum Bridge {
       } catch {
         succeeded = false
         message = error.localizedDescription
-        let reason = (error as? Bridge.Failure)?.code ?? "source_unavailable"
+        let reason = Self.preparationErrorCode(error)
         preparationReason = reason
         _ = try? await Bridge.call(["op": "record_event", "receiver": false, "code": reason])
+        // Rust caps item-specific reasons and parks the source for attention.
         _ = try? await Bridge.call([
           "op": "source_result", "receiver_id": target.receiverID, "source": sourceID,
-          "complete": false,
+          "complete": false, "error": reason,
         ])
       }
     }
@@ -773,7 +804,15 @@ enum Bridge {
       throw Bridge.Failure(code: snapshot.reason ?? snapshot.limitingReason)
     }
     guard await canPrepareForReceiver() else { throw Bridge.Failure(code: "receiver_unavailable") }
-    let writer = try BoundedExportWriter(url: url, snapshot: snapshot)
+    // Earlier resources of this asset share its folder and count toward its size.
+    let folder = url.deletingLastPathComponent()
+    let staged = ((try? FileManager.default.contentsOfDirectory(
+      at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
+      .filter { $0 != url }
+      .reduce(UInt64(0)) {
+        $0 + UInt64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+      }
+    let writer = try BoundedExportWriter(url: url, snapshot: snapshot, staged: staged)
     activeExport = writer
     defer { activeExport = nil }
     let options = PHAssetResourceRequestOptions()

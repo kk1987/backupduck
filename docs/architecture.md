@@ -41,6 +41,33 @@ atomically before export; the shared queue deduplicates the exported asset.
 BGProcessingTask provides opportunistic discovery and retry wakes, not a timer or
 an assurance of immediate work while the app is closed.
 
+## Preparation retry policy
+
+Sources wait in the maintenance database until their originals are exported and
+queued. A failed preparation retries five minutes later and records a fixed error
+code; caller text is never stored. Item-specific reasons (unavailable or hidden
+originals, limited photo access, unsupported formats, export failures, an item
+larger than the staging cache budget, and unknown codes) count toward a cap.
+After five such failures the source is parked as `needs_attention`: it leaves the
+preparation queue and delayed-work browsing, history rows label it, and
+`needs_attention` lists it with its code and attempt count. Environmental reasons
+(cache budget, local free space, network, receiver capacity, low space, busy,
+receiver unavailable, cancellation) never spend the cap and keep retrying.
+
+`retry_source` and `retry_all_needs_attention` return parked sources with a fresh
+cap. `skip_source` removes one; a later history scan may schedule it again because
+skipping is not a receipt. Rescheduling never revives a parked source. Saving
+storage settings resets every cap, since a larger budget may resolve parked items;
+an item that still fails costs at most five more exports. The PhotoKit discovery
+queue hands a source to this queue after five failed attempts instead of retrying
+it on its own.
+
+An asset whose new bytes exceed the receiver's entire budget is rejected with
+HTTP 507 and reason `receiver_budget_single_item`. The sender records it as a
+failed task that needs a manual retry after the budget is raised, instead of
+waiting forever like ordinary capacity pressure. Older receivers report plain
+capacity, which keeps the automatic retry.
+
 ## Receiver durability
 
 The receiver has a single writer lock for its root. SQLite stores assets and

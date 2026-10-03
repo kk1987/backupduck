@@ -156,6 +156,18 @@
 "event_low_space" = "Receiver free space is below its reserve. Retrying automatically after space becomes available.";
 "event_local_free_space" = "Not enough free space to prepare originals. Free up disk space to continue automatically.";
 "event_local_cache_budget" = "Staging cache budget reached. Wait for verified transfers or raise the budget in settings.";
+"state_needs_attention" = "Preparation stopped after repeated failures";
+"error_receiver_budget_single_item" = "This item is larger than the receiver's entire storage budget. Raise the budget on the receiver, then retry.";
+"error_local_cache_budget_single_item" = "This item is larger than the staging cache budget. Raise the budget in settings, then retry.";
+"error_export_failed" = "Photos could not export the original. Retry later or check the item in Photos.";
+"error_hidden_excluded" = "This item is hidden in Photos. Unhide it to back it up.";
+"error_photos_permission" = "Limited photo access does not include this item. Allow access in Settings.";
+"error_other" = "Original preparation failed for an unrecognized reason.";
+"event_source_needs_attention" = "A photo stopped retrying preparation and needs attention";
+"event_source_skipped" = "A photo was removed from preparation";
+"event_receiver_budget_single_item" = "This item is larger than the receiver's entire storage budget. Raise the budget on the receiver, then retry.";
+"event_local_cache_budget_single_item" = "This item is larger than the staging cache budget. Raise the budget in settings, then retry.";
+"event_export_failed" = "Photos could not export the original. Retry later or check the item in Photos.";
 "pairing_unlock_wait" = "Loading saved pairing. If macOS asks for Keychain access, complete authorization in the system dialog.";
 
 "logs_job_id" = "Task #%lld";

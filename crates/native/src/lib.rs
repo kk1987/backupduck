@@ -553,6 +553,24 @@ enum Command {
         receiver_id: String,
         source: String,
         complete: bool,
+        #[serde(default)]
+        error: Option<String>,
+    },
+    NeedsAttention {
+        receiver_id: String,
+        #[serde(default)]
+        after: i64,
+    },
+    RetrySource {
+        receiver_id: String,
+        source: String,
+    },
+    SkipSource {
+        receiver_id: String,
+        source: String,
+    },
+    RetryAllNeedsAttention {
+        receiver_id: String,
     },
     StorageStatus {
         receiver: bool,
@@ -1043,14 +1061,15 @@ fn dispatch(command: Command) -> Result<Value> {
                     .map_err(lock)?
                     .source_states(&receiver_id, &sources)?;
                 for row in items {
+                    let fallback = match row["pending_state"].as_str() {
+                        None => "scanned",
+                        Some("needs_attention") => "needs_attention",
+                        Some(_) => "preparing",
+                    };
                     row["state"] = json!(states
                         .get(row["source"].as_str().unwrap_or_default())
                         .map(String::as_str)
-                        .unwrap_or(if row["retry_at"].is_null() {
-                            "scanned"
-                        } else {
-                            "preparing"
-                        }));
+                        .unwrap_or(fallback));
                 }
             }
             Ok(page)
@@ -1072,13 +1091,50 @@ fn dispatch(command: Command) -> Result<Value> {
             receiver_id,
             source,
             complete,
+            error,
         } => {
             sender()?.maintenance.lock().map_err(lock)?.source_result(
                 &receiver_id,
                 &source,
                 complete,
+                error.as_deref(),
             )?;
             Ok(json!({}))
+        }
+        Command::NeedsAttention { receiver_id, after } => sender()?
+            .maintenance
+            .lock()
+            .map_err(lock)?
+            .needs_attention(&receiver_id, after),
+        Command::RetrySource {
+            receiver_id,
+            source,
+        } => {
+            let count = sender()?
+                .maintenance
+                .lock()
+                .map_err(lock)?
+                .retry_source(&receiver_id, &source)?;
+            Ok(json!({"count":count}))
+        }
+        Command::SkipSource {
+            receiver_id,
+            source,
+        } => {
+            let count = sender()?
+                .maintenance
+                .lock()
+                .map_err(lock)?
+                .skip_source(&receiver_id, &source)?;
+            Ok(json!({"count":count}))
+        }
+        Command::RetryAllNeedsAttention { receiver_id } => {
+            let count = sender()?
+                .maintenance
+                .lock()
+                .map_err(lock)?
+                .retry_all_needs_attention(&receiver_id)?;
+            Ok(json!({"count":count}))
         }
         Command::ArchiveBatch { root } => {
             receiver_storage::with_store(root.as_deref(), |store, _| {
@@ -1705,6 +1761,7 @@ fn error_code(e: Error) -> &'static str {
         Error::Conflict(_) => "conflict",
         Error::NotFound => "not_found",
         Error::Capacity => "capacity",
+        Error::ExceedsCapacity => "receiver_budget_single_item",
         Error::LowSpace => "low_space",
         Error::Integrity => "integrity",
         Error::Storage(_) => "storage",

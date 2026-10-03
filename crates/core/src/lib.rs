@@ -29,6 +29,10 @@ pub enum Error {
     NotFound,
     #[error("receiver capacity exceeded")]
     Capacity,
+    /// The asset's own new bytes exceed the whole receiver budget, so waiting
+    /// for other content to be released can never admit it.
+    #[error("asset exceeds the receiver storage budget")]
+    ExceedsCapacity,
     #[error("receiver free space is below reserve")]
     LowSpace,
     #[error("integrity verification failed")]

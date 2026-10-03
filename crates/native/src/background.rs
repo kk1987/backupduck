@@ -190,6 +190,12 @@ impl SenderHost {
                 {
                     Failure::LowSpace
                 }
+                507 if serde_json::from_str::<Value>(body)
+                    .ok()
+                    .is_some_and(|v| v["code"] == "receiver_budget_single_item") =>
+                {
+                    Failure::ReceiverBudgetSingleItem
+                }
                 507 => Failure::Capacity,
                 422 => Failure::Integrity,
                 400 | 405 | 413 | 415 => Failure::Unsupported,
