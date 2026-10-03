@@ -41,6 +41,8 @@ struct BackupJob: Decodable, Identifiable, Equatable {
   let errorCode: String?
   var processing: String? = nil
   var processingError: String? = nil
+  /// Cloud verification reported by this sender's auditor (macOS only).
+  var cloud: String? = nil
   var attempts: Int? = nil
   var nextAttemptAt: Int64? = nil
   var stateChangedAt: Int64? = nil
@@ -53,7 +55,7 @@ struct BackupJob: Decodable, Identifiable, Equatable {
     case sortValue = "sort_value"
     case confirmedBytes = "confirmed_bytes"
     case errorCode = "error_code"
-    case processing
+    case processing, cloud
     case processingError = "processing_error"
   }
 }
@@ -104,6 +106,12 @@ enum Bridge {
   @Published var savingConcurrency = false
   @Published var transferProgress: [Int64: TransferProgress] = [:]
   @Published var receiverUnavailable = false
+  #if os(macOS)
+    @Published var cloudAudit: CloudAuditStatus?
+    @Published var cloudAuditRunning = false
+    @Published var cloudAuditError: String?
+    var cloudAuditTask: Task<Void, Never>?
+  #endif
   private var activeExport: BoundedExportWriter?
   private lazy var availability = ReceiverAvailability(changed: { [weak self] in
     self?.receiverUnavailable = true
@@ -267,6 +275,9 @@ enum Bridge {
       }
       if !paused { startWorker() }
       scheduleBackgroundWork()
+      #if os(macOS)
+        startCloudAudit()
+      #endif
     } catch {
       opened = false
       message = error.localizedDescription
@@ -840,6 +851,9 @@ struct SenderSummary: Decodable {
   var received = 0
   var published = 0
   var publication_failed = 0
+  var cloud_verified = 0
+  var cloud_quota = 0
+  var cloud_missing = 0
   var waiting = 0
   var failed = 0
   var queued = 0

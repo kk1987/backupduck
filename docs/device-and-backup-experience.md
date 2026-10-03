@@ -221,12 +221,18 @@ prolonged iOS background execution remain acceptance work.
 
 The sender knows device identity, negotiated generic media capabilities, transfer
 progress, integrity-confirmed receipt and generic capacity/backpressure. It does
-not implement or advertise Google Photos, Pixel cleanup or NAS-specific steps.
+not implement Pixel cleanup or NAS-specific steps. The one Google Photos-specific
+part is optional and macOS-only: a cloud auditor that, with cookies the user
+exports, looks published gallery copies up in Google Photos and reports verdicts
+to receivers that advertise `cloud_audit` (see
+[architecture](architecture.md#cloud-audit)). It never uploads to or deletes from
+Google Photos, and iOS and Android builds do not include it.
 
 Apple sender receipt/pairing copy has been made receiver-neutral. The receiver
 owns conversion, system-gallery publication, external cloud integrations and
 local retention policy. A receiver processing status may be exposed generically,
-but a saved receipt must never be relabeled as confirmed third-party cloud backup.
+but a saved receipt must never be relabeled as confirmed third-party cloud backup;
+only an auditor verdict (`Backed up to Google Photos`) is shown as cloud backup.
 
 ## Google Photos space release on Android
 

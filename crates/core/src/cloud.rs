@@ -48,6 +48,32 @@ pub enum CloudResult {
     NotFound,
 }
 
+/// A copy still not found a week after publication is reported missing.
+pub const CLOUD_MISSING_AFTER_MS: i64 = 7 * 86_400_000;
+
+/// State after applying one verdict. `verified` never regresses; quota and
+/// missing copies can still become `verified`.
+pub fn next_cloud_state(
+    current: &str,
+    result: CloudResult,
+    published_at_ms: Option<i64>,
+    now_ms: i64,
+) -> &str {
+    match (current, result) {
+        (_, CloudResult::Free) | ("verified", _) => "verified",
+        (_, CloudResult::CountsAgainstQuota) => "verified_counts_against_quota",
+        (current, CloudResult::NotFound) => {
+            if published_at_ms.is_some_and(|p| now_ms.saturating_sub(p) > CLOUD_MISSING_AFTER_MS) {
+                "missing"
+            } else if current == "unknown" {
+                "pending"
+            } else {
+                current
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CloudObservation {
     pub asset_id: String,

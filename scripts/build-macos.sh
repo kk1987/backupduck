@@ -7,7 +7,7 @@ export MACOSX_DEPLOYMENT_TARGET=14.0
 export CARGO_PROFILE_RELEASE_STRIP=none
 ./scripts/fetch-sparkle.sh
 export CARGO_ENCODED_RUSTFLAGS=$(printf '%s\037%s' "--remap-path-prefix=$PWD=/backupduck" "--remap-path-prefix=$HOME=/builder")
-cargo build --locked --release --target aarch64-apple-darwin -p backupduck-native --features folder-source
+cargo build --locked --release --target aarch64-apple-darwin -p backupduck-native --features folder-source,cloud-audit
 app=build/macos/BackupDuck.app
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
 cp apps/macos/BackupDuck/Info.plist "$app/Contents/Info.plist"

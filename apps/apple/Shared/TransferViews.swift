@@ -64,7 +64,13 @@ struct TransferRow: View {
   private var statusKey: String {
     if job.state == "received" {
       switch job.processing {
-      case "complete": return "state_published"
+      case "complete":
+        switch job.cloud {
+        case "verified": return "state_cloud_verified"
+        case "verified_counts_against_quota": return "state_cloud_quota"
+        case "missing": return "state_cloud_missing"
+        default: return "state_published"
+        }
       case "failed": return "state_publication_failed"
       case "pending": return "state_publication_pending"
       default: return "state_received"
@@ -84,6 +90,17 @@ struct TransferRow: View {
     }
     return text
   }
+  private var statusSymbol: (name: String, color: Color) {
+    if job.state == "received" && job.processing == "failed" { return ("exclamationmark.circle", .orange) }
+    if job.state == "received" && job.processing == "complete" {
+      switch job.cloud {
+      case "verified": return ("checkmark.circle.fill", .blue)
+      case "verified_counts_against_quota", "missing": return ("exclamationmark.icloud", .orange)
+      default: break
+      }
+    }
+    return (taskSymbol(job.state), job.state == "received" ? .blue : job.state == "failed" ? .orange : .secondary)
+  }
   var activityLabel: String? = nil
   var retry: () -> Void
   var body: some View {
@@ -98,8 +115,7 @@ struct TransferRow: View {
         HStack {
           Text(job.asset.resources.first?.filename ?? "").lineLimit(1)
           Spacer()
-          Image(systemName: job.state == "received" && job.processing == "failed" ? "exclamationmark.circle" : taskSymbol(job.state)).foregroundStyle(
-            job.state == "received" && job.processing == "failed" ? .orange : job.state == "received" ? .blue : job.state == "failed" ? .orange : .secondary)
+          Image(systemName: statusSymbol.name).foregroundStyle(statusSymbol.color)
         }
         HStack(spacing: 8) {
           Label(LocalizedStringKey("library_filter_" + (job.asset.metadata?["burst_group_ref"] != nil ? "burst" : job.asset.kind)),
@@ -393,6 +409,14 @@ struct BackupStatusIndicator: View {
                 model.summary.received, model.summary.total)).foregroundStyle(.secondary)
               Text(String(format: NSLocalizedString("publication_summary", comment: ""),
                 model.summary.published, model.summary.received)).foregroundStyle(.secondary)
+              if model.summary.cloud_verified + model.summary.cloud_quota + model.summary.cloud_missing > 0 {
+                Text(String(format: NSLocalizedString("cloud_summary", comment: ""),
+                  model.summary.cloud_verified, model.summary.published)).foregroundStyle(.secondary)
+                if model.summary.cloud_quota + model.summary.cloud_missing > 0 {
+                  Text(String(format: NSLocalizedString("cloud_summary_attention", comment: ""),
+                    model.summary.cloud_quota, model.summary.cloud_missing)).foregroundStyle(.orange)
+                }
+              }
               if model.waitingForNetwork || model.receiverUnavailable { Text("waiting_for_wifi") }
               WaitingStatus(model: model)
             }.frame(maxWidth: .infinity, alignment: .leading)

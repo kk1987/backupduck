@@ -99,6 +99,34 @@ removes nothing. Copies published before SHA-1 evidence are re-read by the
 Android receiver's background sweep to add it. See
 [protocol](protocol.md#cloud-verification).
 
+### Cloud audit
+
+The macOS sender is the only auditor. Its native library is built with the
+optional `cloud-audit` feature (never on iOS or Android) and links
+[`backupduck-cloud-audit`](../crates/cloud-audit/README.md), which talks to the
+undocumented Google Photos web RPC using a `cookies.txt` exported from a
+signed-in browser. The user picks the file in Settings > Google Photos; the app
+keeps only a security-scoped bookmark and Rust reads the file per run. Cookie
+values, the path and the account email never appear in results or logs.
+
+A run requires the receiver's `cloud_audit` capability, pages
+`/v2/publications?cloud=due` up to 600 copies, looks them up by SHA-1, fetches
+quota flags for the matches and posts `free`, `counts_against_quota` or
+`not_found`. A match without a quota flag is not posted, so the copy stays
+`pending` and is looked up again next run. Calls are sequential and capped per
+run; rate limiting, the call budget or an expired session end the run with
+partial counts. A dry run looks up without posting. Verdicts are mirrored onto
+the sender's own jobs (`cloud_observations`), which drive the transfer list,
+summary counts and the library grid's `backed_up` badge. The app runs it every
+ten minutes when enabled and, by default, pauses backup when newly uploaded
+copies count against Google storage.
+
+A verdict means a library item with the same SHA-1 as the gallery copy exists
+and Google reported its quota flag at that moment. It does not prove the item
+stays in the account, that it is the same account the Pixel uploads to, or that
+storage-saver re-encodes would match; the live RPC behaviour is unverified by
+this project.
+
 Conversion location can be optimized later through capability negotiation without
 changing asset identity or the original-resource receipt contract. Original
 retention and derived-output cleanup require an explicit target policy.
