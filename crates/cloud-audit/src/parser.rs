@@ -13,6 +13,9 @@ pub struct HashLookup {
     pub hash_b64: String,
     pub media_key: String,
     pub dedup_key: Option<String>,
+    /// Camera make/model from the item's EXIF (`cameraInfo`), e.g. "iPhone 17
+    /// Pro" for a file pushed to a Pixel. Not the uploading device; only the
+    /// quota flags say whether the Pixel perk applied. Verified live 2026-10-03.
     pub device_model: Option<String>,
     pub width: Option<u64>,
     pub height: Option<u64>,

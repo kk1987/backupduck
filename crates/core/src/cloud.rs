@@ -81,6 +81,8 @@ pub struct CloudObservation {
     pub result: CloudResult,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_key: Option<String>,
+    /// EXIF camera model reported by Google Photos, informational only; it is
+    /// not the device that uploaded the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_model: Option<String>,
 }
