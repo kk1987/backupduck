@@ -769,6 +769,107 @@ fn cloud_verdicts_mirror_onto_received_jobs() {
 }
 
 #[test]
+fn locked_folder_moves_migrate_and_count_in_summary() {
+    let t = Temp::new();
+    let job = {
+        let mut s = Sender::open(&t.0).unwrap();
+        add(&mut s)
+    };
+    // A database from before Locked Folder moves gains the tables on open.
+    rusqlite::Connection::open(t.0.join("sender.sqlite3"))
+        .unwrap()
+        .execute_batch("DROP TABLE locked_folder_moves; DROP TABLE locked_folder_runs;")
+        .unwrap();
+    let mut s = Sender::open(&t.0).unwrap();
+    let asset_id = job.asset.id().unwrap();
+    let hidden = vec!["native:42".to_string(), "native:absent".to_string()];
+    // Not received yet: not a candidate.
+    assert!(s
+        .locked_folder_jobs("receiver-1", &hidden)
+        .unwrap()
+        .is_empty());
+    let running = s.claim("receiver-1", 0).unwrap().unwrap();
+    s.acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    s.observe_cloud("receiver-1", &asset_id, "verified", None, 1)
+        .unwrap();
+    assert_eq!(
+        s.locked_folder_jobs("receiver-1", &hidden).unwrap(),
+        vec![LockedFolderJob {
+            asset_id: asset_id.clone(),
+            cloud: Some("verified".into()),
+            status: None,
+            attempts: 0,
+            dedup_key: None,
+        }]
+    );
+    assert!(s
+        .locked_folder_jobs("receiver-2", &hidden)
+        .unwrap()
+        .is_empty());
+    assert!(s
+        .locked_folder_jobs("receiver-1", &["native:other".into()])
+        .unwrap()
+        .is_empty());
+    assert_eq!(s.summary("receiver-1").unwrap()["locked_folder_moved"], 0);
+    assert!(s
+        .record_locked_folder("receiver-1", &asset_id, "bogus", None, false, 2)
+        .is_err());
+
+    let before = s.revision().unwrap();
+    s.record_locked_folder("receiver-1", &asset_id, "failed", Some("dedup-1"), true, 2)
+        .unwrap();
+    assert!(s.revision().unwrap() > before);
+    // A failure without a new move request keeps the recorded dedup key.
+    s.record_locked_folder("receiver-1", &asset_id, "failed", None, true, 3)
+        .unwrap();
+    let row = &s.locked_folder_jobs("receiver-1", &hidden).unwrap()[0];
+    assert_eq!(
+        (
+            row.status.as_deref(),
+            row.attempts,
+            row.dedup_key.as_deref()
+        ),
+        (Some("failed"), 2, Some("dedup-1"))
+    );
+    assert_eq!(
+        s.job(job.id).unwrap().locked_folder.as_deref(),
+        Some("failed")
+    );
+    assert_eq!(s.summary("receiver-1").unwrap()["locked_folder_moved"], 0);
+
+    s.record_locked_folder("receiver-1", &asset_id, "moved", None, false, 4)
+        .unwrap();
+    let moved_at: i64 = rusqlite::Connection::open(t.0.join("sender.sqlite3"))
+        .unwrap()
+        .query_row("SELECT moved_at_ms FROM locked_folder_moves", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(moved_at, 4);
+    let summary = s.summary("receiver-1").unwrap();
+    assert_eq!(summary["locked_folder_moved"], 1);
+    assert_eq!(s.summary("receiver-2").unwrap()["locked_folder_moved"], 0);
+    assert!(serde_json::to_string(&s.job(job.id).unwrap())
+        .unwrap()
+        .contains("\"locked_folder\":\"moved\""));
+
+    assert!(s.locked_folder_run("receiver-1").unwrap().is_none());
+    s.record_locked_folder_run("receiver-1", 5, &serde_json::json!({"moved": 1}))
+        .unwrap();
+    drop(s);
+    let s = Sender::open(&t.0).unwrap();
+    assert_eq!(
+        s.locked_folder_run("receiver-1").unwrap(),
+        Some((5, serde_json::json!({"moved": 1})))
+    );
+    assert_eq!(
+        s.job(job.id).unwrap().locked_folder.as_deref(),
+        Some("moved")
+    );
+}
+
+#[test]
 fn busy_retries_steadily_while_network_backs_off() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();
