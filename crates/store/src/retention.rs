@@ -108,7 +108,12 @@ impl Receiver {
     /// still referenced by any retained asset outside the plan.
     pub fn gallery_release_bytes(&self, ids: &[String]) -> Result<u64> {
         let encoded = serde_json::to_string(ids)?;
-        let bytes: i64 = self.conn.query_row("SELECT COALESCE(SUM(size),0) FROM blobs WHERE ready=1 AND EXISTS (SELECT 1 FROM assets,json_each(assets.manifest,'$.resources') r WHERE assets.id IN (SELECT value FROM json_each(?1)) AND originals_released=0 AND json_extract(r.value,'$.sha256')=blobs.hash) AND NOT EXISTS (SELECT 1 FROM assets,json_each(assets.manifest,'$.resources') r WHERE originals_released=0 AND assets.id NOT IN (SELECT value FROM json_each(?1)) AND json_extract(r.value,'$.sha256')=blobs.hash)", [encoded], |r| r.get(0)).map_err(db)?;
+        let bytes: i64 = self.conn.query_row("SELECT COALESCE(SUM(size),0) FROM blobs WHERE ready=1 \
+             AND hash IN (SELECT json_extract(r.value,'$.sha256') FROM assets,json_each(assets.manifest,'$.resources') r \
+                 WHERE assets.id IN (SELECT value FROM json_each(?1)) AND originals_released=0) \
+             AND hash NOT IN (SELECT json_extract(r.value,'$.sha256') FROM assets,json_each(assets.manifest,'$.resources') r \
+                 WHERE originals_released=0 AND assets.id NOT IN (SELECT value FROM json_each(?1)) \
+                 AND json_extract(r.value,'$.sha256') IS NOT NULL)", [encoded], |r| r.get(0)).map_err(db)?;
         Ok(bytes as u64)
     }
     pub fn expected_gallery_copy(&self, id: &str) -> Result<Option<GalleryCopy>> {

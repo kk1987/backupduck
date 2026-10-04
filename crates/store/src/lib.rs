@@ -33,6 +33,12 @@ fn db(error: rusqlite::Error) -> Error {
 /// transport's 30 s bundle stall and 60 s request timeouts, so only uploads
 /// a sender abandoned (deleted source, unpaired, uninstalled) qualify.
 pub const ABANDONED_TTL_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+/// Resource hashes still referenced by an asset whose originals are retained.
+/// NULLs are excluded so `NOT IN` never degrades to an empty result.
+const RETAINED_RESOURCE_HASHES: &str =
+    "SELECT json_extract(r.value,'$.sha256') FROM assets,json_each(assets.manifest,'$.resources') AS r \
+     WHERE assets.originals_released=0 AND json_extract(r.value,'$.sha256') IS NOT NULL";
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct ExpiredSummary {
     pub assets: u64,
@@ -345,7 +351,15 @@ impl Receiver {
         self.reclaim_unreferenced()
     }
     pub fn reclaim_unreferenced(&mut self) -> Result<u64> {
-        let mut query=self.conn.prepare("SELECT hash,size FROM blobs WHERE NOT EXISTS (SELECT 1 FROM assets,json_each(assets.manifest,'$.resources') AS r WHERE originals_released=0 AND json_extract(r.value,'$.sha256')=blobs.hash)").map_err(db)?;
+        // Uncorrelated set lookup: SQLite builds the referenced-hash set once.
+        // A correlated NOT EXISTS re-parsed every manifest per blob, which took
+        // ~20 s per call on a Pixel 1 with a few thousand assets.
+        let mut query = self
+            .conn
+            .prepare(&format!(
+                "SELECT hash,size FROM blobs WHERE hash NOT IN ({RETAINED_RESOURCE_HASHES})"
+            ))
+            .map_err(db)?;
         let blobs = query
             .query_map([], |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
