@@ -22,9 +22,10 @@ internal object GalleryReceiptExport {
             val hasCloud = db.rawQuery("SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='cloud_state')", null).use {
                 it.moveToFirst() && it.getInt(0) == 1
             }
-            val cloudColumn = if (hasCloud) "a.cloud_state" else "'unknown'"
+            val cloudColumns = if (hasCloud) "a.cloud_state,a.gallery_released" else "'unknown',0"
+            // Copies the cloud release deleted stay listed with gallery_released=true.
             db.rawQuery(
-                "SELECT a.id,a.manifest,a.published_at_ms,g.copy,$cloudColumn FROM assets a " +
+                "SELECT a.id,a.manifest,a.published_at_ms,g.copy,$cloudColumns FROM assets a " +
                     "LEFT JOIN gallery_copies g ON g.asset_id=a.id " +
                     "WHERE a.received=1 AND a.processing='complete' ORDER BY a.rowid",
                 null
@@ -49,7 +50,7 @@ internal object GalleryReceiptExport {
                     val item = JSONObject().put("id", id).put("name", name).put("size", size)
                         .put("sha256", hash).put("sha1", sha1 ?: JSONObject.NULL).put("kind", kind)
                         .put("published_at_ms", if (rows.isNull(2)) JSONObject.NULL else rows.getLong(2))
-                        .put("cloud_state", rows.getString(4))
+                        .put("cloud_state", rows.getString(4)).put("gallery_released", rows.getInt(5) == 1)
                     entries.put(item)
                     if (copy.optString("display_name").isBlank()) backfill.putString(id, name)
                 }

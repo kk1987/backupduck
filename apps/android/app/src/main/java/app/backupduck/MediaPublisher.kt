@@ -85,6 +85,20 @@ internal object MediaPublisher {
         checkReady(context, uri)
         return copy.copy(sha1 = actual.sha1)
     }
+    /**
+     * True only when MediaStore has no row for the locator, pending included.
+     * Rows owned by another app are invisible here too; callers only use it
+     * for copies whose bytes the cloud already matched.
+     */
+    fun absent(context: Context, copy: GalleryCopy): Boolean {
+        val uri = Uri.parse(copy.locator)
+        if (uri.scheme != "content" || uri.authority != "media") return false
+        @Suppress("DEPRECATION")
+        val lookup = MediaStore.setIncludePending(uri)
+        return runCatching {
+            context.contentResolver.query(lookup, arrayOf(MediaStore.MediaColumns._ID), null, null, null)?.use { !it.moveToFirst() }
+        }.getOrNull() ?: false
+    }
     private fun checkReady(context: Context, uri: Uri) {
         val columns = mutableListOf(MediaStore.MediaColumns.IS_PENDING, MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH)
         if (Build.VERSION.SDK_INT >= 30) columns += MediaStore.MediaColumns.IS_TRASHED

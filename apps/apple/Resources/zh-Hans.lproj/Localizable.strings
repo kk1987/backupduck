@@ -633,7 +633,7 @@
 
 "settings_cloud" = "Google 相册";
 "cloud_audit_title" = "Google 相册核对";
-"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考，不会因此删除任何内容。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
+"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考。Mac 不会删除任何内容；如果在 Pixel 上开启云端释放，Pixel 会删除自己相册中已确认备份且不占用 Google 存储空间的照片副本。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
 "cloud_audit_readme" = "如何导出 Cookie 以及核对内容";
 "cloud_audit_cookies" = "Cookie 文件";
 "cloud_audit_cookies_set" = "已选择";

@@ -36,6 +36,7 @@ class ReceiverService : Service() {
     private var cursor = ""
     private var spaceBlocked = false
     private val retention = GalleryRetention()
+    private val cloudRelease = CloudRelease()
     private val cleanup by lazy { PhotosCleanup(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -154,6 +155,7 @@ class ReceiverService : Service() {
                             if (!cleanup.held && !ReceiverHolds.thermalHeld) ReceiverState.mediaOperations.withLock {
                                 if (!cleanup.held && !ReceiverHolds.thermalHeld) {
                                     retention.step(this@ReceiverService)
+                                    cloudRelease.step(this@ReceiverService)
                                     publish()
                                 }
                             }
