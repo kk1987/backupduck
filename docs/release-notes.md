@@ -18,6 +18,7 @@
 - The Pixel receiver frees storage reserved by uploads that were abandoned for 7 days (for example after a photo was deleted or a sender was unpaired mid-transfer), including their partial files, so its storage budget no longer shrinks over weeks of unattended use. Content shared with received photos is kept. It checks on start and hourly and logs the freed bytes; a sender that comes back later starts that upload again.
 - The Pixel receiver's pause temperature can now be set from 35 to 50°C (was 35 to 45°C); the default stays 40°C. Thresholds above 45°C let the phone stay warmer while charging, which ages older batteries faster.
 - Senders retry a busy receiver (for example a Pixel paused by temperature protection) about once a minute instead of backing off up to 15 minutes, so backup resumes soon after the phone cools. Network and storage waits keep their existing backoff.
+- The Pixel receiver no longer fails HEIC/HEIF photos with `publication_date_failed` just because Android 10 cannot read the file (seen with a `heix`-branded photo without EXIF). BackupDuck now reads and verifies HEIF capture dates with its own container parser, so an existing capture date is also never replaced merely because Android could not see it. A HEIF whose metadata BackupDuck cannot parse is not published and shows "Photo metadata unreadable". Photos that already failed this way can be retried with "Retry failed processing" after updating the Pixel.
 
 # 0.2.0-rc.3
 

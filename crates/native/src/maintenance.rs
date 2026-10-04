@@ -176,6 +176,7 @@ pub enum PublicationError {
     GalleryCopyChanged,
     GalleryCopyMissing,
     PublicationDateFailed,
+    PublicationDateUnreadable,
     OperationFailed,
     Other,
 }
@@ -197,6 +198,7 @@ impl PublicationError {
             Some("gallery_copy_changed") => Self::GalleryCopyChanged,
             Some("gallery_copy_missing") => Self::GalleryCopyMissing,
             Some("publication_date_failed") => Self::PublicationDateFailed,
+            Some("publication_date_unreadable") => Self::PublicationDateUnreadable,
             Some("operation_failed") | None => Self::OperationFailed,
             Some(_) => Self::Other,
         }
@@ -1102,6 +1104,12 @@ mod tests {
             maintenance.events().unwrap()[0]["context"]["publication_error"],
             "unsupported"
         );
+        for code in ["publication_date_failed", "publication_date_unreadable"] {
+            assert_eq!(
+                serde_json::to_value(PublicationError::from_code(Some(code))).unwrap(),
+                code
+            );
+        }
         for invalid in [
             json!({"token":"private"}),
             json!({"phase":"private-filename.jpg"}),

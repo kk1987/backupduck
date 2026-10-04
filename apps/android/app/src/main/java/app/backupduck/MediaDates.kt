@@ -7,6 +7,8 @@ import android.provider.MediaStore
 import android.system.Os
 import org.json.JSONObject
 import java.io.File
+import java.text.ParsePosition
+import java.text.SimpleDateFormat
 import androidx.exifinterface.media.ExifInterface
 import java.time.Instant
 import java.time.ZoneOffset
@@ -28,15 +30,26 @@ internal object MediaDates {
             "image/heic", "image/heif" -> "heic"
             else -> return source
         }
-        val original = ExifInterface(source)
-        if (original.dateTimeOriginal != null) return source
+        val heif = extension == "heic"
+        // Android 10's HEIF stack cannot parse some valid HEIF variants (seen
+        // with a `heix`-branded file); ExifInterface then reports no date at all.
+        // For HEIF, the Rust container parser decides when Android sees none.
+        val androidDate = if (heif) runCatching { ExifInterface(source).dateTimeOriginal }.getOrNull()
+            else ExifInterface(source).dateTimeOriginal
+        if (androidDate != null) return source
+        if (heif && hasCaptureDate(nativePhotoDate(source))) return source
         val output = File(context.cacheDir, "dated-${UUID.randomUUID()}.$extension")
         val date = DateTimeFormatter.ofPattern("uuuu:MM:dd HH:mm:ss", Locale.ROOT)
             .withZone(ZoneOffset.UTC).format(Instant.ofEpochMilli(captured))
         try {
-            if (extension == "heic") {
-                NativeBridge.request(JSONObject().put("op", "write_photo_date")
-                    .put("source", source.path).put("output", output.path).put("date", date).put("subsecond", captured % 1000))
+            if (heif) {
+                // Rust re-reads its own output and verifies DateTimeOriginal,
+                // OffsetTimeOriginal and SubSecTimeOriginal. Android may be
+                // unable to parse this container, so it cannot verify it.
+                val written = NativeBridge.request(JSONObject().put("op", "write_photo_date")
+                    .put("source", source.path).put("output", output.path).put("date", date).put("subsecond", captured % 1000)) as JSONObject
+                check(written.optString("date_time_original") == date) { "publication_date_failed" }
+                return output
             } else {
                 source.copyTo(output)
                 ExifInterface(output).apply {
@@ -55,6 +68,18 @@ internal object MediaDates {
             return output
         } catch (error: Exception) { output.delete(); throw error }
     }
+
+    /** Throws `publication_date_unreadable` when the container cannot be parsed. */
+    private fun nativePhotoDate(source: File): String? {
+        val value = NativeBridge.request(JSONObject().put("op", "read_photo_date").put("source", source.path)) as JSONObject
+        return if (value.isNull("date_time_original")) null else value.getString("date_time_original")
+    }
+
+    /** The acceptance rule of androidx ExifInterface 1.3.7 getDateTimeOriginal:
+     * a non-zero digit, then a lenient `yyyy:MM:dd HH:mm:ss` or dashed parse.
+     * HEIF and JPEG/PNG therefore agree on what counts as an existing date. */
+    internal fun hasCaptureDate(value: String?): Boolean = value != null && value.any { it in '1'..'9' } &&
+        listOf("yyyy:MM:dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss").any { SimpleDateFormat(it, Locale.US).parse(value, ParsePosition(0)) != null }
 
     fun values(captured: Long?): ContentValues = ContentValues().apply {
         captured?.let {

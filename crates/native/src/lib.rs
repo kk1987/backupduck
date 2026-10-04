@@ -798,6 +798,9 @@ enum Command {
         listen: SocketAddr,
         capacity: u64,
     },
+    ReadPhotoDate {
+        source: PathBuf,
+    },
     WritePhotoDate {
         source: PathBuf,
         output: PathBuf,
@@ -1011,14 +1014,19 @@ fn dispatch(command: Command) -> Result<Value> {
         } => Ok(serde_json::to_value(
             BurstMetadata::from_identifier(&identifier, primary)?.fields(),
         )?),
+        // Android 10 cannot parse some valid HEIF variants, so the receiver
+        // asks the container parser whether a capture date already exists.
+        Command::ReadPhotoDate { source } => Ok(json!({
+            "date_time_original": backupduck_pixel::read_photo_date(&source)?
+        })),
         Command::WritePhotoDate {
             source,
             output,
             date,
             subsecond,
         } => {
-            backupduck_pixel::write_photo_date(&source, &output, &date, subsecond)?;
-            Ok(json!({}))
+            let verified = backupduck_pixel::write_photo_date(&source, &output, &date, subsecond)?;
+            Ok(json!({ "date_time_original": verified }))
         }
         Command::PackageBurst {
             jpeg,
@@ -2042,6 +2050,7 @@ fn error_code(e: Error) -> &'static str {
             "burst_jpeg_xmp_conflict" => "burst_jpeg_xmp_conflict",
             "burst_jpeg_xmp" => "burst_jpeg_xmp",
             "burst_jpeg_structure" => "burst_jpeg_structure",
+            "publication_date_unreadable" => "publication_date_unreadable",
             "cloud_audit_unsupported" => "cloud_audit_unsupported",
             "cloud_session_expired" => "cloud_session_expired",
             "cloud_cookies_invalid" => "cloud_cookies_invalid",
@@ -2203,6 +2212,58 @@ mod burst_error_tests {
         assert_eq!(
             call(&request(&jpeg, "jpeg.heic")),
             json!({"ok": false, "error": "unsupported"}).to_string()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod photo_date_tests {
+    use super::*;
+
+    /// MediaDates.kt reads `date_time_original` and the error codes below.
+    #[test]
+    fn photo_date_commands_round_trip_through_the_ffi_boundary() {
+        let root =
+            std::env::temp_dir().join(format!("backupduck-photo-date-ffi-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        // Received originals are stored by digest, without an extension.
+        let blob = root.join("0123abcd");
+        std::fs::write(
+            &blob,
+            include_bytes!("../../pixel/tests/fixtures/date.heic"),
+        )
+        .unwrap();
+        let read = |source: &std::path::Path| {
+            call(&json!({"op": "read_photo_date", "source": source}).to_string())
+        };
+        assert_eq!(
+            read(&blob),
+            json!({"ok": true, "value": {"date_time_original": null}}).to_string()
+        );
+        let dated = root.join("dated.heic");
+        let date = "2026:06:14 17:35:13";
+        assert_eq!(
+            call(
+                &json!({"op": "write_photo_date", "source": blob, "output": dated,
+                    "date": date, "subsecond": 7})
+                .to_string()
+            ),
+            json!({"ok": true, "value": {"date_time_original": date}}).to_string()
+        );
+        assert_eq!(
+            read(&dated),
+            json!({"ok": true, "value": {"date_time_original": date}}).to_string()
+        );
+        let garbage = root.join("4567ef01");
+        std::fs::write(&garbage, [0xff, 0xd8, 0xff, 0xd9]).unwrap();
+        assert_eq!(
+            read(&garbage),
+            json!({"ok": false, "error": "publication_date_unreadable"}).to_string()
+        );
+        assert_eq!(
+            read(&root.join("missing")),
+            json!({"ok": false, "error": "storage"}).to_string()
         );
         std::fs::remove_dir_all(root).unwrap();
     }

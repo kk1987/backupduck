@@ -31,6 +31,7 @@ internal data class HistoryItem(val cursor: Long, val id: String, val filename: 
         processing == "complete" -> R.string.filter_published
         kind == "motion" && processing == "failed" && processingError == "conversion_required" -> R.string.receiver_item_conversion_required
         processing == "failed" && (processingError == "unsupported" || processingError?.startsWith("burst_jpeg_") == true) -> R.string.receiver_item_failed_unsupported
+        processing == "failed" && processingError == "publication_date_unreadable" -> R.string.receiver_item_failed_metadata
         else -> statusLabel
     }
 }

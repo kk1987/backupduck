@@ -6,7 +6,7 @@ mod heic_burst;
 mod heic_motion;
 mod motion_xmp;
 mod photo_date;
-pub use photo_date::write_photo_date;
+pub use photo_date::{read_photo_date, write_photo_date};
 pub mod photos_cleanup;
 pub mod photos_probe;
 use backupduck_core::{
