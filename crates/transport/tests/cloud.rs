@@ -75,7 +75,8 @@ async fn auditor_lists_copies_and_reports_verdicts() {
         .unwrap()
     });
     let client = Client::new(&base, TOKEN).unwrap();
-    assert!(client.capabilities().await.unwrap().cloud_audit);
+    let caps = client.capabilities().await.unwrap();
+    assert!(caps.cloud_audit && caps.cloud_preexisting);
 
     let page = client.cloud_due(None, 100, true).await.unwrap();
     assert_eq!(page.next, None);

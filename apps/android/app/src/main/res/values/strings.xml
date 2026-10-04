@@ -345,13 +345,14 @@
 <string name="recovery_interface">The Wi-Fi address is no longer available. Reconnect Wi-Fi and start receiving again.</string>
 <string name="history_cloud_verified">Backed up to Google Photos</string>
 <string name="history_cloud_released">Backed up to Google Photos · freed from phone</string>
+<string name="history_cloud_elsewhere">Already in Google Photos (from another device)</string>
 <string name="history_cloud_quota">Uploaded, but counting against Google storage</string>
 <string name="history_cloud_missing">Not found in Google Photos</string>
 <string name="cloud_release_title">Free space after Google Photos backup</string>
 <string name="cloud_release_toggle">Delete phone copies backed up to Google Photos</string>
-<string name="cloud_release_note">Off: gallery copies stay on this phone. On: a copy and its originals are deleted only after the Mac’s Google Photos check finds the exact same bytes stored free at original quality.</string>
+<string name="cloud_release_note">Off: gallery copies stay on this phone. On: a copy and its originals are deleted only after the Mac’s Google Photos check finds the exact same bytes stored free at original quality, or already in Google Photos from another device.</string>
 <string name="cloud_release_confirm_title">Delete copies Google Photos has backed up?</string>
-<string name="cloud_release_confirm_note">BackupDuck will delete its own gallery copies on this phone, and the originals it keeps for them, only after the Mac’s Google Photos check found the exact same bytes in your Google Photos library, stored free at original quality. Copies that count against your Google storage or are not found are never deleted.\n\nCopies in Google Photos are not affected.\n\nThis needs the Mac’s Google Photos check to keep running. Each copy waits at least %1$d minutes after it was verified.\n\nWhile on, it replaces relay reclamation: originals are also kept until Google Photos has the photo. You can turn it off at any time; deleted copies are not restored.</string>
+<string name="cloud_release_confirm_note">BackupDuck will delete its own gallery copies on this phone, and the originals it keeps for them, only after the Mac’s Google Photos check found the exact same bytes in your Google Photos library, stored free at original quality or already uploaded by another device. Copies that count against your Google storage or are not found are never deleted.\n\nCopies in Google Photos are not affected.\n\nThis needs the Mac’s Google Photos check to keep running. Each copy waits at least %1$d minutes after it was verified.\n\nWhile on, it replaces relay reclamation: originals are also kept until Google Photos has the photo. You can turn it off at any time; deleted copies are not restored.</string>
 <string name="cloud_release_enable">Delete after backup</string>
 <string name="cloud_release_enabled">Verified copies will be deleted while receiving runs.</string>
 <string name="cloud_release_disabled">Deletion is off. Remaining copies are kept.</string>

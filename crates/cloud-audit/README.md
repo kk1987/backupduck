@@ -52,11 +52,16 @@ Google Photos, choose the exported `cookies.txt` and the account index, then
 "Check now", "Dry run" (look up without reporting) or enable the 10-minute
 check. A run asks the paired Pixel receiver for gallery copies whose check is
 due, looks up at most 600 of them within the limits below and reports verdicts
-back; a match without quota information is left pending for the next run.
+back; a match without quota information is left pending for the next run. A
+quota match that Google added to the library (`swbisb` creation time) more
+than ten minutes before the Pixel published its copy came from another device
+and is reported as `already_in_cloud`, which never pauses backup; see
+[architecture](../../docs/architecture.md#cloud-audit).
 "Google Photos session expired" means the cookies need exporting again.
 
 "Hidden photos" (off by default, needs a confirmation that Locked Folder
-backup is on) moves Apple Photos Hidden items whose copy is verified into the
+backup is on) moves Apple Photos Hidden items whose copy is verified (free or
+already in Google Photos from another device) into the
 Locked Folder with `StLnCe`, at most 200 per run, after each check; see
 [architecture](../../docs/architecture.md#hidden-photos-and-locked-folder).
 

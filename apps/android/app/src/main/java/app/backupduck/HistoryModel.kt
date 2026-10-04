@@ -23,6 +23,7 @@ internal data class HistoryItem(val cursor: Long, val id: String, val filename: 
     val rowStatus: Int get() = when {
         galleryReleased -> R.string.history_cloud_released
         processing == "complete" && cloudState == "verified" -> R.string.history_cloud_verified
+        processing == "complete" && cloudState == "verified_elsewhere" -> R.string.history_cloud_elsewhere
         processing == "complete" && cloudState == "verified_counts_against_quota" -> R.string.history_cloud_quota
         processing == "complete" && cloudState == "missing" -> R.string.history_cloud_missing
         originalsReleased && releaseReason == "gallery" -> R.string.history_relay_reclaimed

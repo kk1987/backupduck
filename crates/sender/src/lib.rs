@@ -76,6 +76,15 @@ pub struct LockedFolderJob {
     /// Set once a move was requested for this item.
     pub dedup_key: Option<String>,
 }
+impl LockedFolderJob {
+    /// Only copies the cloud holds may move: free uploads and items another
+    /// device uploaded first. Quota, pending and missing copies never do.
+    pub fn cloud_held(&self) -> bool {
+        self.cloud
+            .as_deref()
+            .is_some_and(|c| CLOUD_HELD_STATES.contains(&c))
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attempt {
     pub job_id: i64,
@@ -168,13 +177,15 @@ impl Sender {
             CREATE TRIGGER IF NOT EXISTS jobs_update_revision AFTER UPDATE ON jobs BEGIN UPDATE settings SET value=value+1 WHERE key='revision'; END;
             CREATE INDEX IF NOT EXISTS jobs_source_revision ON jobs(receiver_id,json_extract(manifest,'$.source_id'),json_extract(manifest,'$.revision'));").map_err(db)?;
         sorting::migrate(&conn)?;
-        let has_cloud_audit: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('receiver_features') WHERE name='cloud_audit')", [], |r| r.get(0)).map_err(db)?;
-        if !has_cloud_audit {
-            conn.execute(
-                "ALTER TABLE receiver_features ADD COLUMN cloud_audit INTEGER NOT NULL DEFAULT 0",
-                [],
-            )
-            .map_err(db)?;
+        for feature in ["cloud_audit", "cloud_preexisting"] {
+            let present: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('receiver_features') WHERE name=?1)", [feature], |r| r.get(0)).map_err(db)?;
+            if !present {
+                conn.execute(
+                    &format!("ALTER TABLE receiver_features ADD COLUMN {feature} INTEGER NOT NULL DEFAULT 0"),
+                    [],
+                )
+                .map_err(db)?;
+            }
         }
         // Rust foreground tasks cannot survive a process exit. OS tasks can and must
         // be reconciled explicitly after the native scheduler has enumerated them.
@@ -448,8 +459,11 @@ impl Sender {
                 .optional()
                 .map_err(db)?;
             if let Some((state, cloud)) = value {
-                let backed_up =
-                    include_cloud && state == "received" && cloud.as_deref() == Some("verified");
+                let backed_up = include_cloud
+                    && state == "received"
+                    && cloud
+                        .as_deref()
+                        .is_some_and(|c| CLOUD_HELD_STATES.contains(&c));
                 states.insert(
                     id.clone(),
                     if backed_up { "backed_up".into() } else { state },
@@ -515,11 +529,12 @@ impl Sender {
         ).map_err(db)?;
         result["published"] = published.into();
         result["publication_failed"] = publication_failed.into();
-        let (verified, quota, missing): (i64, i64, i64) = self.conn.query_row(
-            "SELECT COALESCE(SUM(c.state='verified'),0),COALESCE(SUM(c.state='verified_counts_against_quota'),0),COALESCE(SUM(c.state='missing'),0) FROM jobs j JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND j.state='received' AND (?2 IS NULL OR COALESCE(json_extract(j.manifest,'$.metadata.source_ref'),'library')=?2)",
-            params![receiver, source], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        let (verified, elsewhere, quota, missing): (i64, i64, i64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(c.state='verified'),0),COALESCE(SUM(c.state='verified_elsewhere'),0),COALESCE(SUM(c.state='verified_counts_against_quota'),0),COALESCE(SUM(c.state='missing'),0) FROM jobs j JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND j.state='received' AND (?2 IS NULL OR COALESCE(json_extract(j.manifest,'$.metadata.source_ref'),'library')=?2)",
+            params![receiver, source], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         ).map_err(db)?;
         result["cloud_verified"] = verified.into();
+        result["cloud_elsewhere"] = elsewhere.into();
         result["cloud_quota"] = quota.into();
         result["cloud_missing"] = missing.into();
         let locked: i64 = self.conn.query_row(
@@ -609,6 +624,23 @@ impl Sender {
             .conn
             .query_row(
                 "SELECT cloud_audit FROM receiver_features WHERE receiver_id=?1",
+                [receiver],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(db)?
+            .unwrap_or(false))
+    }
+    /// The receiver accepts `already_in_cloud` cloud observations.
+    pub fn set_cloud_preexisting(&mut self, receiver: &str, enabled: bool) -> Result<()> {
+        self.conn.execute("INSERT INTO receiver_features(receiver_id,bundle_upload,cloud_preexisting) VALUES(?1,0,?2) ON CONFLICT(receiver_id) DO UPDATE SET cloud_preexisting=excluded.cloud_preexisting", params![receiver, enabled]).map_err(db)?;
+        Ok(())
+    }
+    pub fn cloud_preexisting(&self, receiver: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT cloud_preexisting FROM receiver_features WHERE receiver_id=?1",
                 [receiver],
                 |r| r.get(0),
             )
@@ -800,7 +832,11 @@ impl Sender {
     ) -> Result<bool> {
         if !matches!(
             state,
-            "pending" | "verified" | "verified_counts_against_quota" | "missing"
+            "pending"
+                | "verified"
+                | "verified_elsewhere"
+                | "verified_counts_against_quota"
+                | "missing"
         ) {
             return Err(Error::Invalid("cloud state".into()));
         }

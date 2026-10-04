@@ -952,6 +952,7 @@ struct SenderSummary: Decodable {
   var published = 0
   var publication_failed = 0
   var cloud_verified = 0
+  var cloud_elsewhere = 0
   var cloud_quota = 0
   var cloud_missing = 0
   var waiting = 0

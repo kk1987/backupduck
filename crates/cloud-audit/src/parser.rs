@@ -19,7 +19,10 @@ pub struct HashLookup {
     pub device_model: Option<String>,
     pub width: Option<u64>,
     pub height: Option<u64>,
+    /// Capture time.
     pub timestamp_ms: Option<i64>,
+    /// When the item was added to the library; seconds after capture for a
+    /// Pixel's own backup in a live spike.
     pub creation_timestamp_ms: Option<i64>,
 }
 

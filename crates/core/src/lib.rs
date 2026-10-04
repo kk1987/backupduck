@@ -208,6 +208,9 @@ pub struct Capabilities {
     /// `/v2/publications` and `/v2/cloud-observations` are available.
     #[serde(default)]
     pub cloud_audit: bool,
+    /// Cloud observations may report `already_in_cloud`.
+    #[serde(default)]
+    pub cloud_preexisting: bool,
 }
 impl Default for Capabilities {
     fn default() -> Self {
@@ -218,6 +221,7 @@ impl Default for Capabilities {
             target_processing: vec![],
             bundle_upload: true,
             cloud_audit: true,
+            cloud_preexisting: true,
         }
     }
 }

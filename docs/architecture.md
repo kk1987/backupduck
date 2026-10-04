@@ -171,11 +171,15 @@ receipt never claims Google Photos cloud backup.
 Gallery evidence records SHA-1 as well as SHA-256 of the published copy's bytes.
 An external auditor lists published copies over the protocol, looks each up by
 SHA-1 in the user's cloud library, and reports `verified`,
-`verified_counts_against_quota` or not found; copies not found a week after
-publication become `missing`. The receiver stores the state per asset and rejects
-verdicts for bytes other than the stored copy. A receipt still does not mean the
-copy is in the cloud: only a `verified` state reflects an auditor's lookup, and
-only the opt-in [cloud-verified release](#cloud-verified-release) acts on it.
+`verified_elsewhere` (the cloud item predates our copy, see
+[Cloud audit](#cloud-audit)), `verified_counts_against_quota` or not found;
+copies not found a week after publication become `missing`. The receiver stores
+the state per asset and rejects verdicts for bytes other than the stored copy.
+`verified` never changes again; `verified_elsewhere` only upgrades to `verified`.
+Both mean the cloud holds the bytes and neither is looked up again. A receipt
+still does not mean the copy is in the cloud: only these states reflect an
+auditor's lookup, and only the opt-in
+[cloud-verified release](#cloud-verified-release) acts on them.
 Copies published before SHA-1 evidence are re-read by the
 Android receiver's background sweep to add it. See
 [protocol](protocol.md#cloud-verification).
@@ -192,8 +196,9 @@ values, the path and the account email never appear in results or logs.
 
 A run requires the receiver's `cloud_audit` capability, pages
 `/v2/publications?cloud=due` up to 600 copies, looks them up by SHA-1, fetches
-quota flags for the matches and posts `free`, `counts_against_quota` or
-`not_found`. A match without a quota flag is not posted, so the copy stays
+quota flags for the matches and posts `free`, `already_in_cloud`,
+`counts_against_quota` or `not_found`. A match without a quota flag is not
+posted, so the copy stays
 `pending` and is looked up again next run. Calls are sequential and capped per
 run; rate limiting, the call budget or an expired session end the run with
 partial counts. A dry run looks up without posting. Verdicts are mirrored onto
@@ -201,6 +206,33 @@ the sender's own jobs (`cloud_observations`), which drive the transfer list,
 summary counts and the library grid's `backed_up` badge. The app runs it every
 ten minutes when enabled and, by default, pauses backup when newly uploaded
 copies count against Google storage.
+
+A photo already backed up to Google Photos from another device (another phone,
+an older Pixel, a desktop upload) is in the library before our receiver
+publishes it. Google de-duplicates identical bytes, so the Pixel's upload maps
+onto that existing item: it adds no storage use and the cloud already holds the
+bytes, but the item keeps the quota flag of the first upload, so it still
+reports `takes_up_space`. Such items do not get the Pixel's free-storage perk:
+Google keeps one item for the bytes and does not re-classify it because a
+Pixel uploaded them again, and BackupDuck never re-encodes to force a new item.
+Observed 2026-10: two Pixel 6a photos (`PXL_20260929_013814464.jpg`,
+`PXL_20260929_013820318.TS.mp4`) were created in Google Photos on 2026-09-28
+at 18:38, seconds after capture and five days before the receiver published
+its copies; they were reported as counting against quota and auto-paused the
+Mac. The `swbisb` match carries `creation_timestamp_ms`, when the item was added
+to the library (about 8 s after capture for a photo the Pixel uploaded itself
+in a live check). A match that counts against quota and whose creation time is
+more than ten minutes (clock-skew margin) before the receiver's
+`published_at_ms` is posted as `already_in_cloud` and becomes
+`verified_elsewhere`. Without either timestamp, or within the margin, it stays
+`counts_against_quota`. Only genuine quota use counts toward `quota` and
+`new_quota` in the run report, so these items never pause backup; the report
+counts them as `already_in_cloud`. The sender posts `already_in_cloud` only to
+receivers advertising `cloud_preexisting` (older ones would reject it) and
+otherwise keeps posting `counts_against_quota`. Rows recorded as
+`verified_counts_against_quota` before this check are re-classified by the
+normal quota re-check backoff (at most one day): the next lookup posts
+`already_in_cloud`, which moves them to `verified_elsewhere`.
 
 A verdict means a library item with the same SHA-1 as the gallery copy exists
 and Google reported its quota flag at that moment. It does not prove the item
@@ -225,8 +257,9 @@ the `smartAlbumAllHidden` identifiers off the main thread and calls
 PhotoKit exposes no hidden assets (usually the locked Hidden album, see
 [Apple library scope](#apple-library-scope)) it shows that warning and skips the
 call. Rust maps the identifiers to this receiver's `received` jobs whose sender
-cloud observation is `verified` (never `verified_counts_against_quota`,
-`pending` or `missing`), takes at most 200 per run, gets each gallery copy's
+cloud observation is `verified` or `verified_elsewhere` (never
+`verified_counts_against_quota`, `pending` or `missing`), takes at most 200 per
+run, gets each gallery copy's
 SHA-1 from `/v2/publications?cloud=all` (the evidence outlives a released phone
 copy), and looks the hashes up. A match's dedup key goes to `StLnCe`
 (`[[dedup_key, ..], []]`, 50 per call); the item counts as moved only when that
@@ -247,8 +280,8 @@ in the Locked Folder on the web, marked as backed up. Moving it back out in the
 web UI produced a new media key with the same dedup key, so dedup keys, not
 media keys, are the stable identity.
 
-The receiver is not told about the move and keeps `cloud_state='verified'`: the
-audit never lists verified rows again, so the item leaving the library is
+The receiver is not told about the move and keeps its `verified` or
+`verified_elsewhere` state: the audit never lists those rows again, so the item leaving the library is
 invisible to it, and cloud-verified release still applies. Listing the Locked
 Folder is never automated. From a cookie session `nMFwOc` returns an empty
 list and `photos.google.com/lockedfolder` redirects to an interactive sign-in
@@ -272,8 +305,10 @@ auditor's verdicts above.
 | on | off or on | keep originals and copy | cloud release only; relay rows, manual inspection and `release_gallery` are refused |
 
 A copy is eligible when it is received, published, `verified` (free at original
-quality), not yet released, and its verdict is at least the grace old.
-`verified_counts_against_quota`, `missing`, `pending` and `unknown` never are.
+quality) or `verified_elsewhere` (another device uploaded the same bytes first,
+so the cloud holds them), not yet released, and its verdict is at least the
+grace old. `verified_counts_against_quota`, `missing`, `pending` and `unknown`
+never are.
 Rows whose originals relay or archive already released are still eligible; only
 the gallery copy remains to delete.
 

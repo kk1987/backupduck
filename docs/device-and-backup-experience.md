@@ -351,7 +351,8 @@ The storage page also offers “Delete phone copies backed up to Google Photos�
 off by default, under “Free space after Google Photos backup”. Enabling needs a
 confirmation that explains: only BackupDuck's own gallery copies (and the
 originals it keeps for them) are deleted; only after the Mac's Google Photos
-check found the exact bytes stored free at original quality; copies counting
+check found the exact bytes stored free at original quality, or already in
+Google Photos from another device; copies counting
 against Google storage or not found are never deleted; the cloud copy is not
 touched; the Mac check must keep running; each copy waits at least the grace
 (one hour by default) after its verdict. The card shows how many copies are

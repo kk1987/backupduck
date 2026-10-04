@@ -71,10 +71,11 @@ impl Catalog {
                 |r| r.get(0),
             )
             .map_err(super::db)?;
-        // Gallery bytes freed by cloud release, from the recorded copy sizes.
+        // Copies the cloud holds (release-eligible states) and gallery bytes
+        // freed by cloud release, from the recorded copy sizes.
         let (verified, released, released_bytes): (i64, i64, i64) = if has_cloud {
             conn.query_row(
-                "SELECT COALESCE(SUM(cloud_state='verified'),0),COALESCE(SUM(gallery_released),0),\
+                "SELECT COALESCE(SUM(cloud_state IN ('verified','verified_elsewhere')),0),COALESCE(SUM(gallery_released),0),\
                  (SELECT COALESCE(SUM(json_extract(g.copy,'$.size')),0) FROM assets a JOIN gallery_copies g ON g.asset_id=a.id WHERE a.gallery_released=1) FROM assets",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),

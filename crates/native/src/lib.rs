@@ -1082,6 +1082,10 @@ fn dispatch(command: Command) -> Result<Value> {
                 &pairing.receiver_id,
                 caps.version == PROTOCOL_VERSION && caps.cloud_audit,
             )?;
+            sender.set_cloud_preexisting(
+                &pairing.receiver_id,
+                caps.version == PROTOCOL_VERSION && caps.cloud_preexisting,
+            )?;
             if let Some(peer) = peer.as_ref() {
                 devices.remember(&pairing.receiver_id, peer)?;
             }
@@ -1552,6 +1556,7 @@ fn dispatch(command: Command) -> Result<Value> {
             if let Ok(host) = sender() {
                 host.set_bundle_upload(&pairing.receiver_id, caps.bundle_upload)?;
                 host.set_cloud_audit(&pairing.receiver_id, caps.cloud_audit)?;
+                host.set_cloud_preexisting(&pairing.receiver_id, caps.cloud_preexisting)?;
             }
             Ok(json!({"receiver_id":pairing.receiver_id,"cloud_audit":caps.cloud_audit}))
         }

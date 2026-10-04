@@ -43,6 +43,8 @@ impl Drop for Temp {
 #[derive(Default)]
 struct Fake {
     library: HashMap<String, (String, Option<bool>)>,
+    /// SHA-1 -> when Google added the item (`creation_timestamp_ms`).
+    created: HashMap<String, i64>,
     expire_lookup: bool,
     expire_info: bool,
     /// Expire every lookup once this many have been made.
@@ -69,7 +71,7 @@ impl CloudLookup for Fake {
                     width: None,
                     height: None,
                     timestamp_ms: None,
-                    creation_timestamp_ms: None,
+                    creation_timestamp_ms: self.created.get(h).copied(),
                 })
             })
             .collect())
@@ -726,4 +728,168 @@ async fn lock_hidden_partial_runs_settle_on_the_next_run() {
     }
     assert_eq!(job_locked(&sender, &ids[3]), None);
     assert!(fake.library.contains_key(&sha1('d')));
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
+const MINUTE: i64 = 60_000;
+
+/// Copies are published an hour ago (see `gallery`); a quota match Google
+/// added more than ten minutes before that came from another device.
+#[tokio::test]
+async fn quota_matches_added_before_publication_are_already_in_cloud() {
+    let t = Temp::new();
+    let r = common::start_receiver(&t.0.join("receiver"), 100000).await;
+    let sender = SenderHost::open(&t.0.join("sender")).unwrap();
+    sender
+        .set_cloud_audit(&r.pairing.receiver_id, true)
+        .unwrap();
+    sender
+        .set_cloud_preexisting(&r.pairing.receiver_id, true)
+        .unwrap();
+    let mut fake = Fake::default();
+    for c in ['a', 'b', 'c', 'd'] {
+        fake.library
+            .insert(sha1(c), (format!("key-{c}"), Some(true)));
+    }
+    let now = now_ms();
+    fake.created.insert(sha1('a'), now - 120 * MINUTE);
+    fake.created.insert(sha1('b'), now - 30 * MINUTE);
+    fake.created.insert(sha1('c'), now - 65 * MINUTE);
+
+    let earlier = publish(&t, &r, &sender, "earlier", 'a').await;
+    let report = sender
+        .cloud_audit(&r.pairing, &mut fake, RUN)
+        .await
+        .unwrap();
+    // No genuine quota use, so nothing for the app to pause on.
+    assert_eq!(
+        report,
+        RunReport {
+            checked: 1,
+            found: 1,
+            already_in_cloud: 1,
+            posted: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(cloud_state(&r, &earlier), "verified_elsewhere");
+    assert_eq!(
+        job_cloud(&sender, &earlier).as_deref(),
+        Some("verified_elsewhere")
+    );
+
+    // Added after publication, inside the skew margin, or without a
+    // timestamp: our upload may have added it, so it counts.
+    let after = publish(&t, &r, &sender, "after", 'b').await;
+    let margin = publish(&t, &r, &sender, "margin", 'c').await;
+    let untimed = publish(&t, &r, &sender, "untimed", 'd').await;
+    let report = sender
+        .cloud_audit(&r.pairing, &mut fake, RUN)
+        .await
+        .unwrap();
+    assert_eq!(
+        report,
+        RunReport {
+            checked: 3,
+            found: 3,
+            quota: 3,
+            new_quota: 3,
+            posted: 3,
+            ..Default::default()
+        }
+    );
+    for id in [&after, &margin, &untimed] {
+        assert_eq!(cloud_state(&r, id), "verified_counts_against_quota");
+    }
+
+    // Cloud-held, so hidden copies may move to the Locked Folder.
+    let lock = sender
+        .lock_hidden(
+            &r.pairing,
+            &mut fake,
+            lock_options(&["earlier", "after"], false),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (lock.verified_hidden, lock.moved, lock.skipped_quota),
+        (1, 1, 1)
+    );
+    assert_eq!(job_locked(&sender, &earlier).as_deref(), Some("moved"));
+}
+
+/// A receiver without `cloud_preexisting` would reject `already_in_cloud`,
+/// so it keeps getting `counts_against_quota`. Once it advertises it, the
+/// quota rows the backoff re-checks re-classify.
+#[tokio::test]
+async fn quota_rows_reclassify_once_the_receiver_accepts_already_in_cloud() {
+    let t = Temp::new();
+    let r = common::start_receiver(&t.0.join("receiver"), 100000).await;
+    let sender = SenderHost::open(&t.0.join("sender")).unwrap();
+    sender
+        .set_cloud_audit(&r.pairing.receiver_id, true)
+        .unwrap();
+    let mut fake = Fake::default();
+    fake.library.insert(sha1('a'), ("key-a".into(), Some(true)));
+    fake.created.insert(sha1('a'), now_ms() - 120 * MINUTE);
+    let id = publish(&t, &r, &sender, "earlier", 'a').await;
+    let report = sender
+        .cloud_audit(&r.pairing, &mut fake, RUN)
+        .await
+        .unwrap();
+    assert_eq!(
+        (report.quota, report.new_quota, report.already_in_cloud),
+        (1, 1, 0)
+    );
+    assert_eq!(cloud_state(&r, &id), "verified_counts_against_quota");
+
+    sender
+        .set_cloud_preexisting(&r.pairing.receiver_id, true)
+        .unwrap();
+    // Not due yet: the first re-check waits twenty minutes.
+    let idle = sender
+        .cloud_audit(&r.pairing, &mut fake, RUN)
+        .await
+        .unwrap();
+    assert_eq!(idle.checked, 0);
+    rusqlite::Connection::open(t.0.join("receiver/store/receiver.sqlite3"))
+        .unwrap()
+        .execute(
+            "UPDATE assets SET cloud_checked_at_ms=cloud_checked_at_ms-1200000 WHERE id=?1",
+            [&id],
+        )
+        .unwrap();
+    let report = sender
+        .cloud_audit(&r.pairing, &mut fake, RUN)
+        .await
+        .unwrap();
+    assert_eq!(
+        report,
+        RunReport {
+            checked: 1,
+            found: 1,
+            already_in_cloud: 1,
+            posted: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(cloud_state(&r, &id), "verified_elsewhere");
+    assert_eq!(
+        job_cloud(&sender, &id).as_deref(),
+        Some("verified_elsewhere")
+    );
+    assert_eq!(
+        sender
+            .cloud_audit(&r.pairing, &mut fake, RUN)
+            .await
+            .unwrap()
+            .checked,
+        0
+    );
 }

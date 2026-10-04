@@ -633,7 +633,7 @@
 
 "settings_cloud" = "Google Photos";
 "cloud_audit_title" = "Google Photos check";
-"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory. The Mac deletes nothing; if you turn on cloud release on the Pixel, it removes its own gallery copies of photos reported as backed up without using Google storage. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
+"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory. The Mac deletes nothing; if you turn on cloud release on the Pixel, it removes its own gallery copies of photos reported as backed up without using Google storage, or already in Google Photos from another device. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
 "cloud_audit_readme" = "How to export cookies and what is checked";
 "cloud_audit_cookies" = "Cookies file";
 "cloud_audit_cookies_set" = "Selected";
@@ -644,17 +644,19 @@
 "cloud_audit_auto_pause" = "Pause backup when new uploads count against Google storage";
 "cloud_audit_check_now" = "Check now";
 "cloud_audit_dry_run" = "Dry run";
-"cloud_audit_last_run" = "Last check %1$@: %2$d checked, %3$d free, %4$d counting against storage, %5$d not found, %6$d unknown";
+"cloud_audit_last_run" = "Last check %1$@: %2$d checked, %3$d free, %4$d already in Google Photos from another device, %5$d counting against storage, %6$d not found, %7$d unknown";
 "cloud_audit_session_expired" = "Google Photos session expired. Export cookies again.";
 "cloud_quota_warning" = "%d photos in Google Photos count against your Google storage.";
 "cloud_quota_pause" = "Backup paused: %d newly uploaded photos count against your Google storage.";
 "cloud_summary" = "%1$d backed up to Google Photos / %2$d added to phone gallery";
+"cloud_summary_elsewhere" = "%d already in Google Photos from another device";
 "cloud_summary_attention" = "%1$d counting against Google storage, %2$d not found in Google Photos";
 "state_cloud_verified" = "Backed up to Google Photos";
+"state_cloud_elsewhere" = "Already in Google Photos (from another device)";
 "state_cloud_quota" = "Uploaded, but counting against Google storage";
 "state_cloud_missing" = "Not found in Google Photos yet";
 "cloud_lock_hidden_title" = "Hidden photos";
-"cloud_lock_hidden_explanation" = "Moves photos from the Photos Hidden album into the Google Photos Locked Folder once the check has found them backed up free of storage, so they do not stay in your Google Photos timeline. At most 200 per run, after each check. Photos counting against storage or not yet found are left alone, and nothing is moved back out.";
+"cloud_lock_hidden_explanation" = "Moves photos from the Photos Hidden album into the Google Photos Locked Folder once the check has found them backed up free of storage or already in Google Photos from another device, so they do not stay in your Google Photos timeline. At most 200 per run, after each check. Photos counting against storage or not yet found are left alone, and nothing is moved back out.";
 "cloud_lock_hidden_enabled" = "Move hidden photos to the Locked Folder";
 "cloud_lock_hidden_reconfirm" = "The Google account index changed. Turn this on again to confirm Locked Folder backup for that account.";
 "cloud_lock_hidden_now" = "Move hidden photos now";

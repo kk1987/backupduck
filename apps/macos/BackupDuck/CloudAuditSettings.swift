@@ -7,6 +7,9 @@ struct CloudAuditResult: Decodable, Equatable {
   var checked = 0
   var found = 0
   var verified = 0
+  /// Counted against quota, but another device uploaded the bytes first.
+  var already_in_cloud = 0
+  /// Genuine quota use by our uploads.
   var quota = 0
   var new_quota = 0
   var not_found = 0
@@ -266,7 +269,7 @@ struct CloudAuditSettings: View {
     guard let status = model.cloudAudit, let at = status.last_run_ms, let result = status.last_result else { return nil }
     let date = Date(timeIntervalSince1970: Double(at) / 1000).formatted(date: .abbreviated, time: .shortened)
     return String(format: NSLocalizedString("cloud_audit_last_run", comment: ""), date, result.checked,
-      result.verified, result.quota, result.not_found, result.unknown)
+      result.verified, result.already_in_cloud, result.quota, result.not_found, result.unknown)
       + (result.dry_run ? " · " + NSLocalizedString("cloud_audit_dry_run", comment: "") : "")
   }
 

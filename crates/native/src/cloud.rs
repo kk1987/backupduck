@@ -122,13 +122,18 @@ pub struct RunOptions {
     pub max_items: u32,
 }
 
-/// `verified`/`quota`/`not_found`/`unknown` count Google verdicts in this run;
-/// receiver states follow from them per the protocol.
+/// `verified`/`already_in_cloud`/`quota`/`not_found`/`unknown` count Google
+/// verdicts in this run; receiver states follow from them per the protocol.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunReport {
     pub checked: u32,
     pub found: u32,
     pub verified: u32,
+    /// Counted against quota but added to Google Photos before the receiver
+    /// published its copy: another device uploaded the bytes, ours added none.
+    #[serde(default)]
+    pub already_in_cloud: u32,
+    /// Genuine quota use by our upload.
     pub quota: u32,
     /// Quota verdicts for copies not already known to count against quota.
     pub new_quota: u32,
@@ -154,7 +159,7 @@ pub struct LockOptions {
 /// of this run; `already_moved` and `attempts_exhausted` are earlier ones.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LockReport {
-    /// Received jobs of hidden sources whose copy is `verified`, including
+    /// Received jobs of hidden sources whose copy the cloud holds, including
     /// those already moved.
     pub verified_hidden: u32,
     /// Verified items selected this run (at most `max_items`).
@@ -187,6 +192,21 @@ fn move_may_have_happened(error: &audit::Error) -> bool {
         error,
         audit::Error::SessionExpired | audit::Error::RateLimited | audit::Error::BudgetExhausted
     )
+}
+
+/// Clock-skew margin between the receiver's publication time and Google's.
+pub const PREEXISTING_MARGIN_MS: i64 = 600_000;
+
+/// Whether Google added the matched item well before the receiver published
+/// its copy, so another device uploaded the same bytes first and Google
+/// de-duplicated our upload onto it. Unknown timestamps never qualify.
+fn added_before_publication(hit: Option<&HashLookup>, published_at_ms: Option<i64>) -> bool {
+    match (hit.and_then(|h| h.creation_timestamp_ms), published_at_ms) {
+        (Some(created), Some(published)) => {
+            created < published.saturating_sub(PREEXISTING_MARGIN_MS)
+        }
+        _ => false,
+    }
 }
 
 fn now_ms() -> i64 {
@@ -314,7 +334,9 @@ impl SenderHost {
 
     /// Checks due gallery copies, posts verdicts (unless `dry_run`) and mirrors
     /// them onto this sender's jobs. Unknown verdicts are not posted, so those
-    /// copies stay pending and are looked up again next run.
+    /// copies stay pending and are looked up again next run. Quota matches
+    /// that predate publication are `already_in_cloud` when the receiver
+    /// accepts it, else `counts_against_quota` as before.
     pub async fn cloud_audit(
         &self,
         pairing: &Pairing,
@@ -324,6 +346,11 @@ impl SenderHost {
         let receiver = pairing.receiver_id.as_str();
         self.require_cloud_audit(receiver)?;
         let _guard = BusyGuard::acquire(&self.cloud_audit_busy)?;
+        let preexisting = self
+            .sender
+            .lock()
+            .map_err(lock)?
+            .cloud_preexisting(receiver)?;
         let client = pairing.client()?;
         let max = if options.max_items == 0 {
             DEFAULT_MAX_ITEMS
@@ -364,6 +391,13 @@ impl SenderHost {
                     Verdict::Free => {
                         report.verified += 1;
                         CloudResult::Free
+                    }
+                    Verdict::CountsAgainstQuota
+                        if preexisting
+                            && added_before_publication(hit.as_ref(), item.published_at_ms) =>
+                    {
+                        report.already_in_cloud += 1;
+                        CloudResult::AlreadyInCloud
                     }
                     Verdict::CountsAgainstQuota => {
                         report.quota += 1;
@@ -454,9 +488,10 @@ impl SenderHost {
 impl SenderHost {
     /// Moves cloud-verified copies of the given hidden sources into the Google
     /// Photos Locked Folder, at most `max_items` per run. Only received jobs
-    /// whose copy is `verified` qualify. A move counts only when `StLnCe`
-    /// succeeded and a fresh lookup no longer finds the SHA-1 in the library.
-    /// Receiver state is not touched: its `verified` rows are never re-checked.
+    /// whose copy the cloud holds (`verified`, `verified_elsewhere`) qualify.
+    /// A move counts only when `StLnCe` succeeded and a fresh lookup no longer
+    /// finds the SHA-1 in the library.
+    /// Receiver state is not touched: its cloud-held rows are never re-checked.
     pub async fn lock_hidden(
         &self,
         pairing: &Pairing,
@@ -483,7 +518,7 @@ impl SenderHost {
         let mut eligible = Vec::new();
         for job in jobs {
             match job.cloud.as_deref() {
-                Some("verified") => report.verified_hidden += 1,
+                _ if job.cloud_held() => report.verified_hidden += 1,
                 Some("verified_counts_against_quota") => {
                     report.skipped_quota += 1;
                     continue;
