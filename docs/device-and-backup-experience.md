@@ -345,6 +345,39 @@ the original format. Users should keep their source library or another original
 backup. A retained receipt records a completed historical transfer; it is not
 a guarantee of indefinite original retention or third-party cloud availability.
 
+### Cloud-verified release
+
+The storage page also offers “Delete phone copies backed up to Google Photos”,
+off by default, under “Free space after Google Photos backup”. Enabling needs a
+confirmation that explains: only BackupDuck's own gallery copies (and the
+originals it keeps for them) are deleted; only after the Mac's Google Photos
+check found the exact bytes stored free at original quality; copies counting
+against Google storage or not found are never deleted; the cloud copy is not
+touched; the Mac check must keep running; each copy waits at least the grace
+(one hour by default) after its verdict. The card shows how many copies are
+verified, how many were freed and their recorded size.
+
+While on, it replaces relay reclamation: publication keeps originals, the relay
+sweep and manual historical inspection find nothing, and originals are released
+together with the gallery copy only through the cloud path. A note under the
+relay switch says so. Turning it off stops new deletions at the next command;
+deleted copies are not restored. The policy is designed for whole-library
+migrations through a small phone, so it deletes as soon as a copy qualifies
+instead of waiting for low space.
+
+History rows show “Backed up to Google Photos · freed from phone” for released
+copies, then “Backed up to Google Photos”, “Uploaded, but counting against
+Google storage” or “Not found in Google Photos” from the auditor's verdict, and
+skip the thumbnail of a released copy. The receipt export keeps released copies
+and adds `gallery_released`. The browser dashboard shows the same states.
+
+On Android 10 an app may delete MediaStore items it owns without a prompt.
+Uninstalling also removes the receiver's records, so a copy the app no longer
+owns is not expected in practice; if one appears it is left in place and
+logged. See
+[architecture](architecture.md#cloud-verified-release) for the order of
+operations and crash safety.
+
 
 References:
 - https://developer.android.com/reference/android/provider/MediaStore.MediaColumns
