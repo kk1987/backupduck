@@ -23,6 +23,16 @@ pub struct HashLookup {
     pub creation_timestamp_ms: Option<i64>,
 }
 
+/// Result of one `StLnCe` move into the Locked Folder.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct LockedMove {
+    /// Media keys of the new Locked Folder items. Media keys change on every
+    /// move; dedup keys are the stable identity.
+    pub new_keys: Vec<String>,
+    /// Media keys of the library item and its album entries that were removed.
+    pub removed_keys: Vec<String>,
+}
+
 /// Quota-relevant item fields from `EWgK9e`, `VrseUb` or `fDcn4b`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ItemInfo {
@@ -188,5 +198,29 @@ pub fn parse_item_info_ext(data: &Value) -> Result<ItemInfo> {
         takes_up_space,
         space_taken,
         is_original_quality,
+    })
+}
+
+/// `StLnCe` (move to Locked Folder, recorded live 2026-10-03): `data[0]` lists
+/// the new items `[newKey, null x4, [newKey, [..]]]`, `data[1]` the removed
+/// library and album entries `[[1, [oldKey]], null, true]`.
+pub fn parse_locked_move(data: &Value) -> Result<LockedMove> {
+    if !data.is_array() {
+        return Err(Error::Parse("StLnCe payload is not an array".into()));
+    }
+    let keys = |index: usize, path: &[usize]| -> Result<Vec<String>> {
+        let what = format!("StLnCe data[{index}]");
+        Ok(list(at(data, &[index]), &what)?
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| non_empty(at(item, path)))
+                    .collect()
+            })
+            .unwrap_or_default())
+    };
+    Ok(LockedMove {
+        new_keys: keys(0, &[0])?,
+        removed_keys: keys(1, &[0, 1, 0])?,
     })
 }

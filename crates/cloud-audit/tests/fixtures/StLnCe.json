@@ -1,0 +1,20 @@
+[
+  [
+    [
+      "AF1QipLOCKEDNEWKEY000000000000000000000000000",
+      null,
+      null,
+      null,
+      null,
+      [
+        "AF1QipLOCKEDNEWKEY000000000000000000000000000",
+        ["100000000000000000000", null, "7000000000000000000"]
+      ]
+    ]
+  ],
+  [
+    [[1, ["AF1QipORIGINALKEY00000000000000000000000000"]], null, true],
+    [[1, ["AF1QipALBUMITEMKEY1000000000000000000000000"]], null, true],
+    [[1, ["AF1QipALBUMITEMKEY2000000000000000000000000"]], null, true]
+  ]
+]

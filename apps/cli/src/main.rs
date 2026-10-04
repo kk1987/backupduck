@@ -326,6 +326,7 @@ async fn cloud_audit(command: CloudCommand) -> cloud::Result<()> {
                         "sha1": sha1,
                         "found": lookup.is_some(),
                         "media_key": lookup.as_ref().map(|l| &l.media_key),
+                        "dedup_key": lookup.as_ref().and_then(|l| l.dedup_key.as_ref()),
                         "device_model": lookup.as_ref().and_then(|l| l.device_model.as_ref()),
                         "takes_up_space": info.and_then(|i| i.takes_up_space),
                         "is_original_quality": info.and_then(|i| i.is_original_quality),

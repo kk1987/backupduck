@@ -10,6 +10,10 @@ from the `wrb.fr` envelope, that upstream sanitised before publishing (media
 URLs, names and identifiers replaced with placeholders). `EWgK9e.json` is the
 item list at `response[0][1]`, as Toolkit stores it.
 
+`StLnCe.json` is this project's own recording of a `StLnCe` (move to Locked
+Folder) response from 2026-10-03, unwrapped like the others. Media keys and
+numeric identifiers were replaced with placeholders of the same shape.
+
 Upstream licence:
 
 ```
