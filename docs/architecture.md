@@ -93,6 +93,10 @@ shows the `smartAlbumAllHidden` count PhotoKit currently exposes and, when it is
 A process that was already running saw the change only after several minutes
 (the cause is not known); a relaunch shows it right away.
 
+On macOS, hidden items verified in Google Photos can also be moved into the
+Google Photos Locked Folder; see
+[Hidden photos and Locked Folder](#hidden-photos-and-locked-folder).
+
 ## Rescan and content identity
 
 Gallery metadata (favorite, location, capture date, burst fields) is part of the
@@ -203,6 +207,55 @@ and Google reported its quota flag at that moment. It does not prove the item
 stays in the account, that it is the same account the Pixel uploads to, or that
 storage-saver re-encodes would match; the live RPC behaviour is unverified by
 this project.
+
+### Hidden photos and Locked Folder
+
+Items from the Apple Photos Hidden album should not stay in the normal Google
+Photos timeline. The Mac can move them into the Google Photos Locked Folder
+once the cloud audit has verified them. It is off by default (`cloudLockHidden`
+in the Mac app). Turning it on requires ticking that Locked Folder backup is on
+in Google Photos for the selected account; the confirmation is stored with the
+account index and asked again when the index changes. Google's help states that
+Google Photos backups of Locked Folder items are deleted when Locked Folder
+backup is off, so without it a move would remove the only cloud copy.
+
+After each successful audit run, and from "Move hidden photos now", Swift reads
+the `smartAlbumAllHidden` identifiers off the main thread and calls
+`cloud_audit` `lock_hidden` with them; Rust never decides hiddenness. When
+PhotoKit exposes no hidden assets (usually the locked Hidden album, see
+[Apple library scope](#apple-library-scope)) it shows that warning and skips the
+call. Rust maps the identifiers to this receiver's `received` jobs whose sender
+cloud observation is `verified` (never `verified_counts_against_quota`,
+`pending` or `missing`), takes at most 200 per run, gets each gallery copy's
+SHA-1 from `/v2/publications?cloud=all` (the evidence outlives a released phone
+copy), and looks the hashes up. A match's dedup key goes to `StLnCe`
+(`[[dedup_key, ..], []]`, 50 per call); the item counts as moved only when that
+call succeeded and a second lookup no longer finds the SHA-1. Results are kept
+per item in the sender table `locked_folder_moves` (`moved`, `failed` with at
+most three attempts, `not_in_library` for a verified item no longer in the
+library that was never moved). A move whose result was not confirmed (a
+transport error, or the session expiring before the re-check) keeps its dedup
+key; if the next lookup no longer finds the hash, it is recorded as `moved`.
+Jobs carry the status as `locked_folder`, the summary counts
+`locked_folder_moved`, and the transfer list shows "In Google Photos Locked
+Folder". A dry run looks up without moving or recording.
+
+Observed live on 2026-10-03: `StLnCe` worked from a plain cookie session without
+a re-auth token. Afterwards the SHA-1 lookup found nothing, item info for the
+old media key failed, and the item was not in the trash; a person then saw it
+in the Locked Folder on the web, marked as backed up. Moving it back out in the
+web UI produced a new media key with the same dedup key, so dedup keys, not
+media keys, are the stable identity.
+
+The receiver is not told about the move and keeps `cloud_state='verified'`: the
+audit never lists verified rows again, so the item leaving the library is
+invisible to it, and cloud-verified release still applies. Listing the Locked
+Folder is never automated. From a cookie session `nMFwOc` returns an empty
+list and `photos.google.com/lockedfolder` redirects to an interactive sign-in
+challenge that also pushes a fingerprint prompt to the user's phone. Only the
+user can confirm the contents, in a browser at
+`https://photos.google.com/u/<account index>/lockedfolder`; the settings page
+links there. Items un-hidden later in Apple Photos stay in the Locked Folder.
 
 ### Cloud-verified release
 

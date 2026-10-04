@@ -43,6 +43,8 @@ struct BackupJob: Decodable, Identifiable, Equatable {
   var processingError: String? = nil
   /// Cloud verification reported by this sender's auditor (macOS only).
   var cloud: String? = nil
+  /// Google Photos Locked Folder move status (macOS only).
+  var lockedFolder: String? = nil
   var attempts: Int? = nil
   var nextAttemptAt: Int64? = nil
   var stateChangedAt: Int64? = nil
@@ -56,6 +58,7 @@ struct BackupJob: Decodable, Identifiable, Equatable {
     case confirmedBytes = "confirmed_bytes"
     case errorCode = "error_code"
     case processing, cloud
+    case lockedFolder = "locked_folder"
     case processingError = "processing_error"
   }
 }
@@ -111,6 +114,10 @@ enum Bridge {
     @Published var cloudAuditRunning = false
     @Published var cloudAuditError: String?
     var cloudAuditTask: Task<Void, Never>?
+    @Published var lockHiddenRunning = false
+    @Published var lockHiddenError: String?
+    /// Hidden assets PhotoKit exposed at the last Locked Folder run.
+    @Published var hiddenVisible: Int?
   #endif
   @Published var receiverConnection = ReceiverConnection.unknown
   @Published var checkingConnection = false

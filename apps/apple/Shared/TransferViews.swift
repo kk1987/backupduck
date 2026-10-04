@@ -66,7 +66,7 @@ struct TransferRow: View {
       switch job.processing {
       case "complete":
         switch job.cloud {
-        case "verified": return "state_cloud_verified"
+        case "verified": return job.lockedFolder == "moved" ? "state_cloud_locked_folder" : "state_cloud_verified"
         case "verified_counts_against_quota": return "state_cloud_quota"
         case "missing": return "state_cloud_missing"
         default: return "state_published"
@@ -94,7 +94,7 @@ struct TransferRow: View {
     if job.state == "received" && job.processing == "failed" { return ("exclamationmark.circle", .orange) }
     if job.state == "received" && job.processing == "complete" {
       switch job.cloud {
-      case "verified": return ("checkmark.circle.fill", .blue)
+      case "verified": return (job.lockedFolder == "moved" ? "lock.icloud.fill" : "checkmark.circle.fill", .blue)
       case "verified_counts_against_quota", "missing": return ("exclamationmark.icloud", .orange)
       default: break
       }
