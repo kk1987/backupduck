@@ -242,6 +242,8 @@ async fn history(
                 "received_at_ms": item.received_at_ms,
                 "published_at_ms": item.published_at_ms,
                 "originals_released": item.originals_released,
+                "cloud_state": item.cloud_state,
+                "gallery_released": item.gallery_released,
                 "senders": item.senders.into_iter().map(|peer| peer.profile.name).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         })).into_response(),
