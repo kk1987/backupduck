@@ -41,7 +41,8 @@ backupduck cloud-audit lookup --cookies cookies.txt [--account N] FILE...
 `--account N` selects `photos.google.com/u/N/` in a multi-login session.
 `status` prints the account index and whether the session is valid; it never
 prints the account email. `lookup` prints one JSON object per file: SHA-1,
-whether a library item has that hash, media key, camera model (EXIF make/model of the photo, not the uploading device), the quota flags
+whether a library item has that hash, media key, dedup key (stable across
+Locked Folder moves), camera model (EXIF make/model of the photo, not the uploading device), the quota flags
 and a verdict (`free`, `counts_against_quota`, `not_found`, `unknown`).
 
 ## macOS app
@@ -53,6 +54,11 @@ check. A run asks the paired Pixel receiver for gallery copies whose check is
 due, looks up at most 600 of them within the limits below and reports verdicts
 back; a match without quota information is left pending for the next run.
 "Google Photos session expired" means the cookies need exporting again.
+
+"Hidden photos" (off by default, needs a confirmation that Locked Folder
+backup is on) moves Apple Photos Hidden items whose copy is verified into the
+Locked Folder with `StLnCe`, at most 200 per run, after each check; see
+[architecture](../../docs/architecture.md#hidden-photos-and-locked-folder).
 
 ## Protocol
 
@@ -80,6 +86,25 @@ error. HTTP 429 is rate limiting.
 | `EWgK9e` | `[[[[[key], ..]], [[null x24, [], null x10, []]]]]` | name, size and quota vector for up to 50 media keys |
 | `VrseUb` | `[key, null, null, null, null]` | single item; quota vector only (lower confidence) |
 | `fDcn4b` | parser only | extended single-item info |
+| `StLnCe` | `[[dedup_key, ..], []]` | move library items into the Locked Folder (`Auditor::move_to_locked_folder`) |
+
+`StLnCe` returns `[newItems, removedEntries]`: each new Locked Folder item is
+`[newMediaKey, null x4, [newMediaKey, [..]]]`, each removed library or album
+entry `[[1, [oldMediaKey]], null, true]` (fixture `tests/fixtures/StLnCe.json`,
+recorded 2026-10-03). It worked from a plain cookie session without any re-auth
+token. Afterwards the item's SHA-1 no longer matches in `swbisb` and `VrseUb`
+fails for the old media key. Media keys change on every move in or out; dedup
+keys stay the same. Callers confirm a move with a fresh `swbisb` lookup.
+
+**Never call `nMFwOc` (list the Locked Folder) and never fetch
+`photos.google.com/lockedfolder`.** From a cookie session they return an empty
+list or redirect to an interactive sign-in challenge, and push a fingerprint
+prompt to the account owner's phone. Do not try to complete Google's re-auth
+challenge. Only the user can check the Locked Folder, in a browser.
+
+Moving items into the Locked Folder while Locked Folder backup is off makes
+Google delete their cloud backups (Google Photos help). The Mac app asks the
+user to confirm that backup is on before it moves anything.
 
 The quota vector is `[takesUpSpace, spaceTaken, quality, ..]`: `takesUpSpace`
 is `1` when the item counts against quota, `quality` is `2` for original

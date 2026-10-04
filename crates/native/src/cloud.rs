@@ -3,15 +3,29 @@
 //! contents, paths and account details never appear in results or logs.
 use super::*;
 use backupduck_cloud_audit::{
-    self as audit, Auditor, CookieFile, HashLookup, ItemInfo, Session, Throttle, Verdict,
+    self as audit, auditor::CHUNK, Auditor, CookieFile, HashLookup, ItemInfo, LockedMove, Session,
+    Throttle, Verdict,
 };
-use std::{collections::HashMap, future::Future};
+use backupduck_sender::LockedFolderJob;
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+};
 
 /// Fits the default per-run RPC budget: 50 hashes or keys per call.
 pub const DEFAULT_MAX_ITEMS: u32 = 600;
 
 fn default_max_items() -> u32 {
     DEFAULT_MAX_ITEMS
+}
+
+/// Locked Folder moves per run: three RPCs per 50 items, well inside the budget.
+pub const DEFAULT_LOCK_MAX_ITEMS: u32 = 200;
+/// Failed moves are retried on later runs up to this many attempts.
+pub const MAX_LOCK_ATTEMPTS: u32 = 3;
+
+fn default_lock_max_items() -> u32 {
+    DEFAULT_LOCK_MAX_ITEMS
 }
 
 #[derive(Deserialize)]
@@ -32,6 +46,20 @@ pub enum Command {
         #[serde(default = "default_max_items")]
         max_items: u32,
     },
+    /// Moves cloud-verified copies of hidden sources into the Google Photos
+    /// Locked Folder. The host decides hiddenness: `source_ids` are the
+    /// PhotoKit identifiers of currently hidden assets.
+    LockHidden {
+        pairing: Pairing,
+        cookies_path: PathBuf,
+        #[serde(default)]
+        account_index: u32,
+        source_ids: Vec<String>,
+        #[serde(default)]
+        dry_run: bool,
+        #[serde(default = "default_lock_max_items")]
+        max_items: u32,
+    },
 }
 
 /// Google-side lookups, aligned with their inputs. Tests inject scripted fakes.
@@ -44,6 +72,11 @@ pub trait CloudLookup {
         &mut self,
         media_keys: &[String],
     ) -> impl Future<Output = audit::Result<Vec<Option<ItemInfo>>>>;
+    /// Moves library items (by dedup key) into the Locked Folder.
+    fn move_to_locked(
+        &mut self,
+        dedup_keys: &[String],
+    ) -> impl Future<Output = audit::Result<LockedMove>>;
 }
 
 /// Opens the session on first use, so a run with nothing due never contacts Google.
@@ -75,6 +108,12 @@ impl CloudLookup for LiveLookup {
     async fn info(&mut self, media_keys: &[String]) -> audit::Result<Vec<Option<ItemInfo>>> {
         self.auditor().await?.item_info(media_keys).await
     }
+    async fn move_to_locked(&mut self, dedup_keys: &[String]) -> audit::Result<LockedMove> {
+        self.auditor()
+            .await?
+            .move_to_locked_folder(dedup_keys)
+            .await
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -102,6 +141,52 @@ pub struct RunReport {
     /// Why the run ended early: `rate_limited`, `budget_exhausted` or an error code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct LockOptions {
+    pub source_ids: Vec<String>,
+    pub dry_run: bool,
+    pub max_items: u32,
+}
+
+/// One Locked Folder run. `moved`, `failed` and `not_in_library` are outcomes
+/// of this run; `already_moved` and `attempts_exhausted` are earlier ones.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LockReport {
+    /// Received jobs of hidden sources whose copy is `verified`, including
+    /// those already moved.
+    pub verified_hidden: u32,
+    /// Verified items selected this run (at most `max_items`).
+    pub candidates: u32,
+    /// Verified items left for a later run by `max_items`.
+    pub deferred: u32,
+    /// Candidates looked up in Google Photos.
+    pub checked: u32,
+    /// Candidates still in the library before moving (what a dry run would move).
+    pub found: u32,
+    pub moved: u32,
+    pub failed: u32,
+    pub not_in_library: u32,
+    pub already_moved: u32,
+    pub attempts_exhausted: u32,
+    pub skipped_quota: u32,
+    pub skipped_unverified: u32,
+    /// Verified but the receiver has no SHA-1 evidence for the copy.
+    pub skipped_no_sha1: u32,
+    pub dry_run: bool,
+    pub session_expired: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<String>,
+}
+
+/// Whether a failed `StLnCe` call may still have taken effect. Session,
+/// rate-limit and budget failures never reached Google's move handler.
+fn move_may_have_happened(error: &audit::Error) -> bool {
+    !matches!(
+        error,
+        audit::Error::SessionExpired | audit::Error::RateLimited | audit::Error::BudgetExhausted
+    )
 }
 
 fn now_ms() -> i64 {
@@ -177,6 +262,21 @@ async fn verdicts(
     Ok((verdicts, stop))
 }
 
+struct BusyGuard<'a>(&'a AtomicBool);
+impl<'a> BusyGuard<'a> {
+    fn acquire(flag: &'a AtomicBool) -> Result<Self> {
+        if flag.swap(true, Ordering::SeqCst) {
+            return Err(Error::Conflict("cloud audit already running".into()));
+        }
+        Ok(Self(flag))
+    }
+}
+impl Drop for BusyGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 impl SenderHost {
     fn require_cloud_audit(&self, receiver: &str) -> Result<()> {
         if self.sender.lock().map_err(lock)?.cloud_audit(receiver)? {
@@ -196,11 +296,19 @@ impl SenderHost {
             .as_ref()
             .is_some_and(|(_, r)| r["session_expired"] == true);
         let (last_run_ms, last_result) = run.unzip();
+        let (last_lock_run_ms, last_lock_result) = self
+            .sender
+            .lock()
+            .map_err(lock)?
+            .locked_folder_run(receiver)?
+            .unzip();
         Ok(json!({
             "configured": cookies.is_some_and(Path::is_file),
             "last_run_ms": last_run_ms,
             "last_result": last_result,
             "session_expired": session_expired,
+            "last_lock_run_ms": last_lock_run_ms,
+            "last_lock_result": last_lock_result,
         }))
     }
 
@@ -215,16 +323,7 @@ impl SenderHost {
     ) -> Result<RunReport> {
         let receiver = pairing.receiver_id.as_str();
         self.require_cloud_audit(receiver)?;
-        if self.cloud_audit_busy.swap(true, Ordering::SeqCst) {
-            return Err(Error::Conflict("cloud audit already running".into()));
-        }
-        struct Guard<'a>(&'a AtomicBool);
-        impl Drop for Guard<'_> {
-            fn drop(&mut self) {
-                self.0.store(false, Ordering::SeqCst);
-            }
-        }
-        let _guard = Guard(&self.cloud_audit_busy);
+        let _guard = BusyGuard::acquire(&self.cloud_audit_busy)?;
         let client = pairing.client()?;
         let max = if options.max_items == 0 {
             DEFAULT_MAX_ITEMS
@@ -352,6 +451,240 @@ impl SenderHost {
     }
 }
 
+impl SenderHost {
+    /// Moves cloud-verified copies of the given hidden sources into the Google
+    /// Photos Locked Folder, at most `max_items` per run. Only received jobs
+    /// whose copy is `verified` qualify. A move counts only when `StLnCe`
+    /// succeeded and a fresh lookup no longer finds the SHA-1 in the library.
+    /// Receiver state is not touched: its `verified` rows are never re-checked.
+    pub async fn lock_hidden(
+        &self,
+        pairing: &Pairing,
+        lookup: &mut impl CloudLookup,
+        options: LockOptions,
+    ) -> Result<LockReport> {
+        let receiver = pairing.receiver_id.as_str();
+        self.require_cloud_audit(receiver)?;
+        let _guard = BusyGuard::acquire(&self.cloud_audit_busy)?;
+        let max = if options.max_items == 0 {
+            DEFAULT_LOCK_MAX_ITEMS
+        } else {
+            options.max_items
+        } as usize;
+        let mut report = LockReport {
+            dry_run: options.dry_run,
+            ..Default::default()
+        };
+        let jobs = self
+            .sender
+            .lock()
+            .map_err(lock)?
+            .locked_folder_jobs(receiver, &options.source_ids)?;
+        let mut eligible = Vec::new();
+        for job in jobs {
+            match job.cloud.as_deref() {
+                Some("verified") => report.verified_hidden += 1,
+                Some("verified_counts_against_quota") => {
+                    report.skipped_quota += 1;
+                    continue;
+                }
+                _ => {
+                    report.skipped_unverified += 1;
+                    continue;
+                }
+            }
+            match job.status.as_deref() {
+                Some("moved") => report.already_moved += 1,
+                // Never moved and gone from the library: nothing left to do.
+                Some("not_in_library") => {}
+                Some("failed") if job.attempts >= MAX_LOCK_ATTEMPTS => {
+                    report.attempts_exhausted += 1
+                }
+                _ => eligible.push(job),
+            }
+        }
+        report.deferred = eligible.len().saturating_sub(max) as u32;
+        eligible.truncate(max);
+        report.candidates = eligible.len() as u32;
+
+        let failure = if eligible.is_empty() {
+            None
+        } else {
+            let sha1 = self.gallery_sha1(pairing, &eligible).await?;
+            let mut items = Vec::new();
+            for job in eligible {
+                match sha1.get(&job.asset_id) {
+                    Some(sha1) => items.push((job, sha1.clone())),
+                    None => report.skipped_no_sha1 += 1,
+                }
+            }
+            self.lock_items(receiver, lookup, &items, &mut report)
+                .await?
+        };
+        if let Some(error) = &failure {
+            report.session_expired = matches!(error, audit::Error::SessionExpired);
+            if !report.session_expired {
+                report.stopped = Some(stop_reason(error).into());
+            }
+        }
+        self.sender.lock().map_err(lock)?.record_locked_folder_run(
+            receiver,
+            now_ms(),
+            &serde_json::to_value(&report)?,
+        )?;
+        self.maintenance.lock().map_err(lock)?.log(
+            if report.session_expired {
+                "cloud_session_expired"
+            } else {
+                "cloud_locked_folder_run"
+            },
+            None,
+            None,
+        )?;
+        match failure {
+            Some(error) if report.checked == 0 => Err(cloud_error(&error)),
+            _ => Ok(report),
+        }
+    }
+
+    /// SHA-1 of each job's gallery copy from the receiver's evidence, which
+    /// outlives the phone copy. Pages stop once every asset is found.
+    async fn gallery_sha1(
+        &self,
+        pairing: &Pairing,
+        jobs: &[LockedFolderJob],
+    ) -> Result<HashMap<String, String>> {
+        let client = pairing.client()?;
+        let mut wanted: HashSet<&str> = jobs.iter().map(|j| j.asset_id.as_str()).collect();
+        let mut found = HashMap::new();
+        let mut after: Option<String> = None;
+        while !wanted.is_empty() {
+            let page = client
+                .cloud_due(after.as_deref(), MAX_CLOUD_ITEMS as u32, true)
+                .await?;
+            for item in page.items {
+                if wanted.remove(item.asset_id.as_str()) {
+                    found.insert(item.asset_id, item.sha1);
+                }
+            }
+            match page.next {
+                Some(next) => after = Some(next),
+                None => break,
+            }
+        }
+        Ok(found)
+    }
+
+    /// Looks up, moves and re-checks `items` in batches. Returns the Google
+    /// error that ended the run early, if any.
+    async fn lock_items(
+        &self,
+        receiver: &str,
+        lookup: &mut impl CloudLookup,
+        items: &[(LockedFolderJob, String)],
+        report: &mut LockReport,
+    ) -> Result<Option<audit::Error>> {
+        let record = |job: &LockedFolderJob, status: &str, key: Option<&str>, attempt: bool| {
+            self.sender.lock().map_err(lock)?.record_locked_folder(
+                receiver,
+                &job.asset_id,
+                status,
+                key,
+                attempt,
+                now_ms(),
+            )
+        };
+        for batch in items.chunks(CHUNK) {
+            let hashes: Vec<String> = batch.iter().map(|(_, sha1)| sha1.clone()).collect();
+            let hits = match lookup.lookup(&hashes).await {
+                Ok(hits) if hits.len() == batch.len() => hits,
+                Ok(_) => {
+                    return Ok(Some(audit::Error::Parse(
+                        "hash lookup is not aligned".into(),
+                    )))
+                }
+                Err(e) => return Ok(Some(e)),
+            };
+            report.checked += batch.len() as u32;
+            let dry_run = report.dry_run;
+            let mut to_move = Vec::new();
+            for ((job, sha1), hit) in batch.iter().zip(hits) {
+                match hit {
+                    // A move requested earlier whose re-check did not finish.
+                    None if job.dedup_key.is_some() => {
+                        if dry_run {
+                            report.already_moved += 1;
+                        } else {
+                            report.moved += 1;
+                            record(job, "moved", None, false)?;
+                        }
+                    }
+                    None => {
+                        report.not_in_library += 1;
+                        if !dry_run {
+                            record(job, "not_in_library", None, false)?;
+                        }
+                    }
+                    Some(hit) => {
+                        report.found += 1;
+                        match hit.dedup_key.filter(|k| !k.is_empty()) {
+                            Some(key) => to_move.push((job, key, sha1)),
+                            None if dry_run => {}
+                            None => {
+                                report.failed += 1;
+                                record(job, "failed", None, true)?;
+                            }
+                        }
+                    }
+                }
+            }
+            if dry_run || to_move.is_empty() {
+                continue;
+            }
+            let keys: Vec<String> = to_move.iter().map(|(_, k, _)| k.clone()).collect();
+            if let Err(e) = lookup.move_to_locked(&keys).await {
+                // Only a call that may have reached Google counts; the next
+                // run's lookup settles whether it took effect.
+                if move_may_have_happened(&e) {
+                    for (job, key, _) in &to_move {
+                        report.failed += 1;
+                        record(job, "failed", Some(key), true)?;
+                    }
+                }
+                return Ok(Some(e));
+            }
+            let hashes: Vec<String> = to_move.iter().map(|(_, _, h)| (*h).clone()).collect();
+            let recheck = match lookup.lookup(&hashes).await {
+                Ok(hits) if hits.len() == to_move.len() => Ok(hits),
+                Ok(_) => Err(audit::Error::Parse("hash lookup is not aligned".into())),
+                Err(e) => Err(e),
+            };
+            match recheck {
+                Ok(hits) => {
+                    for ((job, key, _), hit) in to_move.iter().zip(hits) {
+                        if hit.is_none() {
+                            report.moved += 1;
+                            record(job, "moved", Some(key), false)?;
+                        } else {
+                            report.failed += 1;
+                            record(job, "failed", Some(key), true)?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    // The move went through; the next run settles each item.
+                    for (job, key, _) in &to_move {
+                        report.failed += 1;
+                        record(job, "failed", Some(key), false)?;
+                    }
+                    return Ok(Some(e));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
 pub(super) fn call(command: Command) -> Result<Value> {
     let host = sender()?;
     match command {
@@ -373,6 +706,28 @@ pub(super) fn call(command: Command) -> Result<Value> {
                 &pairing,
                 &mut lookup,
                 RunOptions { dry_run, max_items },
+            ))?;
+            Ok(serde_json::to_value(report)?)
+        }
+        Command::LockHidden {
+            pairing,
+            cookies_path,
+            account_index,
+            source_ids,
+            dry_run,
+            max_items,
+        } => {
+            host.require_cloud_audit(&pairing.receiver_id)?;
+            let cookies = CookieFile::load(&cookies_path).map_err(|e| cloud_error(&e))?;
+            let mut lookup = LiveLookup::new(cookies, account_index);
+            let report = runtime().block_on(host.lock_hidden(
+                &pairing,
+                &mut lookup,
+                LockOptions {
+                    source_ids,
+                    dry_run,
+                    max_items,
+                },
             ))?;
             Ok(serde_json::to_value(report)?)
         }

@@ -59,6 +59,22 @@ pub struct Job {
     /// Cloud verification state last reported by the sender's own auditor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cloud: Option<String>,
+    /// Google Photos Locked Folder move status (`moved`, `failed`,
+    /// `not_in_library`) recorded by the sender's auditor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_folder: Option<String>,
+}
+/// Locked Folder move statuses; `failed` is retried up to the attempt cap.
+pub const LOCKED_FOLDER_STATUSES: [&str; 3] = ["moved", "failed", "not_in_library"];
+/// A received job of a hidden source, with its cloud and Locked Folder state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LockedFolderJob {
+    pub asset_id: String,
+    pub cloud: Option<String>,
+    pub status: Option<String>,
+    pub attempts: u32,
+    /// Set once a move was requested for this item.
+    pub dedup_key: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attempt {
@@ -141,6 +157,8 @@ impl Sender {
             CREATE TABLE IF NOT EXISTS processing_observations(job_id INTEGER PRIMARY KEY,state TEXT,error TEXT,checked_at INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS cloud_observations(job_id INTEGER PRIMARY KEY,state TEXT NOT NULL,device_model TEXT,checked_at INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS cloud_audit_runs(receiver_id TEXT PRIMARY KEY,ran_at INTEGER NOT NULL,result TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS locked_folder_moves(receiver_id TEXT NOT NULL,asset_id TEXT NOT NULL,dedup_key TEXT,status TEXT NOT NULL,moved_at_ms INTEGER,attempts INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(receiver_id,asset_id));
+            CREATE TABLE IF NOT EXISTS locked_folder_runs(receiver_id TEXT PRIMARY KEY,ran_at INTEGER NOT NULL,result TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS receiver_features(receiver_id TEXT PRIMARY KEY,bundle_upload INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
             INSERT OR IGNORE INTO settings VALUES('paused',0);
@@ -246,7 +264,7 @@ impl Sender {
         self.conn.query_row("SELECT id FROM jobs WHERE receiver_id=?1 AND json_extract(manifest,'$.source_id')=?2 AND json_extract(manifest,'$.revision')=?3 ORDER BY id DESC LIMIT 1",params![receiver,source,revision],|r|r.get(0)).optional().map_err(db)
     }
     pub fn job(&self, id: i64) -> Result<Job> {
-        let row = self.conn.query_row("SELECT j.receiver_id,j.manifest,j.sources,j.state,j.generation,j.attempts,j.next_attempt_at,j.confirmed_bytes,j.error_code,j.native_task_id,j.state_changed_at_ms,p.state,p.error,c.state FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<i64>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?,r.get::<_,Option<String>>(13)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
+        let row = self.conn.query_row("SELECT j.receiver_id,j.manifest,j.sources,j.state,j.generation,j.attempts,j.next_attempt_at,j.confirmed_bytes,j.error_code,j.native_task_id,j.state_changed_at_ms,p.state,p.error,c.state,l.status FROM jobs j LEFT JOIN processing_observations p ON p.job_id=j.id LEFT JOIN cloud_observations c ON c.job_id=j.id LEFT JOIN locked_folder_moves l ON l.receiver_id=j.receiver_id AND l.asset_id=j.asset_id WHERE j.id=?1", [id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,i64>(4)?,r.get::<_,u32>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<i64>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?,r.get::<_,Option<String>>(13)?,r.get::<_,Option<String>>(14)?))).optional().map_err(db)?.ok_or(Error::NotFound)?;
         Ok(Job {
             id,
             receiver_id: row.0,
@@ -267,6 +285,7 @@ impl Sender {
             state_changed_at_ms: row.10,
             sort_value: None,
             cloud: row.13,
+            locked_folder: row.14,
         })
     }
     /// Bounded keyset pagination; never materialize the entire library for a UI poll.
@@ -503,6 +522,11 @@ impl Sender {
         result["cloud_verified"] = verified.into();
         result["cloud_quota"] = quota.into();
         result["cloud_missing"] = missing.into();
+        let locked: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM jobs j JOIN locked_folder_moves l ON l.receiver_id=j.receiver_id AND l.asset_id=j.asset_id WHERE j.receiver_id=?1 AND j.state='received' AND l.status='moved' AND (?2 IS NULL OR COALESCE(json_extract(j.manifest,'$.metadata.source_ref'),'library')=?2)",
+            params![receiver, source], |r| r.get(0),
+        ).map_err(db)?;
+        result["locked_folder_moved"] = locked.into();
         let waiting: Option<(String,i64)> = self.conn.query_row("SELECT error_code,next_attempt_at FROM jobs WHERE receiver_id=?1 AND state='waiting' AND (?2 IS NULL OR COALESCE(json_extract(manifest,'$.metadata.source_ref'),'library')=?2) ORDER BY next_attempt_at,id LIMIT 1",params![receiver,source],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(db)?;
         result["waiting_reason"] = waiting
             .as_ref()
@@ -818,6 +842,98 @@ impl Sender {
             .conn
             .query_row(
                 "SELECT ran_at,result FROM cloud_audit_runs WHERE receiver_id=?1",
+                [receiver],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        row.map(|(at, result)| Ok((at, serde_json::from_str(&result)?)))
+            .transpose()
+    }
+    /// Received jobs of the given sources, in job order, with their cloud
+    /// verdict and Locked Folder record. Unknown sources are ignored.
+    pub fn locked_folder_jobs(
+        &self,
+        receiver: &str,
+        source_ids: &[String],
+    ) -> Result<Vec<LockedFolderJob>> {
+        let sources: BTreeSet<&String> = source_ids.iter().collect();
+        let mut stmt = self.conn.prepare("SELECT j.id,j.asset_id,c.state,l.status,COALESCE(l.attempts,0),l.dedup_key FROM jobs j LEFT JOIN cloud_observations c ON c.job_id=j.id LEFT JOIN locked_folder_moves l ON l.receiver_id=j.receiver_id AND l.asset_id=j.asset_id WHERE j.receiver_id=?1 AND json_extract(j.manifest,'$.source_id')=?2 AND j.state='received'").map_err(db)?;
+        let mut jobs = Vec::new();
+        for source in sources {
+            let rows = stmt
+                .query_map(params![receiver, source], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        LockedFolderJob {
+                            asset_id: r.get(1)?,
+                            cloud: r.get(2)?,
+                            status: r.get(3)?,
+                            attempts: r.get(4)?,
+                            dedup_key: r.get(5)?,
+                        },
+                    ))
+                })
+                .map_err(db)?;
+            for row in rows {
+                jobs.push(row.map_err(db)?);
+            }
+        }
+        jobs.sort_by_key(|(id, _)| *id);
+        Ok(jobs.into_iter().map(|(_, job)| job).collect())
+    }
+    /// Record a Locked Folder outcome. `dedup_key` is kept once a move was
+    /// requested; `count_attempt` adds one to the failure attempts.
+    pub fn record_locked_folder(
+        &mut self,
+        receiver: &str,
+        asset_id: &str,
+        status: &str,
+        dedup_key: Option<&str>,
+        count_attempt: bool,
+        now_ms: i64,
+    ) -> Result<()> {
+        if !LOCKED_FOLDER_STATUSES.contains(&status) {
+            return Err(Error::Invalid("locked folder status".into()));
+        }
+        let previous: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT status FROM locked_folder_moves WHERE receiver_id=?1 AND asset_id=?2",
+                params![receiver, asset_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        self.conn.execute(
+            "INSERT INTO locked_folder_moves(receiver_id,asset_id,dedup_key,status,moved_at_ms,attempts) VALUES(?1,?2,?3,?4,CASE WHEN ?4='moved' THEN ?5 END,?6) \
+             ON CONFLICT(receiver_id,asset_id) DO UPDATE SET dedup_key=COALESCE(excluded.dedup_key,dedup_key),status=excluded.status,moved_at_ms=COALESCE(excluded.moved_at_ms,moved_at_ms),attempts=attempts+excluded.attempts",
+            params![receiver, asset_id, dedup_key, status, now_ms, i64::from(count_attempt)],
+        ).map_err(db)?;
+        if previous.as_deref() != Some(status) {
+            // Refresh the UI revision without rewriting a transfer receipt.
+            self.conn
+                .execute("UPDATE settings SET value=value+1 WHERE key='revision'", [])
+                .map_err(db)?;
+        }
+        Ok(())
+    }
+    pub fn record_locked_folder_run(
+        &mut self,
+        receiver: &str,
+        ran_at_ms: i64,
+        result: &serde_json::Value,
+    ) -> Result<()> {
+        self.conn.execute("INSERT OR REPLACE INTO locked_folder_runs(receiver_id,ran_at,result) VALUES(?1,?2,?3)",
+            params![receiver, ran_at_ms, result.to_string()]).map_err(db)?;
+        Ok(())
+    }
+    /// Last recorded Locked Folder run as `(ran_at_ms, result)`.
+    pub fn locked_folder_run(&self, receiver: &str) -> Result<Option<(i64, serde_json::Value)>> {
+        let row: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT ran_at,result FROM locked_folder_runs WHERE receiver_id=?1",
                 [receiver],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )

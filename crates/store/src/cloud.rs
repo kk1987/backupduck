@@ -794,6 +794,36 @@ mod tests {
         assert_eq!(item.cloud_state, "verified");
     }
 
+    /// A Mac sender may move a verified item into the Google Photos Locked
+    /// Folder, where SHA-1 lookups no longer find it. The audit must never
+    /// list a verified row again, and its SHA-1 stays available to `all`
+    /// listings even after the gallery copy is released.
+    #[test]
+    fn verified_rows_are_never_due_but_keep_their_sha1() {
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let at = 1_000_000_000;
+        let id = observed(&mut r, "verified", 1, CloudResult::Free, at);
+        let due = |r: &Receiver, now: i64| r.cloud_due("", 100, now, false).unwrap().items.len();
+        for now in [at, at + 86_400_000, at + 365 * 86_400_000, i64::MAX / 2] {
+            assert_eq!(due(&r, now), 0, "{now}");
+        }
+        // A stray not-found verdict does not regress it into the due list.
+        r.observe_cloud(&[observe(&id, 'b', CloudResult::NotFound)], at + 1)
+            .unwrap();
+        assert_eq!(state(&r, &id), "verified");
+        assert_eq!(due(&r, i64::MAX / 2), 0);
+        let later = at + HOUR as i64;
+        r.release_cloud_verified(&id, &copy(1, Some('b')), false, policy(true, later))
+            .unwrap();
+        assert!(r.mark_gallery_released(&id, "cloud", later).unwrap());
+        assert_eq!(due(&r, i64::MAX / 2), 0);
+        let all = r.cloud_due("", 100, 0, true).unwrap();
+        assert_eq!(all.items.len(), 1);
+        assert_eq!(all.items[0].sha1, "b".repeat(40));
+        assert_eq!(all.items[0].cloud_state, "verified");
+    }
+
     #[test]
     fn relay_released_rows_only_mark_the_gallery_and_missing_needs_stored_evidence() {
         let t = Temp::new();

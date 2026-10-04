@@ -363,6 +363,17 @@ import SwiftUI
             view: AnyView(MacPreferences(model: model)), output: output,
             size: NSSize(width: 620, height: 580))
         }
+        UserDefaults.standard.set(MacSettingsSection.cloud.rawValue, forKey: "macSettingsSection")
+        try await capture("settings-cloud", view: AnyView(MacPreferences(model: model)), output: output,
+          size: NSSize(width: 620, height: 1180), action: {
+            let at = Int64(Date().timeIntervalSince1970 * 1000)
+            model.cloudAudit = CloudAuditStatus(configured: true, last_run_ms: at,
+              last_result: CloudAuditResult(checked: 600, found: 590, verified: 588, quota: 2, not_found: 10),
+              last_lock_run_ms: at,
+              last_lock_result: LockHiddenResult(verified_hidden: 1288, candidates: 200, deferred: 400,
+                checked: 200, found: 198, moved: 197, failed: 1, not_in_library: 2, already_moved: 600))
+            model.hiddenVisible = 0
+          })
         UserDefaults.standard.set(MacSettingsSection.cache.rawValue, forKey: "macSettingsSection")
         try await capture("settings-cache-dark", view: AnyView(MacPreferences(model: model)),
           output: output, size: NSSize(width: 620, height: 580), dark: true)
@@ -432,7 +443,7 @@ import SwiftUI
         precondition(model.parkedSources == 0, "Retry all must return parked sources to preparation")
         try await capture("transfers-needs-attention-empty",
           view: AnyView(TransferList(model: model, filter: "needs_attention").padding(24)), output: output)
-        print("Rendered 16 fixture screens; settings, device rename, historical-scan and needs-attention state checks passed.")
+        print("Rendered 17 fixture screens; settings, device rename, historical-scan and needs-attention state checks passed.")
         try FileManager.default.removeItem(at: store)
         app.terminate(nil)
       } catch {

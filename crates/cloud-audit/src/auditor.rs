@@ -1,7 +1,7 @@
 //! Throttled lookups on top of [`Session`].
 
 use crate::{
-    parser::{self, HashLookup, ItemInfo},
+    parser::{self, HashLookup, ItemInfo, LockedMove},
     sha1_hex_to_base64, Error, Result, Session,
 };
 use serde_json::{json, Value};
@@ -118,6 +118,25 @@ impl Auditor {
             .await?;
         parser::parse_item_info(&response)
     }
+
+    /// Moves library items, by dedup key, into the Locked Folder with
+    /// `StLnCe`. Works from a plain cookie session (verified live 2026-10-03).
+    /// The caller must confirm the move with a fresh hash lookup.
+    pub async fn move_to_locked_folder(&mut self, dedup_keys: &[String]) -> Result<LockedMove> {
+        let mut moved = LockedMove::default();
+        for chunk in dedup_keys.chunks(CHUNK) {
+            let response = self.call("StLnCe", &locked_move_payload(chunk)).await?;
+            let part = parser::parse_locked_move(&response)?;
+            moved.new_keys.extend(part.new_keys);
+            moved.removed_keys.extend(part.removed_keys);
+        }
+        Ok(moved)
+    }
+}
+
+/// `[[dedup_key, ..], []]`.
+pub fn locked_move_payload(dedup_keys: &[String]) -> Value {
+    json!([dedup_keys, []])
 }
 
 /// `[[[ [[k1],[k2],..] ], [[null x24, [], null x10, []]]]]`, as Toolkit
@@ -145,5 +164,13 @@ mod tests {
         assert_eq!(fields[35], json!([]));
         assert!(fields[..24].iter().all(Value::is_null));
         assert!(fields[25..35].iter().all(Value::is_null));
+    }
+
+    #[test]
+    fn locked_move_payload_shape() {
+        assert_eq!(
+            locked_move_payload(&["d1".into(), "d2".into()]),
+            json!([["d1", "d2"], []])
+        );
     }
 }

@@ -11,7 +11,7 @@ pub mod session;
 
 pub use auditor::{Auditor, Throttle};
 pub use cookies::CookieFile;
-pub use parser::{HashLookup, ItemInfo};
+pub use parser::{HashLookup, ItemInfo, LockedMove};
 pub use session::Session;
 
 use base64::Engine;

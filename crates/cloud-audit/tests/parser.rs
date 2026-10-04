@@ -10,6 +10,65 @@ fn fixture(name: &str) -> Value {
 }
 
 #[test]
+fn stlnce_fixture() {
+    let path = format!("{}/tests/fixtures/StLnCe.json", env!("CARGO_MANIFEST_DIR"));
+    let data: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let moved = parse_locked_move(&data).unwrap();
+    assert_eq!(
+        moved.new_keys,
+        ["AF1QipLOCKEDNEWKEY000000000000000000000000000"]
+    );
+    assert_eq!(
+        moved.removed_keys,
+        [
+            "AF1QipORIGINALKEY00000000000000000000000000",
+            "AF1QipALBUMITEMKEY1000000000000000000000000",
+            "AF1QipALBUMITEMKEY2000000000000000000000000",
+        ]
+    );
+}
+
+#[test]
+fn stlnce_garbled() {
+    for bad in [
+        json!(null),
+        json!("x"),
+        json!({"a": 1}),
+        json!(["not a list"]),
+        json!([[], 7]),
+    ] {
+        assert!(
+            matches!(parse_locked_move(&bad), Err(Error::Parse(_))),
+            "{bad}"
+        );
+    }
+    assert_eq!(
+        parse_locked_move(&json!([])).unwrap(),
+        LockedMove::default()
+    );
+    assert_eq!(
+        parse_locked_move(&json!([null, null])).unwrap(),
+        LockedMove::default()
+    );
+    // Uncorrelatable entries are dropped.
+    let moved = parse_locked_move(&json!([
+        [null, 3, [], [""], ["new"], [7, "x"]],
+        [
+            null,
+            [],
+            [[1]],
+            [[1, []]],
+            [[1, [""]]],
+            [[1, ["old"]], null, true],
+            [[1, [5]]]
+        ]
+    ]))
+    .unwrap();
+    assert_eq!(moved.new_keys, ["new"]);
+    assert_eq!(moved.removed_keys, ["old"]);
+}
+
+#[test]
 fn swbisb_fixture() {
     let matches = parse_hash_matches(&fixture("swbisb")).unwrap();
     assert_eq!(matches.len(), 4);
