@@ -36,6 +36,37 @@ pub fn single_item_heic(pixels: &[u8]) -> Vec<u8> {
     image
 }
 
+/// One hvc1 primary item with a caller-chosen ftyp body (major brand, minor
+/// version, compatible brands), a `pict` handler and no EXIF or XMP item.
+/// Unlike `single_item_heic`, little_exif can parse and extend its meta box.
+pub fn single_item_heif(ftyp_body: &[u8], pixels: &[u8]) -> Vec<u8> {
+    let ftyp = atom(b"ftyp", ftyp_body);
+    let mut hdlr_body = vec![0; 8];
+    hdlr_body.extend(b"pict");
+    hdlr_body.extend([0; 13]);
+    let pitm = atom(b"pitm", &[0, 0, 0, 0, 0, 1]);
+    let infe = atom(b"infe", b"\x02\0\0\0\0\x01\0\0hvc1\0");
+    let mut iinf_body = vec![0, 0, 0, 0, 0, 1];
+    iinf_body.extend(infe);
+    // version 0; offset_size 4, length_size 4, base_offset_size 0; one item.
+    let mut iloc_body = vec![0, 0, 0, 0, 0x44, 0, 0, 1, 0, 1, 0, 0, 0, 1];
+    iloc_body.extend([0, 0, 0, 0]);
+    iloc_body.extend((pixels.len() as u32).to_be_bytes());
+    let mut meta_body = vec![0, 0, 0, 0];
+    meta_body.extend(atom(b"hdlr", &hdlr_body));
+    meta_body.extend(pitm);
+    meta_body.extend(atom(b"iinf", &iinf_body));
+    meta_body.extend(atom(b"iloc", &iloc_body));
+    let mut meta = atom(b"meta", &meta_body);
+    let image_offset = (ftyp.len() + meta.len() + 8) as u32;
+    let extent = meta.len() - 8;
+    meta[extent..extent + 4].copy_from_slice(&image_offset.to_be_bytes());
+    let mut image = ftyp;
+    image.extend(meta);
+    image.extend(atom(b"mdat", pixels));
+    image
+}
+
 /// Items 1 and 2 are hvc1 images; 3 is the primary's XMP and 4 the XMP of
 /// item 2. Returns the file and its mdat payload.
 pub fn heic_with_xmp(primary: &[u8], auxiliary: &[u8]) -> (Vec<u8>, Vec<u8>) {

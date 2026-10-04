@@ -6,5 +6,6 @@ fn main() -> backupduck_core::Result<()> {
             "usage: photo-date SOURCE OUTPUT 'YYYY:MM:DD HH:MM:SS' (UTC)".into(),
         ));
     }
-    backupduck_pixel::write_photo_date(args[1].as_ref(), args[2].as_ref(), &args[3], 0)
+    backupduck_pixel::write_photo_date(args[1].as_ref(), args[2].as_ref(), &args[3], 0)?;
+    Ok(())
 }
