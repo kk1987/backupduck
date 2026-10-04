@@ -1,6 +1,7 @@
 //! Cloud verification state for published gallery copies. Verdicts come from an
 //! external auditor that looks copies up by SHA-1. Only the opt-in cloud
-//! release below acts on them, and only for `verified` copies after a grace.
+//! release below acts on them, and only for copies the cloud holds
+//! (`verified`, `verified_elsewhere`) after a grace.
 use super::*;
 use retention::GalleryCopy;
 use serde::Serialize;
@@ -8,7 +9,7 @@ use serde::Serialize;
 /// Release reasons recorded for a deleted gallery copy.
 pub const GALLERY_RELEASE_REASONS: [&str; 2] = ["cloud", "missing"];
 
-/// A `verified` copy whose grace has passed and whose gallery copy is still
+/// A cloud-held copy whose grace has passed and whose gallery copy is still
 /// recorded as present. Originals may already be gone through relay/archive.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CloudReleaseCandidate {
@@ -31,9 +32,10 @@ impl CloudReleasePolicy {
     }
 }
 
-/// Never `verified_counts_against_quota` or `missing`: only free cloud copies.
+/// Only copies the cloud holds: free uploads (`verified`) and items another
+/// device uploaded first (`verified_elsewhere`). Never quota or `missing`.
 const CLOUD_RELEASE_ELIGIBLE: &str =
-    "a.received=1 AND a.processing='complete' AND a.cloud_state='verified' \
+    "a.received=1 AND a.processing='complete' AND a.cloud_state IN ('verified','verified_elsewhere') \
      AND a.gallery_released=0 AND a.cloud_checked_at_ms IS NOT NULL AND a.cloud_checked_at_ms<=?2";
 
 /// A copy is first looked up ten minutes after publication.
@@ -159,6 +161,7 @@ impl Receiver {
             }
             match next {
                 "verified" => summary.verified += 1,
+                "verified_elsewhere" => summary.already_in_cloud += 1,
                 "verified_counts_against_quota" => summary.quota += 1,
                 "missing" => summary.missing += 1,
                 _ => summary.still_pending += 1,
@@ -273,7 +276,7 @@ impl Receiver {
         if released {
             return Ok(false);
         }
-        if !originals_released || state != "verified" {
+        if !originals_released || !CLOUD_HELD_STATES.contains(&state.as_str()) {
             return Err(Error::Conflict("gallery release not prepared".into()));
         }
         self.conn
@@ -697,6 +700,63 @@ mod tests {
         assert!(r.cloud_release_candidates("bad", 1, 0, HOUR).is_err());
         assert!(r.cloud_release_candidates("", 0, 0, HOUR).is_err());
         assert!(r.cloud_release_candidates("", 101, 0, HOUR).is_err());
+    }
+
+    #[test]
+    fn copies_another_device_uploaded_first_are_cloud_held() {
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let at = 1_000_000_000;
+        let later = at + HOUR as i64;
+        let elsewhere = observed(&mut r, "elsewhere", 1, CloudResult::AlreadyInCloud, at);
+        // A row classified as quota before the preexisting check existed.
+        let quota = observed(&mut r, "quota", 2, CloudResult::CountsAgainstQuota, at);
+        assert_eq!(state(&r, &elsewhere), "verified_elsewhere");
+        assert_eq!(candidate_ids(&r, later), vec![elsewhere.clone()]);
+        // Never due again, unlike quota rows, which the backoff re-checks.
+        let due: Vec<String> = r
+            .cloud_due("", 100, i64::MAX / 2, false)
+            .unwrap()
+            .items
+            .into_iter()
+            .map(|i| i.asset_id)
+            .collect();
+        assert_eq!(due, vec![quota.clone()]);
+        let summary = r
+            .observe_cloud(&[observe(&quota, 'c', CloudResult::AlreadyInCloud)], at)
+            .unwrap();
+        assert_eq!(
+            summary,
+            CloudSummary {
+                already_in_cloud: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(state(&r, &quota), "verified_elsewhere");
+        assert_eq!(candidate_ids(&r, later).len(), 2);
+        // Only a free verdict changes it again.
+        r.observe_cloud(
+            &[observe(&elsewhere, 'b', CloudResult::CountsAgainstQuota)],
+            at,
+        )
+        .unwrap();
+        assert_eq!(state(&r, &elsewhere), "verified_elsewhere");
+        let overview = r.overview().unwrap();
+        assert_eq!(
+            (&overview["cloud_elsewhere"], &overview["cloud_quota"]),
+            (&serde_json::json!(2), &serde_json::json!(0))
+        );
+        assert_eq!(
+            r.release_cloud_verified(&elsewhere, &copy(1, Some('b')), false, policy(true, later))
+                .unwrap(),
+            "elsewhere".len() as u64
+        );
+        assert!(r.mark_gallery_released(&elsewhere, "cloud", later).unwrap());
+        let counts = catalog::Catalog::open(&t.0).unwrap().counts().unwrap();
+        assert_eq!(counts["cloud_verified"], 2);
+        r.observe_cloud(&[observe(&quota, 'c', CloudResult::Free)], later)
+            .unwrap();
+        assert_eq!(state(&r, &quota), "verified");
     }
 
     #[test]

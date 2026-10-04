@@ -23,6 +23,8 @@ class CloudReleaseTest {
     fun historyPrefersCloudStatesOverLocalRetention() {
         assertEquals(R.string.history_cloud_released, item("verified", released = true, originals = true, reason = "cloud").rowStatus)
         assertEquals(R.string.history_cloud_verified, item("verified", originals = true, reason = "gallery").rowStatus)
+        assertEquals(R.string.history_cloud_elsewhere, item("verified_elsewhere").rowStatus)
+        assertEquals(R.string.history_cloud_released, item("verified_elsewhere", released = true, originals = true, reason = "cloud").rowStatus)
         assertEquals(R.string.history_cloud_quota, item("verified_counts_against_quota").rowStatus)
         assertEquals(R.string.history_cloud_missing, item("missing").rowStatus)
         assertEquals(R.string.history_relay_reclaimed, item("pending", originals = true, reason = "gallery").rowStatus)

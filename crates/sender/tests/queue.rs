@@ -666,9 +666,70 @@ fn receiver_features_gain_cloud_audit_without_losing_bundle_upload() {
     assert!(s.cloud_audit("old").unwrap() && s.bundle_upload("old").unwrap());
     assert!(s.cloud_audit("new").unwrap() && s.bundle_upload("new").unwrap());
     assert!(!s.cloud_audit("absent").unwrap());
+    // Learned separately; an older receiver never advertised it.
+    assert!(!s.cloud_preexisting("old").unwrap());
+    s.set_cloud_preexisting("old", true).unwrap();
+    assert!(s.cloud_preexisting("old").unwrap() && s.cloud_audit("old").unwrap());
+    assert!(!s.cloud_preexisting("new").unwrap());
     drop(s);
-    assert!(Sender::open(&root).unwrap().cloud_audit("old").unwrap());
+    let s = Sender::open(&root).unwrap();
+    assert!(s.cloud_audit("old").unwrap() && s.cloud_preexisting("old").unwrap());
+    drop(s);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn copies_already_in_cloud_count_as_backed_up_and_may_lock() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let job = add(&mut s);
+    let asset_id = job.asset.id().unwrap();
+    let key = [(job.asset.source_id.clone(), job.asset.revision.clone())];
+    let running = s.claim("receiver-1", 0).unwrap().unwrap();
+    s.acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    let hidden = vec![job.asset.source_id.clone()];
+    s.observe_cloud(
+        "receiver-1",
+        &asset_id,
+        "verified_counts_against_quota",
+        None,
+        1,
+    )
+    .unwrap();
+    assert!(!s.locked_folder_jobs("receiver-1", &hidden).unwrap()[0].cloud_held());
+    assert!(s
+        .observe_cloud("receiver-1", &asset_id, "verified_elsewhere", None, 2)
+        .unwrap());
+    let summary = s.summary("receiver-1").unwrap();
+    assert_eq!(
+        (
+            &summary["cloud_verified"],
+            &summary["cloud_elsewhere"],
+            &summary["cloud_quota"]
+        ),
+        (&0.into(), &1.into(), &0.into())
+    );
+    assert_eq!(
+        s.source_states_with_cloud("receiver-1", &key, true)
+            .unwrap()[&job.asset.source_id],
+        "backed_up"
+    );
+    let jobs = s.locked_folder_jobs("receiver-1", &hidden).unwrap();
+    assert_eq!(jobs[0].cloud.as_deref(), Some("verified_elsewhere"));
+    assert!(jobs[0].cloud_held());
+    for (cloud, held) in [
+        (Some("verified"), true),
+        (Some("pending"), false),
+        (Some("missing"), false),
+        (None, false),
+    ] {
+        let job = LockedFolderJob {
+            cloud: cloud.map(Into::into),
+            ..jobs[0].clone()
+        };
+        assert_eq!(job.cloud_held(), held, "{cloud:?}");
+    }
 }
 
 #[test]

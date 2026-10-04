@@ -84,18 +84,25 @@ check, capped at one day. `cloud=all` lists every published copy with SHA-1
 evidence, regardless of state or timing.
 
 `POST /v2/cloud-observations` takes at most 100 observations in at most 64 KiB:
-`{"observations":[{"asset_id":ID,"sha1":HEX,"result":"free"|"counts_against_quota"|"not_found","media_key":S?,"device_model":S?}]}`. `device_model` is the EXIF camera model Google Photos reports for the item (for example `iPhone 17 Pro` for an iPhone original pushed through the Pixel), not the uploading device; only `result` carries the quota verdict.
+`{"observations":[{"asset_id":ID,"sha1":HEX,"result":"free"|"already_in_cloud"|"counts_against_quota"|"not_found","media_key":S?,"device_model":S?}]}`. `device_model` is the EXIF camera model Google Photos reports for the item (for example `iPhone 17 Pro` for an iPhone original pushed through the Pixel), not the uploading device; only `result` carries the quota verdict.
 Optional strings are at most 64 bytes without control characters. Malformed input
 returns 400. An observation is rejected, not applied, when the asset is unknown or
 unpublished, or its SHA-1 differs from the stored copy (a stale verdict). `free`
-sets `verified`; `counts_against_quota` sets `verified_counts_against_quota`;
-`not_found` counts a check and sets `missing` once the copy was published more
-than seven days ago. Quota and missing copies can still become `verified`;
-`verified` never changes again. The reply counts resulting states:
-`{"verified":N,"quota":N,"still_pending":N,"missing":N,"rejected":N}`.
+sets `verified`; `already_in_cloud` (the matched item was added to the cloud
+library before the copy was published, so another device uploaded the bytes)
+sets `verified_elsewhere`; `counts_against_quota` sets
+`verified_counts_against_quota`; `not_found` counts a check and sets `missing`
+once the copy was published more than seven days ago. Quota and missing copies
+can still become `verified` or `verified_elsewhere`; `verified_elsewhere` only
+changes to `verified`; `verified` never changes again. Only receivers
+advertising `cloud_preexisting: true` accept `already_in_cloud`; missing
+capability means false. The reply counts resulting states:
+`{"verified":N,"already_in_cloud":N,"quota":N,"still_pending":N,"missing":N,"rejected":N}`
+(older receivers omit `already_in_cloud`).
 
 Cloud states are `unknown` (no SHA-1 evidence yet), `pending`, `verified`,
-`verified_counts_against_quota` and `missing`. A verdict is the auditor's report,
+`verified_elsewhere`, `verified_counts_against_quota` and `missing`. A verdict is the auditor's report,
 not a receiver-side proof. The wire protocol has no delete operation; an Android
-receiver may opt in to deleting its own `verified` gallery copies locally (see
+receiver may opt in to deleting its own `verified` or `verified_elsewhere`
+gallery copies locally (see
 [architecture](architecture.md#cloud-verified-release)).

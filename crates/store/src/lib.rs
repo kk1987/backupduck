@@ -388,9 +388,9 @@ impl Receiver {
         let (total, received, published, failed, waiting): (i64,i64,i64,i64,i64) = self.conn.query_row(
             "SELECT COUNT(*),COALESCE(SUM(received),0),COALESCE(SUM(processing='complete'),0),COALESCE(SUM(processing='failed'),0),COALESCE(SUM(received=1 AND processing IN ('pending','not_requested')),0) FROM assets", [],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(db)?;
-        let (cloud_verified, cloud_quota, cloud_missing, gallery_released): (i64, i64, i64, i64) = self.conn.query_row(
-            "SELECT COALESCE(SUM(cloud_state='verified'),0),COALESCE(SUM(cloud_state='verified_counts_against_quota'),0),COALESCE(SUM(cloud_state='missing'),0),COALESCE(SUM(gallery_released),0) FROM assets", [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).map_err(db)?;
+        let (cloud_verified, cloud_elsewhere, cloud_quota, cloud_missing, gallery_released): (i64, i64, i64, i64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(cloud_state='verified'),0),COALESCE(SUM(cloud_state='verified_elsewhere'),0),COALESCE(SUM(cloud_state='verified_counts_against_quota'),0),COALESCE(SUM(cloud_state='missing'),0),COALESCE(SUM(gallery_released),0) FROM assets", [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).map_err(db)?;
         let reserved: i64 = self
             .conn
             .query_row("SELECT COALESCE(SUM(size),0) FROM blobs", [], |r| r.get(0))
@@ -413,7 +413,7 @@ impl Receiver {
             items.push(serde_json::json!({"id":id,"filename":asset.resources[0].filename,"kind":asset.kind,"total_bytes":bytes,"confirmed_bytes":confirmed,"receipt":status.receipt,"processing":status.processing,"originals_released":self.originals_released(&id)?}));
         }
         Ok(
-            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"waiting":waiting,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"cloud_verified":cloud_verified,"cloud_quota":cloud_quota,"cloud_missing":cloud_missing,"gallery_released":gallery_released,"recent":items}),
+            serde_json::json!({"total":total,"received":received,"published":published,"failed":failed,"waiting":waiting,"reserved_bytes":reserved,"capacity_bytes":self.capacity,"free_bytes":fs2::available_space(&self.root)?,"min_free_bytes":self.min_free,"cloud_verified":cloud_verified,"cloud_elsewhere":cloud_elsewhere,"cloud_quota":cloud_quota,"cloud_missing":cloud_missing,"gallery_released":gallery_released,"recent":items}),
         )
     }
     pub fn register(&mut self, asset: Asset) -> Result<AssetStatus> {

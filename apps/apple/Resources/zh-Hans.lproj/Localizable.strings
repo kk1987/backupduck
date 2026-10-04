@@ -633,7 +633,7 @@
 
 "settings_cloud" = "Google 相册";
 "cloud_audit_title" = "Google 相册核对";
-"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考。Mac 不会删除任何内容；如果在 Pixel 上开启云端释放，Pixel 会删除自己相册中已确认备份且不占用 Google 存储空间的照片副本。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
+"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考。Mac 不会删除任何内容；如果在 Pixel 上开启云端释放，Pixel 会删除自己相册中已确认备份且不占用 Google 存储空间、或已由其他设备备份到 Google 相册的照片副本。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
 "cloud_audit_readme" = "如何导出 Cookie 以及核对内容";
 "cloud_audit_cookies" = "Cookie 文件";
 "cloud_audit_cookies_set" = "已选择";
@@ -644,17 +644,19 @@
 "cloud_audit_auto_pause" = "新上传的照片占用 Google 存储空间时暂停备份";
 "cloud_audit_check_now" = "立即核对";
 "cloud_audit_dry_run" = "试运行";
-"cloud_audit_last_run" = "上次核对 %1$@：已检查 %2$d，免费 %3$d，占用空间 %4$d，未找到 %5$d，未知 %6$d";
+"cloud_audit_last_run" = "上次核对 %1$@：已检查 %2$d，免费 %3$d，已由其他设备备份 %4$d，占用空间 %5$d，未找到 %6$d，未知 %7$d";
 "cloud_audit_session_expired" = "Google 相册登录已过期，请重新导出 Cookie。";
 "cloud_quota_warning" = "Google 相册中有 %d 张照片占用你的 Google 存储空间。";
 "cloud_quota_pause" = "备份已暂停：%d 张新上传的照片占用你的 Google 存储空间。";
 "cloud_summary" = "已备份到 Google 相册 %1$d / 已加入手机相册 %2$d";
+"cloud_summary_elsewhere" = "已由其他设备备份到 Google 相册 %d";
 "cloud_summary_attention" = "占用 Google 存储空间 %1$d，Google 相册中未找到 %2$d";
 "state_cloud_verified" = "已备份到 Google 相册";
+"state_cloud_elsewhere" = "已在 Google 相册中（来自其他设备）";
 "state_cloud_quota" = "已上传，但占用 Google 存储空间";
 "state_cloud_missing" = "暂未在 Google 相册中找到";
 "cloud_lock_hidden_title" = "隐藏的照片";
-"cloud_lock_hidden_explanation" = "核对确认“照片”中“已隐藏”相簿的照片已备份到 Google 相册且不占用存储空间后，将其移入 Google 相册的“带锁文件夹”，使其不再出现在 Google 相册的时间线中。每次核对后执行，每次最多 200 张。占用存储空间或尚未找到的照片不会移动，已移入的照片也不会移出。";
+"cloud_lock_hidden_explanation" = "核对确认“照片”中“已隐藏”相簿的照片已备份到 Google 相册且不占用存储空间（或已由其他设备备份）后，将其移入 Google 相册的“带锁文件夹”，使其不再出现在 Google 相册的时间线中。每次核对后执行，每次最多 200 张。占用存储空间或尚未找到的照片不会移动，已移入的照片也不会移出。";
 "cloud_lock_hidden_enabled" = "将隐藏的照片移入带锁文件夹";
 "cloud_lock_hidden_reconfirm" = "Google 账号序号已更改。请重新开启此项，为该账号确认带锁文件夹备份。";
 "cloud_lock_hidden_now" = "立即移动隐藏的照片";

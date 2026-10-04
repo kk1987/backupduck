@@ -67,6 +67,8 @@ struct TransferRow: View {
       case "complete":
         switch job.cloud {
         case "verified": return job.lockedFolder == "moved" ? "state_cloud_locked_folder" : "state_cloud_verified"
+        case "verified_elsewhere":
+          return job.lockedFolder == "moved" ? "state_cloud_locked_folder" : "state_cloud_elsewhere"
         case "verified_counts_against_quota": return "state_cloud_quota"
         case "missing": return "state_cloud_missing"
         default: return "state_published"
@@ -94,7 +96,8 @@ struct TransferRow: View {
     if job.state == "received" && job.processing == "failed" { return ("exclamationmark.circle", .orange) }
     if job.state == "received" && job.processing == "complete" {
       switch job.cloud {
-      case "verified": return (job.lockedFolder == "moved" ? "lock.icloud.fill" : "checkmark.circle.fill", .blue)
+      case "verified", "verified_elsewhere":
+        return (job.lockedFolder == "moved" ? "lock.icloud.fill" : "checkmark.circle.fill", .blue)
       case "verified_counts_against_quota", "missing": return ("exclamationmark.icloud", .orange)
       default: break
       }
@@ -592,9 +595,14 @@ struct BackupStatusIndicator: View {
                 model.summary.received, model.summary.total)).foregroundStyle(.secondary)
               Text(String(format: NSLocalizedString("publication_summary", comment: ""),
                 model.summary.published, model.summary.received)).foregroundStyle(.secondary)
-              if model.summary.cloud_verified + model.summary.cloud_quota + model.summary.cloud_missing > 0 {
+              if model.summary.cloud_verified + model.summary.cloud_elsewhere + model.summary.cloud_quota
+                + model.summary.cloud_missing > 0 {
                 Text(String(format: NSLocalizedString("cloud_summary", comment: ""),
                   model.summary.cloud_verified, model.summary.published)).foregroundStyle(.secondary)
+                if model.summary.cloud_elsewhere > 0 {
+                  Text(String(format: NSLocalizedString("cloud_summary_elsewhere", comment: ""),
+                    model.summary.cloud_elsewhere)).foregroundStyle(.secondary)
+                }
                 if model.summary.cloud_quota + model.summary.cloud_missing > 0 {
                   Text(String(format: NSLocalizedString("cloud_summary_attention", comment: ""),
                     model.summary.cloud_quota, model.summary.cloud_missing)).foregroundStyle(.orange)

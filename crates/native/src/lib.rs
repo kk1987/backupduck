@@ -977,7 +977,7 @@ fn dispatch(command: Command) -> Result<Value> {
         } => {
             if temperature_deci_celsius.is_some_and(|value| !(-200..=900).contains(&value))
                 || battery_percent.is_some_and(|value| value > 100)
-                || !(35..=45).contains(&thermal_threshold_celsius)
+                || !THERMAL_THRESHOLD_CELSIUS.contains(&thermal_threshold_celsius)
             {
                 return Err(Error::Invalid("dashboard device status".into()));
             }
@@ -1081,6 +1081,10 @@ fn dispatch(command: Command) -> Result<Value> {
             sender.set_cloud_audit(
                 &pairing.receiver_id,
                 caps.version == PROTOCOL_VERSION && caps.cloud_audit,
+            )?;
+            sender.set_cloud_preexisting(
+                &pairing.receiver_id,
+                caps.version == PROTOCOL_VERSION && caps.cloud_preexisting,
             )?;
             if let Some(peer) = peer.as_ref() {
                 devices.remember(&pairing.receiver_id, peer)?;
@@ -1552,6 +1556,7 @@ fn dispatch(command: Command) -> Result<Value> {
             if let Ok(host) = sender() {
                 host.set_bundle_upload(&pairing.receiver_id, caps.bundle_upload)?;
                 host.set_cloud_audit(&pairing.receiver_id, caps.cloud_audit)?;
+                host.set_cloud_preexisting(&pairing.receiver_id, caps.cloud_preexisting)?;
             }
             Ok(json!({"receiver_id":pairing.receiver_id,"cloud_audit":caps.cloud_audit}))
         }
@@ -2106,8 +2111,43 @@ pub extern "system" fn Java_app_backupduck_NativeBridge_call(
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Receiver temperature-protection thresholds the Android settings offer.
+const THERMAL_THRESHOLD_CELSIUS: std::ops::RangeInclusive<u8> = 35..=50;
+
 #[cfg(test)]
 mod receiver_identity_tests;
+
+#[cfg(test)]
+mod thermal_tests {
+    use super::*;
+
+    #[test]
+    fn dashboard_accepts_thresholds_up_to_fifty() {
+        let status = |celsius| {
+            dispatch(Command::DashboardDeviceStatus {
+                temperature_deci_celsius: Some(400),
+                battery_percent: Some(50),
+                charging: Some(true),
+                thermal_held: false,
+                thermal_enabled: true,
+                thermal_threshold_celsius: celsius,
+            })
+        };
+        for celsius in [34, 51] {
+            assert!(
+                matches!(status(celsius), Err(Error::Invalid(_))),
+                "{celsius}"
+            );
+        }
+        // Valid: fails later only because no receiver is running here.
+        for celsius in [35, 40, 46, 50] {
+            assert!(
+                !matches!(status(celsius), Err(Error::Invalid(_))),
+                "{celsius}"
+            );
+        }
+    }
+}
 
 #[cfg(test)]
 mod burst_error_tests {

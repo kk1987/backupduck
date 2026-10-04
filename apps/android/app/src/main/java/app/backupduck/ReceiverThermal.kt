@@ -9,13 +9,15 @@ import org.json.JSONObject
 
 internal object ReceiverThermalSettings {
     const val DEFAULT_CELSIUS = 40
-    val choices = (35..45).toList()
+    /** Above 45°C charging-time heat ages older batteries faster. */
+    val RANGE = 35..50
+    val choices = RANGE.toList()
     private fun prefs(context: Context) = context.getSharedPreferences("receiver_thermal", Context.MODE_PRIVATE)
     fun enabled(context: Context) = prefs(context).getBoolean("enabled", true)
-    fun threshold(context: Context) = prefs(context).getInt("threshold_c", DEFAULT_CELSIUS).coerceIn(35, 45)
+    fun threshold(context: Context) = prefs(context).getInt("threshold_c", DEFAULT_CELSIUS).coerceIn(RANGE.first, RANGE.last)
     fun setEnabled(context: Context, enabled: Boolean) { prefs(context).edit().putBoolean("enabled", enabled).apply() }
     fun setThreshold(context: Context, celsius: Int) {
-        require(celsius in 35..45)
+        require(celsius in RANGE)
         prefs(context).edit().putInt("threshold_c", celsius).apply()
     }
 }
