@@ -343,4 +343,18 @@
 <string name="dashboard_access_saved">已保存，浏览器需要重新登录。</string>
 <string name="recovery_port">接收端口被占用。请停止这台手机上其他正在接收的应用，再重新开始接收。</string>
 <string name="recovery_interface">当前 Wi-Fi 地址不可用。请重新连接 Wi-Fi，再开始接收。</string>
+<string name="history_cloud_verified">已备份到 Google 相册</string>
+<string name="history_cloud_released">已备份到 Google 相册 · 已从手机释放</string>
+<string name="history_cloud_quota">已上传，但占用 Google 存储空间</string>
+<string name="history_cloud_missing">未在 Google 相册中找到</string>
+<string name="cloud_release_title">Google 相册备份后释放空间</string>
+<string name="cloud_release_toggle">删除已备份到 Google 相册的手机副本</string>
+<string name="cloud_release_note">关闭：相册副本保留在这台手机上。开启：只有 Mac 的 Google 相册检查找到完全相同的字节，并确认以原画质量免费存储后，才会删除该副本及其原件。</string>
+<string name="cloud_release_confirm_title">删除已由 Google 相册备份的副本？</string>
+<string name="cloud_release_confirm_note">只有 Mac 的 Google 相册检查在你的 Google 相册中找到完全相同的字节，并确认以原画质量免费存储后，备份鸭 才会删除它在这台手机相册中的副本，以及为其保留的原件。占用 Google 存储空间或未找到的副本永远不会被删除。\n\nGoogle 相册中的云端副本不受影响。\n\n需要 Mac 的 Google 相册检查持续运行。每个副本在确认后至少等待 %1$d 分钟。\n\n开启期间它取代中转回收：原件也会保留到 Google 相册确认已有这张照片。可随时关闭；已删除的副本不会恢复。</string>
+<string name="cloud_release_enable">备份后删除</string>
+<string name="cloud_release_enabled">接收运行时会删除已确认的副本。</string>
+<string name="cloud_release_disabled">已关闭删除，剩余副本会保留。</string>
+<string name="cloud_release_counts">Google 相册已确认 %1$d 项 · 已从手机释放 %2$d 项（%3$s）</string>
+<string name="relay_superseded">已开启云端释放：原件会保留到 Google 相册确认已有这张照片。</string>
 </resources>

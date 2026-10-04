@@ -149,7 +149,7 @@ impl Receiver {
             .map_err(db)?;
         }
         // Cloud verification is reported by an external auditor; release
-        // columns are reserved for a later verified gallery-copy cleanup.
+        // columns record the opt-in cloud-verified gallery-copy deletion.
         for (name, definition) in [
             ("cloud_state", "TEXT NOT NULL DEFAULT 'unknown'"),
             ("cloud_checked_at_ms", "INTEGER"),

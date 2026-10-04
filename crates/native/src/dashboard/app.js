@@ -7,7 +7,7 @@ const w = en ? {
   eyebrow:"PIXEL RECEIVER", title:"Receiver overview", description:"Track files received, added to the phone gallery, and needing attention.", live:"Receiver online",
   received:"Received", receivedHint:"Confirmed on this Pixel", published:"In phone gallery", publishedHint:"Phone media processing complete", waiting:"Waiting", waitingHint:"Received, not yet in gallery", failed:"Failed", failedHint:"Retry from the list below",
   deviceTitle:"Phone status", deviceNote:"Live readings from the Pixel", temperatureLabel:"Battery temperature", batteryLabel:"Battery", freeLabel:"Available space", reservedLabel:"BackupDuck originals", spaceDetail:(total,minimum)=>`Total ${size(total)} · minimum free ${size(minimum)}`, originalsDetail:"Excludes gallery copies", threshold:value=>`Battery pause at ${value} °C`, thermalPaused:"Heat pause active", thermalOff:"Temperature pause is off", waitingReading:"Waiting for reading", charging:"Charging", notCharging:"Not charging", transfers:"Transfer history", tableNote:"Open a file for full details.", retry:"Retry failed",
-  guideTitle:"Status guide", receivingState:"Receiving", waitingState:"Waiting for gallery", failedState:"Gallery processing failed", publishedState:"In phone gallery", guideReceiving:"File is still transferring", guideWaiting:"Received; waiting to join the phone gallery", guidePublished:"In the Pixel gallery; cloud backup is unknown", guideFailed:"Originals remain on the receiver; retry is available",
+  guideTitle:"Status guide", receivingState:"Receiving", waitingState:"Waiting for gallery", failedState:"Gallery processing failed", publishedState:"In phone gallery", guideReceiving:"File is still transferring", guideWaiting:"Received; waiting to join the phone gallery", guidePublished:"In the Pixel gallery; cloud backup is unknown", guideFailed:"Originals remain on the receiver; retry is available", cloudVerifiedState:"Backed up to Google Photos", cloudReleasedState:"Backed up to Google Photos · freed from phone", cloudQuotaState:"Counts against Google storage", cloudMissingState:"Not found in Google Photos",
   state:"Status", kind:"Type", allStates:"All statuses", receiving:"Receiving", processing:"Waiting", publishedFilter:"In gallery", failedFilter:"Failed", allKinds:"All types", photo:"Photo", video:"Video", motion:"Live", burst:"Burst", burstRole:"Burst role", burstPrimary:"Primary frame", burstOther:"Other frame", auto:"Auto refresh", refresh:"Refresh",
   file:"File", status:"Status", captured:"Captured", receivedTime:"Received", publishedTime:"Added to gallery", amount:"Size", perPage:"Per page", jump:"Go to", go:"Go", pagination:"Transfer pages", first:"First page", previous:"Previous page", next:"Next page", last:"Last page", page:n=>`Page ${n}`,
   count:n=>`${n} matching files`, updated:time=>`Updated ${time}`, olderPage:"This page does not auto-refresh", pageSummary:(page,pages,start,end,total)=>`Page ${page} of ${pages} · ${start}–${end} of ${total}`, unknown:"—", oldTime:"Not recorded", noCapture:"Unknown", noSender:"Unknown sender", noItems:"No transfers match these filters.",
@@ -19,7 +19,7 @@ const w = en ? {
   eyebrow:"PIXEL RECEIVER", title:"接收概览", description:"查看接收、加入手机相册和待处理的文件。", live:"接收端在线",
   received:"已接收", receivedHint:"手机已确认收到的文件", published:"已加入相册", publishedHint:"手机媒体库处理完成", waiting:"等待处理", waitingHint:"已接收，尚未加入相册", failed:"处理失败", failedHint:"可在下方重试",
   deviceTitle:"手机状态", deviceNote:"来自接收端的实时读数", temperatureLabel:"电池温度", batteryLabel:"电量", freeLabel:"可用空间", reservedLabel:"BackupDuck 原件", spaceDetail:(total,minimum)=>`总容量 ${size(total)} · 最低可用 ${size(minimum)}`, originalsDetail:"不含相册副本", threshold:value=>`电池达到 ${value} °C 暂停`, thermalPaused:"高温暂停接收", thermalOff:"温控已关闭", waitingReading:"等待读数", charging:"充电中", notCharging:"未充电", transfers:"传输记录", tableNote:"点击文件名查看完整信息。", retry:"重试失败项",
-  guideTitle:"状态说明", receivingState:"接收中", waitingState:"等待处理", failedState:"处理失败", publishedState:"已加入相册", guideReceiving:"文件仍在传输", guideWaiting:"已收齐，等待加入手机相册", guidePublished:"已加入 Pixel 相册，云端备份状态未知", guideFailed:"原件仍在接收端，可重试",
+  guideTitle:"状态说明", receivingState:"接收中", waitingState:"等待处理", failedState:"处理失败", publishedState:"已加入相册", guideReceiving:"文件仍在传输", guideWaiting:"已收齐，等待加入手机相册", guidePublished:"已加入 Pixel 相册，云端备份状态未知", guideFailed:"原件仍在接收端，可重试", cloudVerifiedState:"已备份到 Google 相册", cloudReleasedState:"已备份到 Google 相册 · 已从手机释放", cloudQuotaState:"占用 Google 存储空间", cloudMissingState:"未在 Google 相册中找到",
   state:"状态", kind:"类型", allStates:"全部状态", receiving:"接收中", processing:"等待处理", publishedFilter:"已加入相册", failedFilter:"处理失败", allKinds:"全部类型", photo:"照片", video:"视频", motion:"实况", burst:"连拍", burstRole:"连拍角色", burstPrimary:"主照片", burstOther:"组内照片", auto:"自动刷新", refresh:"刷新",
   file:"文件", status:"状态", captured:"拍摄时间", receivedTime:"接收完成", publishedTime:"加入手机相册", amount:"大小", perPage:"每页", jump:"跳至", go:"前往", pagination:"传输记录分页", first:"第一页", previous:"上一页", next:"下一页", last:"最后一页", page:n=>`第 ${n} 页`,
   count:n=>`符合条件 ${n} 项`, updated:time=>`更新于 ${time}`, olderPage:"此页不自动刷新", pageSummary:(page,pages,start,end,total)=>`第 ${page} / ${pages} 页 · ${start}–${end} / ${total} 项`, unknown:"—", oldTime:"未记录", noCapture:"未知", noSender:"未知发送设备", noItems:"没有符合条件的传输记录。",
@@ -83,7 +83,12 @@ async function api(path, options = {}) {
 }
 function status(item) {
   if (item.receipt !== "received") return {key:"receiving",label:w.receivingState};
-  if (item.processing === "complete") return {key:"published",label:w.publishedState};
+  if (item.gallery_released) return {key:"published",label:w.cloudReleasedState};
+  if (item.processing === "complete") return {
+    verified:{key:"published",label:w.cloudVerifiedState},
+    verified_counts_against_quota:{key:"waiting",label:w.cloudQuotaState},
+    missing:{key:"waiting",label:w.cloudMissingState}
+  }[item.cloud_state] || {key:"published",label:w.publishedState};
   if (item.processing === "failed") return {key:"failed",label:w.failedState};
   return {key:"waiting",label:w.waitingState};
 }

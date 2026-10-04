@@ -96,4 +96,6 @@ than seven days ago. Quota and missing copies can still become `verified`;
 
 Cloud states are `unknown` (no SHA-1 evidence yet), `pending`, `verified`,
 `verified_counts_against_quota` and `missing`. A verdict is the auditor's report,
-not a receiver-side proof, and nothing is deleted because of it.
+not a receiver-side proof. The wire protocol has no delete operation; an Android
+receiver may opt in to deleting its own `verified` gallery copies locally (see
+[architecture](architecture.md#cloud-verified-release)).

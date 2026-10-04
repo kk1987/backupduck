@@ -170,8 +170,9 @@ SHA-1 in the user's cloud library, and reports `verified`,
 `verified_counts_against_quota` or not found; copies not found a week after
 publication become `missing`. The receiver stores the state per asset and rejects
 verdicts for bytes other than the stored copy. A receipt still does not mean the
-copy is in the cloud: only a `verified` state reflects an auditor's lookup, and it
-removes nothing. Copies published before SHA-1 evidence are re-read by the
+copy is in the cloud: only a `verified` state reflects an auditor's lookup, and
+only the opt-in [cloud-verified release](#cloud-verified-release) acts on it.
+Copies published before SHA-1 evidence are re-read by the
 Android receiver's background sweep to add it. See
 [protocol](protocol.md#cloud-verification).
 
@@ -202,6 +203,53 @@ and Google reported its quota flag at that moment. It does not prove the item
 stays in the account, that it is the same account the Pixel uploads to, or that
 storage-saver re-encodes would match; the live RPC behaviour is unverified by
 this project.
+
+### Cloud-verified release
+
+The Android receiver can delete its own gallery copy, and the originals it keeps
+for it, once the cloud has the copy's exact bytes. It is off by default
+(`cloud_release` in receiver settings; `cloud_release_grace_ms` defaults to one
+hour, at most seven days). It never contacts a cloud service and relies on the
+auditor's verdicts above.
+
+| `cloud_release` | `receiver_relay` | On gallery publication | Later |
+|---|---|---|---|
+| off | off | keep originals and copy | unchanged |
+| off | on | release originals (RC.3 relay, within its scope) | relay sweep; manual historical inspection |
+| on | off or on | keep originals and copy | cloud release only; relay rows, manual inspection and `release_gallery` are refused |
+
+A copy is eligible when it is received, published, `verified` (free at original
+quality), not yet released, and its verdict is at least the grace old.
+`verified_counts_against_quota`, `missing`, `pending` and `unknown` never are.
+Rows whose originals relay or archive already released are still eligible; only
+the gallery copy remains to delete.
+
+The Android receiver runs a bounded sweep (four items) in the 5-second reception
+loop, under the media-operation mutex, skipped during manual relay inspection
+and cooling or Google Photos cleanup holds. For each candidate:
+
+1. Re-read the MediaStore copy: owned by this package, in `DCIM/BackupDuck/`,
+   not pending or trashed, SHA-256, SHA-1 and size equal to the stored evidence.
+2. `release_cloud_verified`: the store re-checks the setting, eligibility and the
+   proof, durably marks `originals_released=1, release_reason='cloud'`, then
+   deletes unreferenced blobs.
+3. Delete the MediaStore row, expecting one row.
+4. `mark_gallery_released(id, "cloud")` sets `gallery_released` and its time.
+
+A crash before step 3 repeats the item: step 2 is idempotent. A crash between 3
+and 4 finds the row gone on the next sweep and records it as `missing`. If step
+1 finds no MediaStore row at all, the SHA-1 match already proved the cloud has
+those bytes, so the originals are released against the stored evidence and the
+copy is marked `missing`. A row that exists but is not ours, moved, pending or
+changed keeps everything; it is skipped until the service restarts and logged
+once as `cloud_release_waiting`. A `SecurityException` on delete (lost
+ownership) logs `cloud_release_not_owned` and leaves the copy for the user.
+Events carry amounts only: `cloud_originals_released` (bytes),
+`cloud_gallery_released` and `cloud_gallery_missing` (copy size).
+
+Deleting a phone copy assumes Google Photos keeps its cloud item when another
+app removes the local file. This project has not yet verified that on a device;
+the receiver cannot check it.
 
 Conversion location can be optimized later through capability negotiation without
 changing asset identity or the original-resource receipt contract. Original

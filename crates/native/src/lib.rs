@@ -10,6 +10,7 @@ compile_error!("cloud-audit is a desktop-only capability");
 mod background;
 #[cfg(feature = "cloud-audit")]
 pub mod cloud;
+mod cloud_release;
 mod dashboard;
 mod dashboard_access;
 #[cfg(feature = "folder-source")]
@@ -876,6 +877,24 @@ enum Command {
         root: PathBuf,
         enabled: bool,
         include_history: bool,
+    },
+    CloudReleaseCandidates {
+        root: Option<PathBuf>,
+        #[serde(default)]
+        after: String,
+    },
+    ReleaseCloudVerified {
+        root: Option<PathBuf>,
+        id: String,
+        copy: backupduck_store::retention::GalleryCopy,
+        /// The copy is gone; `copy` is the stored evidence, not a fresh read.
+        #[serde(default)]
+        missing: bool,
+    },
+    MarkGalleryReleased {
+        root: Option<PathBuf>,
+        id: String,
+        reason: String,
     },
     GalleryReleaseBytes {
         root: PathBuf,
@@ -1791,6 +1810,18 @@ fn dispatch(command: Command) -> Result<Value> {
                 Ok(json!({}))
             })
         }
+        Command::CloudReleaseCandidates { root, after } => {
+            cloud_release::candidates(root.as_deref(), &after)
+        }
+        Command::ReleaseCloudVerified {
+            root,
+            id,
+            copy,
+            missing,
+        } => cloud_release::release(root.as_deref(), &id, &copy, missing),
+        Command::MarkGalleryReleased { root, id, reason } => {
+            cloud_release::mark(root.as_deref(), &id, &reason)
+        }
         Command::GalleryReleaseBytes { root, ids } => {
             if !root.join("store/receiver.sqlite3").is_file() {
                 return Ok(json!({"bytes":0}));
@@ -1812,11 +1843,16 @@ fn dispatch(command: Command) -> Result<Value> {
             }
             receiver_storage::with_store(root.as_deref(), |store, maintenance| {
                 // Relay candidates only when recycling is on or manually
-                // requested; SHA-1 backfill rows regardless.
+                // requested; SHA-1 backfill rows regardless. Cloud release
+                // supersedes relay: originals then wait for the cloud.
+                let settings = &maintenance.settings;
+                if manual && settings.cloud_release {
+                    return Ok(json!([]));
+                }
                 Ok(serde_json::to_value(
                     store.gallery_candidates_with_backfill(
                         &after,
-                        maintenance.settings.receiver_relay,
+                        settings.receiver_relay && !settings.cloud_release,
                         manual,
                     )?,
                 )?)
@@ -1835,8 +1871,9 @@ fn dispatch(command: Command) -> Result<Value> {
         } => receiver_storage::with_store(root.as_deref(), |store, maintenance| {
             store.record_gallery_copy(&id, &copy)?;
             maintenance.log("publication_complete", None, None)?;
-            let release =
-                manual || maintenance.settings.receiver_relay && store.relay_eligible(&id)?;
+            let settings = &maintenance.settings;
+            let release = !settings.cloud_release
+                && (manual || settings.receiver_relay && store.relay_eligible(&id)?);
             let bytes = if release {
                 store.release_gallery_copy(&id, &copy, true)?
             } else {
@@ -1853,6 +1890,9 @@ fn dispatch(command: Command) -> Result<Value> {
             copy,
             manual,
         } => receiver_storage::with_store(root.as_deref(), |store, maintenance| {
+            if maintenance.settings.cloud_release {
+                return Err(Error::Conflict("cloud release active".into()));
+            }
             let bytes = store.release_gallery_copy(
                 &id,
                 &copy,

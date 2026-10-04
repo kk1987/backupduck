@@ -57,12 +57,35 @@ impl Catalog {
     }
     pub fn counts(&self) -> Result<serde_json::Value> {
         let Some(conn) = &self.conn else {
-            return Ok(serde_json::json!({"total":0,"received":0,"published":0}));
+            return Ok(
+                serde_json::json!({"total":0,"received":0,"published":0,"cloud_verified":0,"gallery_released":0,"gallery_released_bytes":0}),
+            );
         };
         let (total, received, published): (i64, i64, i64) = conn.query_row(
             "SELECT COUNT(*),COALESCE(SUM(received),0),COALESCE(SUM(processing='complete'),0) FROM assets", [],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(super::db)?;
-        Ok(serde_json::json!({"total":total,"received":received,"published":published}))
+        let has_cloud: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('assets') WHERE name='cloud_state')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(super::db)?;
+        // Gallery bytes freed by cloud release, from the recorded copy sizes.
+        let (verified, released, released_bytes): (i64, i64, i64) = if has_cloud {
+            conn.query_row(
+                "SELECT COALESCE(SUM(cloud_state='verified'),0),COALESCE(SUM(gallery_released),0),\
+                 (SELECT COALESCE(SUM(json_extract(g.copy,'$.size')),0) FROM assets a JOIN gallery_copies g ON g.asset_id=a.id WHERE a.gallery_released=1) FROM assets",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(super::db)?
+        } else {
+            (0, 0, 0)
+        };
+        Ok(
+            serde_json::json!({"total":total,"received":received,"published":published,"cloud_verified":verified,"gallery_released":released,"gallery_released_bytes":released_bytes}),
+        )
     }
     pub fn reserved_bytes(&self) -> Result<u64> {
         let Some(conn) = &self.conn else { return Ok(0) };

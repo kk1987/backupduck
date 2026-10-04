@@ -633,7 +633,7 @@
 
 "settings_cloud" = "Google Photos";
 "cloud_audit_title" = "Google Photos check";
-"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory; nothing is deleted because of them. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
+"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory. The Mac deletes nothing; if you turn on cloud release on the Pixel, it removes its own gallery copies of photos reported as backed up without using Google storage. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
 "cloud_audit_readme" = "How to export cookies and what is checked";
 "cloud_audit_cookies" = "Cookies file";
 "cloud_audit_cookies_set" = "Selected";

@@ -11,12 +11,26 @@ import org.json.JSONObject
 
 internal data class HistoryItem(val cursor: Long, val id: String, val filename: String, val kind: String,
     val totalBytes: Long, val confirmedBytes: Long, val receipt: String, val processing: String,
-    val processingError: String?, val originalsReleased: Boolean, val releaseReason: String? = null, val senderNames: String = "") {
+    val processingError: String?, val originalsReleased: Boolean, val releaseReason: String? = null, val senderNames: String = "",
+    val cloudState: String = "unknown", val galleryReleased: Boolean = false) {
     val statusLabel: Int get() = when {
         receipt != "received" -> R.string.receiver_item_receiving
         processing == "complete" -> R.string.receiver_item_published
         processing == "failed" -> R.string.receiver_item_failed
         else -> R.string.receiver_item_received
+    }
+    /** History row text: cloud verdicts outrank local retention details. */
+    val rowStatus: Int get() = when {
+        galleryReleased -> R.string.history_cloud_released
+        processing == "complete" && cloudState == "verified" -> R.string.history_cloud_verified
+        processing == "complete" && cloudState == "verified_counts_against_quota" -> R.string.history_cloud_quota
+        processing == "complete" && cloudState == "missing" -> R.string.history_cloud_missing
+        originalsReleased && releaseReason == "gallery" -> R.string.history_relay_reclaimed
+        originalsReleased -> R.string.history_archived
+        processing == "complete" -> R.string.filter_published
+        kind == "motion" && processing == "failed" && processingError == "conversion_required" -> R.string.receiver_item_conversion_required
+        processing == "failed" && (processingError == "unsupported" || processingError?.startsWith("burst_jpeg_") == true) -> R.string.receiver_item_failed_unsupported
+        else -> statusLabel
     }
 }
 internal data class HistoryState(val items: List<HistoryItem> = emptyList(), val total: Int = 0,
@@ -66,7 +80,8 @@ internal class HistoryModel : ViewModel() {
                     HistoryItem(row.getLong("cursor"), row.getString("id"), row.getString("filename"), row.getString("kind"),
                         row.getLong("total_bytes"), row.getLong("confirmed_bytes"), row.getString("receipt"),
                         row.getString("processing"), if (row.isNull("processing_error")) null else row.getString("processing_error"),
-                        row.getBoolean("originals_released"), row.optString("release_reason").takeIf { it == "gallery" || it == "archive" }, names)
+                        row.getBoolean("originals_released"), row.optString("release_reason").takeIf { it == "gallery" || it == "archive" || it == "cloud" }, names,
+                        row.optString("cloud_state", "unknown"), row.optBoolean("gallery_released", false))
                 }
                 Triple(items, data.getInt("total"), if (data.isNull("next_cursor")) null else data.getLong("next_cursor"))
             } }

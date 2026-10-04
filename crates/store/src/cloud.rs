@@ -1,7 +1,40 @@
 //! Cloud verification state for published gallery copies. Verdicts come from an
-//! external auditor that looks copies up by SHA-1. Nothing here deletes media.
+//! external auditor that looks copies up by SHA-1. Only the opt-in cloud
+//! release below acts on them, and only for `verified` copies after a grace.
 use super::*;
 use retention::GalleryCopy;
+use serde::Serialize;
+
+/// Release reasons recorded for a deleted gallery copy.
+pub const GALLERY_RELEASE_REASONS: [&str; 2] = ["cloud", "missing"];
+
+/// A `verified` copy whose grace has passed and whose gallery copy is still
+/// recorded as present. Originals may already be gone through relay/archive.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct CloudReleaseCandidate {
+    pub id: String,
+    pub copy: GalleryCopy,
+    pub originals_released: bool,
+}
+
+/// Settings snapshot taken under the receiver/settings locks at each command.
+#[derive(Clone, Copy, Debug)]
+pub struct CloudReleasePolicy {
+    pub enabled: bool,
+    pub now_ms: i64,
+    pub grace_ms: u64,
+}
+impl CloudReleasePolicy {
+    fn cutoff(self) -> i64 {
+        self.now_ms
+            .saturating_sub(i64::try_from(self.grace_ms).unwrap_or(i64::MAX))
+    }
+}
+
+/// Never `verified_counts_against_quota` or `missing`: only free cloud copies.
+const CLOUD_RELEASE_ELIGIBLE: &str =
+    "a.received=1 AND a.processing='complete' AND a.cloud_state='verified' \
+     AND a.gallery_released=0 AND a.cloud_checked_at_ms IS NOT NULL AND a.cloud_checked_at_ms<=?2";
 
 /// A copy is first looked up ten minutes after publication.
 const FIRST_CHECK_MS: i64 = 600_000;
@@ -133,6 +166,133 @@ impl Receiver {
         }
         tx.commit().map_err(db)?;
         Ok(summary)
+    }
+
+    /// Bounded page of copies the cloud release may delete, in id order.
+    pub fn cloud_release_candidates(
+        &self,
+        after: &str,
+        limit: u32,
+        now_ms: i64,
+        grace_ms: u64,
+    ) -> Result<Vec<CloudReleaseCandidate>> {
+        if !after.is_empty() && !valid_digest(after) {
+            return Err(Error::Invalid("cloud cursor".into()));
+        }
+        if limit == 0 || limit as usize > MAX_CLOUD_ITEMS {
+            return Err(Error::Invalid("cloud limit".into()));
+        }
+        let policy = CloudReleasePolicy {
+            enabled: true,
+            now_ms,
+            grace_ms,
+        };
+        let mut query = self
+            .conn
+            .prepare(&format!(
+                "SELECT a.id,g.copy,a.originals_released FROM assets a JOIN gallery_copies g ON g.asset_id=a.id \
+                 WHERE a.id>?1 AND {CLOUD_RELEASE_ELIGIBLE} ORDER BY a.id LIMIT ?3"
+            ))
+            .map_err(db)?;
+        let rows = query
+            .query_map(params![after, policy.cutoff(), limit], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            })
+            .map_err(db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db)?;
+        rows.into_iter()
+            .map(|(id, copy, originals_released)| {
+                Ok(CloudReleaseCandidate {
+                    id,
+                    copy: serde_json::from_str(&copy)?,
+                    originals_released,
+                })
+            })
+            .collect()
+    }
+
+    /// Release originals of an eligible copy before the host deletes the
+    /// gallery copy. `fresh` must be a fresh read matching the stored evidence,
+    /// or, with `missing`, the stored evidence itself for a copy the host found
+    /// gone: the cloud already matched its SHA-1. The durable marker precedes
+    /// blob deletion; repeating it is harmless. Returns bytes freed.
+    pub fn release_cloud_verified(
+        &mut self,
+        id: &str,
+        fresh: &GalleryCopy,
+        missing: bool,
+        policy: CloudReleasePolicy,
+    ) -> Result<u64> {
+        if !policy.enabled {
+            return Err(Error::Conflict("cloud release disabled".into()));
+        }
+        fresh.validate()?;
+        let stored = self.gallery_copy(id)?.ok_or(Error::Integrity)?;
+        let proven = if missing {
+            stored == *fresh
+        } else {
+            fresh.sha1.is_some() && stored.matches(fresh)
+        };
+        if !proven {
+            return Err(Error::Integrity);
+        }
+        if !self.cloud_release_eligible(id, policy)? {
+            return Err(Error::Conflict("cloud release not eligible".into()));
+        }
+        self.conn
+            .execute(
+                "UPDATE assets SET originals_released=1,release_reason='cloud' WHERE id=?1 AND originals_released=0",
+                [id],
+            )
+            .map_err(db)?;
+        self.reclaim_unreferenced()
+    }
+
+    /// Record that the host deleted (`cloud`) or found gone (`missing`) the
+    /// gallery copy after `release_cloud_verified`. Not gated by the setting:
+    /// it records what already happened. Returns whether the row changed.
+    pub fn mark_gallery_released(&mut self, id: &str, reason: &str, now_ms: i64) -> Result<bool> {
+        if !GALLERY_RELEASE_REASONS.contains(&reason) {
+            return Err(Error::Invalid("gallery release reason".into()));
+        }
+        let (originals_released, state, released): (bool, String, bool) = self
+            .conn
+            .query_row(
+                "SELECT originals_released,cloud_state,gallery_released FROM assets WHERE id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(db)?
+            .ok_or(Error::NotFound)?;
+        if released {
+            return Ok(false);
+        }
+        if !originals_released || state != "verified" {
+            return Err(Error::Conflict("gallery release not prepared".into()));
+        }
+        self.conn
+            .execute(
+                "UPDATE assets SET gallery_released=1,gallery_released_at_ms=?2,gallery_release_reason=?3 WHERE id=?1 AND gallery_released=0",
+                params![id, now_ms, reason],
+            )
+            .map_err(db)?;
+        Ok(true)
+    }
+
+    fn cloud_release_eligible(&self, id: &str, policy: CloudReleasePolicy) -> Result<bool> {
+        self.conn
+            .query_row(
+                &format!("SELECT EXISTS(SELECT 1 FROM assets a WHERE a.id=?1 AND {CLOUD_RELEASE_ELIGIBLE})"),
+                params![id, policy.cutoff()],
+                |r| r.get(0),
+            )
+            .map_err(db)
     }
 }
 
@@ -481,5 +641,214 @@ mod tests {
         assert!(r.observe_cloud(&[bad], 0).is_err());
         let many = vec![observe(&id, 'a', CloudResult::Free); 101];
         assert!(r.observe_cloud(&many, 0).is_err());
+    }
+
+    fn policy(enabled: bool, now_ms: i64) -> CloudReleasePolicy {
+        CloudReleasePolicy {
+            enabled,
+            now_ms,
+            grace_ms: HOUR,
+        }
+    }
+    const HOUR: u64 = 3_600_000;
+    /// A published copy (SHA-1 'a'+n) with a cloud verdict recorded at `at`.
+    fn observed(r: &mut Receiver, name: &str, n: u8, result: CloudResult, at: i64) -> String {
+        let id = received(r, name);
+        let sha1 = (b'a' + n) as char;
+        r.record_gallery_copy(&id, &copy(n, Some(sha1))).unwrap();
+        r.observe_cloud(&[observe(&id, sha1, result)], at).unwrap();
+        id
+    }
+    fn candidate_ids(r: &Receiver, now: i64) -> Vec<String> {
+        r.cloud_release_candidates("", 100, now, HOUR)
+            .unwrap()
+            .into_iter()
+            .map(|c| c.id)
+            .collect()
+    }
+
+    #[test]
+    fn cloud_release_lists_only_free_verified_copies_after_grace() {
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let at = 1_000_000_000;
+        let verified = observed(&mut r, "verified", 1, CloudResult::Free, at);
+        let quota = observed(&mut r, "quota", 2, CloudResult::CountsAgainstQuota, at);
+        let pending = observed(&mut r, "pending", 3, CloudResult::NotFound, at);
+        let unknown = received(&mut r, "unknown");
+        r.record_gallery_copy(&unknown, &copy(4, None)).unwrap();
+        let missing = observed(&mut r, "missing", 5, CloudResult::NotFound, i64::MAX / 2);
+        assert_eq!(state(&r, &quota), "verified_counts_against_quota");
+        assert_eq!(state(&r, &pending), "pending");
+        assert_eq!(state(&r, &missing), "missing");
+        assert!(candidate_ids(&r, at + HOUR as i64 - 1).is_empty());
+        assert_eq!(candidate_ids(&r, at + HOUR as i64), vec![verified.clone()]);
+        assert!(candidate_ids(&r, i64::MAX).contains(&verified));
+        assert_eq!(candidate_ids(&r, i64::MAX).len(), 1);
+        let page = r
+            .cloud_release_candidates("", 1, at + HOUR as i64, HOUR)
+            .unwrap();
+        assert_eq!(page[0].copy, copy(1, Some('b')));
+        assert!(!page[0].originals_released);
+        assert!(r
+            .cloud_release_candidates(&verified, 1, at + HOUR as i64, HOUR)
+            .unwrap()
+            .is_empty());
+        assert!(r.cloud_release_candidates("bad", 1, 0, HOUR).is_err());
+        assert!(r.cloud_release_candidates("", 0, 0, HOUR).is_err());
+        assert!(r.cloud_release_candidates("", 101, 0, HOUR).is_err());
+    }
+
+    #[test]
+    fn cloud_release_requires_setting_grace_and_matching_proof() {
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let at = 1_000_000_000;
+        let id = observed(&mut r, "release", 1, CloudResult::Free, at);
+        let quota = observed(&mut r, "quota", 2, CloudResult::CountsAgainstQuota, at);
+        let fresh = copy(1, Some('b'));
+        let later = at + HOUR as i64;
+        let blobs = |r: &Receiver| -> i64 {
+            r.conn
+                .query_row("SELECT COUNT(*) FROM blobs", [], |row| row.get(0))
+                .unwrap()
+        };
+        assert_eq!(blobs(&r), 2);
+        assert!(matches!(
+            r.release_cloud_verified(&id, &fresh, false, policy(false, later)),
+            Err(Error::Conflict(_))
+        ));
+        assert!(matches!(
+            r.release_cloud_verified(&id, &fresh, false, policy(true, later - 1)),
+            Err(Error::Conflict(_))
+        ));
+        // Missing or different SHA-1, other bytes, other locator.
+        for bad in [copy(1, None), copy(1, Some('c')), copy(2, Some('b'))] {
+            assert!(matches!(
+                r.release_cloud_verified(&id, &bad, false, policy(true, later)),
+                Err(Error::Integrity)
+            ));
+        }
+        assert!(r
+            .release_cloud_verified(&quota, &copy(2, Some('c')), false, policy(true, later))
+            .is_err());
+        assert!(r.mark_gallery_released(&id, "cloud", later).is_err());
+        assert!(!r.originals_released(&id).unwrap());
+        assert_eq!(
+            r.release_cloud_verified(&id, &fresh, false, policy(true, later))
+                .unwrap(),
+            "release".len() as u64
+        );
+        assert!(r.originals_released(&id).unwrap());
+        assert_eq!(blobs(&r), 1);
+        // A crash before the gallery mark repeats the release harmlessly.
+        assert_eq!(candidate_ids(&r, later), vec![id.clone()]);
+        assert!(r.cloud_release_candidates("", 1, later, HOUR).unwrap()[0].originals_released);
+        assert_eq!(
+            r.release_cloud_verified(&id, &fresh, false, policy(true, later))
+                .unwrap(),
+            0
+        );
+        assert!(r.mark_gallery_released(&id, "elsewhere", later).is_err());
+        assert!(r.mark_gallery_released(&id, "cloud", later).unwrap());
+        assert!(!r.mark_gallery_released(&id, "cloud", later).unwrap());
+        assert!(candidate_ids(&r, later).is_empty());
+        assert!(r
+            .release_cloud_verified(&id, &fresh, false, policy(true, later))
+            .is_err());
+        let (reason, released_at, release_reason): (String, i64, String) = r
+            .conn
+            .query_row(
+                "SELECT gallery_release_reason,gallery_released_at_ms,release_reason FROM assets WHERE id=?1",
+                [&id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (reason.as_str(), released_at, release_reason.as_str()),
+            ("cloud", later, "cloud")
+        );
+        assert_eq!(r.overview().unwrap()["gallery_released"], 1);
+        let counts = catalog::Catalog::open(&t.0).unwrap().counts().unwrap();
+        assert_eq!(
+            (
+                &counts["cloud_verified"],
+                &counts["gallery_released"],
+                &counts["gallery_released_bytes"]
+            ),
+            (
+                &serde_json::json!(1),
+                &serde_json::json!(1),
+                &serde_json::json!(1)
+            )
+        );
+        let item = catalog::Catalog::open(&t.0)
+            .unwrap()
+            .page(None, "all", "all", 10)
+            .unwrap()
+            .items
+            .into_iter()
+            .find(|i| i.id == id)
+            .unwrap();
+        assert!(item.gallery_released && item.originals_released);
+        assert_eq!(item.cloud_state, "verified");
+    }
+
+    #[test]
+    fn relay_released_rows_only_mark_the_gallery_and_missing_needs_stored_evidence() {
+        let t = Temp::new();
+        let mut r = Receiver::open(&t.0, 1 << 20).unwrap();
+        let at = 1_000_000_000;
+        let later = at + HOUR as i64;
+        let relayed = observed(&mut r, "relayed", 1, CloudResult::Free, at);
+        r.release_gallery_copy(&relayed, &copy(1, Some('b')), true)
+            .unwrap();
+        assert_eq!(candidate_ids(&r, later), vec![relayed.clone()]);
+        assert_eq!(
+            r.release_cloud_verified(&relayed, &copy(1, Some('b')), false, policy(true, later))
+                .unwrap(),
+            0
+        );
+        let reason: String = r
+            .conn
+            .query_row(
+                "SELECT release_reason FROM assets WHERE id=?1",
+                [&relayed],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reason, "gallery");
+        assert!(r.mark_gallery_released(&relayed, "cloud", later).unwrap());
+
+        // The copy vanished: the stored evidence stands in for a fresh read.
+        let gone = observed(&mut r, "gone", 2, CloudResult::Free, at);
+        let mut other = copy(2, Some('d'));
+        assert!(matches!(
+            r.release_cloud_verified(&gone, &other, true, policy(true, later)),
+            Err(Error::Integrity)
+        ));
+        other.sha1 = None;
+        assert!(r
+            .release_cloud_verified(&gone, &other, true, policy(true, later))
+            .is_err());
+        assert!(r
+            .release_cloud_verified(&gone, &copy(2, Some('c')), true, policy(true, later - 1))
+            .is_err());
+        assert_eq!(
+            r.release_cloud_verified(&gone, &copy(2, Some('c')), true, policy(true, later))
+                .unwrap(),
+            "gone".len() as u64
+        );
+        assert!(r.mark_gallery_released(&gone, "missing", later).unwrap());
+        assert!(candidate_ids(&r, later).is_empty());
+        // Without stored evidence there is nothing to stand in.
+        let bare = received(&mut r, "bare");
+        assert!(r
+            .release_cloud_verified(&bare, &copy(3, Some('d')), true, policy(true, later))
+            .is_err());
+        assert!(matches!(
+            r.mark_gallery_released(&digest(b"absent"), "cloud", later),
+            Err(Error::NotFound)
+        ));
     }
 }

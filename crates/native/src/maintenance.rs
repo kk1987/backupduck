@@ -66,6 +66,17 @@ pub struct Settings {
     pub receiver_relay: bool,
     pub log_days: u32,
     pub log_limit: u32,
+    /// Delete gallery copies and originals once the cloud auditor verified
+    /// them. Supersedes relay release while on.
+    #[serde(default)]
+    pub cloud_release: bool,
+    /// Minimum age of a `verified` verdict before acting on it.
+    #[serde(default = "default_cloud_release_grace_ms")]
+    pub cloud_release_grace_ms: u64,
+}
+pub const MAX_CLOUD_RELEASE_GRACE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+fn default_cloud_release_grace_ms() -> u64 {
+    60 * 60 * 1000
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -77,6 +88,8 @@ impl Default for Settings {
             receiver_relay: false,
             log_days: 14,
             log_limit: 5000,
+            cloud_release: false,
+            cloud_release_grace_ms: default_cloud_release_grace_ms(),
         }
     }
 }
@@ -392,6 +405,7 @@ impl Maintenance {
             || !(0..=(100u64 << 30)).contains(&settings.min_free_bytes)
             || !(1..=90).contains(&settings.log_days)
             || !(100..=20000).contains(&settings.log_limit)
+            || settings.cloud_release_grace_ms > MAX_CLOUD_RELEASE_GRACE_MS
         {
             return Err(Error::Invalid("storage settings".into()));
         }
@@ -1759,5 +1773,28 @@ mod tests {
         let m = Maintenance::open(&t.0).unwrap();
         assert_eq!(m.settings.log_limit, 100);
         assert_eq!(m.settings.log_days, 1);
+    }
+    #[test]
+    fn cloud_release_settings_default_off_and_validate_grace() {
+        let old: Settings = serde_json::from_str(
+            r#"{"cache_budget_bytes":1,"receiver_budget_bytes":1,"min_free_bytes":0,"auto_reclaim":true,"receiver_relay":true,"log_days":14,"log_limit":5000}"#,
+        )
+        .unwrap();
+        assert!(!old.cloud_release && old.receiver_relay);
+        assert_eq!(old.cloud_release_grace_ms, 3_600_000);
+        assert!(!Settings::default().cloud_release);
+        assert_eq!(Settings::default().cloud_release_grace_ms, 3_600_000);
+        let t = Temp::new();
+        let mut m = Maintenance::open(&t.0).unwrap();
+        let mut settings = m.settings.clone();
+        settings.cloud_release = true;
+        settings.cloud_release_grace_ms = MAX_CLOUD_RELEASE_GRACE_MS + 1;
+        assert!(m.save(settings.clone()).is_err());
+        settings.cloud_release_grace_ms = 0;
+        m.save(settings).unwrap();
+        drop(m);
+        let m = Maintenance::open(&t.0).unwrap();
+        assert!(m.settings.cloud_release);
+        assert_eq!(m.settings.cloud_release_grace_ms, 0);
     }
 }

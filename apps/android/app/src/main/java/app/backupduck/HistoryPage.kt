@@ -209,7 +209,7 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
         holder.cancel(); holder.itemID = item.id
         holder.name.text = item.filename
         holder.sender.text = activity.getString(R.string.history_from, item.senderNames.ifBlank { activity.getString(R.string.history_sender_unknown) })
-        holder.status.text = activity.getString(if (item.originalsReleased && item.releaseReason == "gallery") R.string.history_relay_reclaimed else if (item.originalsReleased) R.string.history_archived else if (item.processing == "complete") R.string.filter_published else if (item.kind == "motion" && item.processing == "failed" && item.processingError == "conversion_required") R.string.receiver_item_conversion_required else if (item.processing == "failed" && (item.processingError == "unsupported" || item.processingError?.startsWith("burst_jpeg_") == true)) R.string.receiver_item_failed_unsupported else item.statusLabel)
+        holder.status.text = activity.getString(item.rowStatus)
         holder.progress.visibility = if (item.receipt == "received") View.GONE else View.VISIBLE
         holder.size.text = if (item.receipt == "received") Formatter.formatFileSize(activity, item.totalBytes)
             else "${Formatter.formatFileSize(activity, item.confirmedBytes)} / ${Formatter.formatFileSize(activity, item.totalBytes)}"
@@ -225,7 +225,8 @@ private class TransferAdapter(private val activity: MainActivity) : ListAdapter<
                 .setPositiveButton(R.string.nav_settings) { _, _ -> activity.openSettings() }
                 .show()
         } else null)
-        if (item.processing != "complete") return
+        // A released copy is gone from the phone; there is nothing to preview.
+        if (item.processing != "complete" || item.galleryReleased) return
         val signal = CancellationSignal()
         holder.signal = signal
         holder.work = activity.lifecycleScope.launch {

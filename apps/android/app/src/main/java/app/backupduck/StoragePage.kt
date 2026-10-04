@@ -25,6 +25,8 @@ internal class StoragePage(
     private lateinit var galleryPending: TextView
     private lateinit var updated: TextView
     private lateinit var retention: RetentionControls
+    private lateinit var cloudRelease: CloudReleaseControls
+    private lateinit var relaySuperseded: TextView
     private lateinit var relayStatus: TextView
     private var work: Job? = null
     private var lastRefresh = 0L
@@ -60,9 +62,12 @@ internal class StoragePage(
             label(body, getString(R.string.storage_gallery_note), 14, secondaryColor())
             action(body, R.string.receiver_open_photos, action = ::openPhotos)
         }
+        section(panel, R.string.cloud_release_title)
+        card(panel) { body -> cloudRelease = CloudReleaseControls(activity, body) { refresh(force = true) } }
         section(panel, R.string.storage_retention_title)
         card(panel) { body ->
             retention = RetentionControls(activity, body)
+            relaySuperseded = label(body, getString(R.string.relay_superseded), 13, secondaryColor()).apply { visibility = View.GONE }
             relayStatus = label(body, "", 13, secondaryColor())
             action(body, R.string.storage_how_to_free) {
                 MaterialAlertDialogBuilder(activity).setTitle(R.string.storage_how_to_free)
@@ -93,6 +98,8 @@ internal class StoragePage(
                 free.text = size(data.getLong("free_bytes"))
                 val config = data.getJSONObject("settings")
                 retention.render(config.optBoolean("receiver_relay", false))
+                cloudRelease.render(config, data.getJSONObject("counts"))
+                relaySuperseded.visibility = if (config.optBoolean("cloud_release", false)) View.VISIBLE else View.GONE
                 val used = data.getLong("used_bytes"); val budget = config.getLong("receiver_budget_bytes")
                 reservation.text = activity.getString(R.string.storage_reservation, size(used), size(budget))
                 budgetProgress.progress = (used.toDouble() / budget.coerceAtLeast(1) * 1000).toInt().coerceIn(0, 1000)
