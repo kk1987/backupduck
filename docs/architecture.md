@@ -142,9 +142,10 @@ which is a network retry that drops its checkpoint, so it registers again from
 offset zero. There is no explicit reservation cancellation.
 
 The Android receiver reads battery temperature and Android's thermal status while
-running. Temperature protection is on by default at 40°C (adjustable from 35–45°C,
-or off). At the threshold or severe system thermal status it holds admission of
-new assets and subsequent upload chunks. It resumes after cooling below the
+running. Temperature protection is on by default at 40°C (adjustable from
+35–50°C, or off). Thresholds above 45°C allow charging-time temperatures that
+age older batteries faster. At the threshold or severe system thermal status it
+holds admission of new assets and subsequent upload chunks. It resumes after cooling below the
 threshold by 2°C and after the system status falls below moderate. The hold is
 combined with Google Photos cleanup holds, so one guard cannot clear the other.
 Senders get 409 busy while it holds and retry about once a minute (60 s ±10 s,

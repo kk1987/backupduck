@@ -16,6 +16,7 @@
 - A new "All issues" filter on Mac and iPhone lists photos that stopped retrying preparation, with their reason and attempt count, next to failed transfers. Each photo can be retried or skipped, and "Retry all" retries everything listed. The Mac overview and menu bar show the count.
 - Scan library again and re-selection no longer upload a second copy of photos that were already backed up. Favorite, location, date and Photos edits no longer count as new content; a new "Back up edited photos again" setting (off by default) re-checks edited photos, and identical originals are still never published twice. Use "Back up already received items again" to force another copy.
 - The Pixel receiver frees storage reserved by uploads that were abandoned for 7 days (for example after a photo was deleted or a sender was unpaired mid-transfer), including their partial files, so its storage budget no longer shrinks over weeks of unattended use. Content shared with received photos is kept. It checks on start and hourly and logs the freed bytes; a sender that comes back later starts that upload again.
+- The Pixel receiver's pause temperature can now be set from 35 to 50°C (was 35 to 45°C); the default stays 40°C. Thresholds above 45°C let the phone stay warmer while charging, which ages older batteries faster.
 - Senders retry a busy receiver (for example a Pixel paused by temperature protection) about once a minute instead of backing off up to 15 minutes, so backup resumes soon after the phone cools. Network and storage waits keep their existing backoff.
 
 # 0.2.0-rc.3
