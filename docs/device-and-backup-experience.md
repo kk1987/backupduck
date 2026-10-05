@@ -91,6 +91,12 @@ changed representative frame, retry/restart, original digest checks, grouped
 receiver presentation and actual motion playback. Existing motion playback
 verification does not establish burst grouping.
 
+### AVIF photos
+
+Google Photos on Android 10 does not back up AVIF files, even when MediaStore labels them `image/avif` (tested on a Pixel 1 with Google Photos 7.94: a relabelled row and a freshly inserted `image/avif` row both stayed unuploaded for 25 minutes). The Apple sender therefore converts an AVIF photo resource to 10-bit HEIC in the source color space at quality 0.9 before enqueueing it, keeping the original stem (`P1000919.avif` becomes `P1000919.heic`) and the image properties (EXIF, capture time and offset, orientation). On a 20 MP 10-bit Display P3 Lightroom export this measured 52 dB PSNR against the decoded AVIF at about 2.5 times the bytes. This is a lossy re-encode; the AVIF bytes are not sent.
+
+Sources already received as AVIF are reported as `superseded` by `source_states` and `history_batch` when the host passes `superseded_media_types: ["image/avif"]`, so the next "Scan library again" schedules them, and preparation converts and sends them as new receiver assets. Their earlier AVIF copies on the receiver never verify in the cloud and are not released automatically.
+
 ### Current burst implementation
 
 The shared preparation path expands a selected burst into all accessible siblings,

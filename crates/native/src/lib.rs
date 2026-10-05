@@ -602,6 +602,9 @@ enum Command {
         /// Re-add sources received under an older revision (edited photos).
         #[serde(default)]
         rebackup_edited: bool,
+        /// Re-add sources last received with one of these primary media types.
+        #[serde(default)]
+        superseded_media_types: Vec<String>,
     },
     ScheduleSources {
         receiver_id: String,
@@ -745,6 +748,10 @@ enum Command {
         include_cloud: bool,
         #[serde(default)]
         include_previous_receipts: bool,
+        /// Report sources last received with one of these primary media
+        /// types as `superseded` instead of `received`.
+        #[serde(default)]
+        superseded_media_types: Vec<String>,
         receiver_id: String,
         sources: Vec<(String, String)>,
     },
@@ -1122,16 +1129,25 @@ fn dispatch(command: Command) -> Result<Value> {
             sources,
             finished,
             rebackup_edited,
+            superseded_media_types,
         } => {
             let host = sender()?;
             let known = {
                 let sender = host.sender.lock().map_err(lock)?;
-                let mut known = sender.source_states(&receiver_id, &sources)?;
+                let mut known = sender.source_states_superseding(
+                    &receiver_id,
+                    &sources,
+                    false,
+                    &superseded_media_types,
+                )?;
                 if !rebackup_edited {
                     for (id, state) in sender.previous_receipts(&receiver_id, &sources)? {
                         known.entry(id).or_insert(state);
                     }
                 }
+                // Superseded receipts must be prepared again, so they are not
+                // known; inserting them first also keeps previous receipts out.
+                known.retain(|_, state| state != "superseded");
                 known
             };
             let status = host.maintenance.lock().map_err(lock)?.history_batch(
@@ -1478,13 +1494,19 @@ fn dispatch(command: Command) -> Result<Value> {
             include_pending,
             include_cloud,
             include_previous_receipts,
+            superseded_media_types,
         } => {
             let host = sender()?;
-            let mut states = host.sender.lock().map_err(lock)?.source_states_with_cloud(
-                &receiver_id,
-                &sources,
-                include_cloud,
-            )?;
+            let mut states = host
+                .sender
+                .lock()
+                .map_err(lock)?
+                .source_states_superseding(
+                    &receiver_id,
+                    &sources,
+                    include_cloud,
+                    &superseded_media_types,
+                )?;
             if include_pending {
                 let pending = host
                     .maintenance

@@ -99,5 +99,30 @@ fn rescan_skips_sources_received_under_an_older_revision() {
         "sources":sources,"finished":true,"rebackup_edited":true}),
     );
     assert_eq!(status["pending"], 1);
+
+    // A receipt in a superseded format is reported as such and rescheduled,
+    // even though previous receipts would otherwise count it as done.
+    call(json!({"op":"source_result","receiver_id":receiver,"source":"photo-1","complete":true}));
+    assert_eq!(
+        call(json!({"op":"pending_sources","receiver_id":receiver}))["count"],
+        0
+    );
+    let received_window = json!([["photo-1", "1"]]);
+    let superseded = json!(["image/jpeg"]);
+    let states = call(
+        json!({"op":"source_states","receiver_id":receiver,"sources":received_window,
+        "include_previous_receipts":true,"superseded_media_types":superseded}),
+    );
+    assert_eq!(states["photo-1"], "superseded");
+    let plain =
+        call(json!({"op":"source_states","receiver_id":receiver,"sources":received_window}));
+    assert_eq!(plain["photo-1"], "received");
+    let run = call(json!({"op":"history_control","receiver_id":receiver,"action":"start"}))["run"]
+        .clone();
+    let status = call(
+        json!({"op":"history_batch","receiver_id":receiver,"run":run,"sources":received_window,
+        "finished":true,"rebackup_edited":false,"superseded_media_types":superseded}),
+    );
+    assert_eq!(status["pending"], 1);
     let _ = std::fs::remove_dir_all(&root);
 }

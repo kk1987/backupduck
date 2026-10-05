@@ -174,7 +174,8 @@ extension BackupModel {
         pairing?.receiverID == target.receiverID else { return }
       let data = try await Bridge.call(["op": "history_batch", "receiver_id": target.receiverID,
         "run": status.run, "sources": sources, "finished": end == cursor.ids.count,
-        "rebackup_edited": Self.rebackupEdited])
+        "rebackup_edited": Self.rebackupEdited,
+        "superseded_media_types": AvifConversion.supersededMediaTypes])
       guard version == historyControlRevision, pairing?.receiverID == target.receiverID else { return }
       historicalImport = try JSONDecoder().decode(HistoricalImportStatus.self, from: data)
       try cursor.advance(to: end) // Replay after a crash is idempotent in Rust.

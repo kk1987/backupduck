@@ -548,7 +548,8 @@ enum Bridge {
   /// `received_previous` (an older revision was received) counts as done
   /// unless the selection explicitly asked for a repeat backup.
   static func shouldSkipSource(_ state: String?, rebackupReceived: Bool) -> Bool {
-    guard let state else { return false }
+    // Received in a format the receiver cannot use; prepare it again converted.
+    guard let state, state != "superseded" else { return false }
     return state != "failed" && !(rebackupReceived && receivedStates.contains(state))
   }
   private static let receivedStates: Set<String> = ["received", "received_previous"]
@@ -637,6 +638,7 @@ enum Bridge {
         // manual selection and metadata replay after a historical-scan restart.
         let existingData = try await Bridge.call(["op": "source_states", "receiver_id": target.receiverID,
           "include_previous_receipts": !Self.rebackupEdited,
+          "superseded_media_types": AvifConversion.supersededMediaTypes,
           "sources": [[sourceID, PhotoLibraryModel.revision(asset)]]])
         let existing = try JSONDecoder().decode([String: String].self, from: existingData)
         let rebackupThisSource = rebackupReceived
@@ -668,6 +670,16 @@ enum Bridge {
           try await export(resource, to: destination)
           try Task.checkCancellation()
           guard pairing?.receiverID == target.receiverID else { return false }
+          if AvifConversion.applies(to: resource, role: role) {
+            let name = AvifConversion.filename(for: resource.originalFilename)
+            let converted = folder.appendingPathComponent(role + "-" + name)
+            try await AvifConversion.convert(destination, to: converted)
+            try Task.checkCancellation()
+            resources.append([
+              "role": role, "filename": name, "media_type": "image/heic", "path": converted.path,
+            ])
+            continue
+          }
           let ext = (resource.originalFilename as NSString).pathExtension.lowercased()
           let mime: [String: String] = [
             "heic": "image/heic", "heif": "image/heif", "jpg": "image/jpeg", "jpeg": "image/jpeg",
