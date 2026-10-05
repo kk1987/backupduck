@@ -334,6 +334,7 @@ impl Maintenance {
           CREATE TABLE IF NOT EXISTS history_runs(receiver TEXT PRIMARY KEY, run INTEGER NOT NULL, state TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS history_members(receiver TEXT NOT NULL, source TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(receiver,source));
           CREATE TABLE IF NOT EXISTS pending_sources(receiver TEXT NOT NULL, source TEXT NOT NULL, retry_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(receiver,source));
+          CREATE TABLE IF NOT EXISTS priority_sources(source TEXT PRIMARY KEY);
           CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, code TEXT NOT NULL, job_id INTEGER, amount INTEGER);") .map_err(database)?;
         let has_capture_date: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM pragma_table_info('pending_sources') WHERE name='created_at_ms')",
@@ -654,7 +655,7 @@ impl Maintenance {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .map_err(database)?;
-        let mut s=self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND state='pending' AND retry_at<=?2 ORDER BY created_at_ms DESC,source LIMIT 5").map_err(database)?;
+        let mut s=self.conn.prepare("SELECT source FROM pending_sources WHERE receiver=?1 AND state='pending' AND retry_at<=?2 ORDER BY EXISTS(SELECT 1 FROM priority_sources p WHERE p.source=pending_sources.source) DESC,created_at_ms DESC,source LIMIT 5").map_err(database)?;
         let ids = s
             .query_map(params![receiver, now()], |r| r.get::<_, String>(0))
             .map_err(database)?
@@ -1579,6 +1580,26 @@ mod tests {
         assert!(!PreparationError::from_code(Some("local_cache_budget")).is_item_specific());
         assert!(
             PreparationError::from_code(Some("local_cache_budget_single_item")).is_item_specific()
+        );
+    }
+    #[test]
+    fn priority_sources_are_prepared_before_newer_captures() {
+        let t = Temp::new();
+        let conn = Connection::open(t.0.join("maintenance.sqlite3")).unwrap();
+        conn.execute_batch("CREATE TABLE pending_sources(receiver TEXT NOT NULL,source TEXT NOT NULL,retry_at INTEGER NOT NULL DEFAULT 0,created_at_ms INTEGER,PRIMARY KEY(receiver,source));
+            INSERT INTO pending_sources VALUES('a','old-video',0,5),('a','new',0,9),('a','middle',0,7);").unwrap();
+        drop(conn);
+        let m = Maintenance::open(&t.0).unwrap();
+        assert_eq!(
+            m.pending("a").unwrap()["sources"],
+            json!(["new", "middle", "old-video"])
+        );
+        m.conn
+            .execute("INSERT INTO priority_sources VALUES('old-video')", [])
+            .unwrap();
+        assert_eq!(
+            m.pending("a").unwrap()["sources"],
+            json!(["old-video", "new", "middle"])
         );
     }
     #[test]

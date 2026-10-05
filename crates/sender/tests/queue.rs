@@ -963,3 +963,27 @@ fn busy_retries_steadily_while_network_backs_off() {
         [5, 10, 20, 40, 80, 160].map(|d| d + jitter).to_vec()
     );
 }
+
+#[test]
+fn priority_sources_jump_capture_order() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let mut ids = Vec::new();
+    for (name, date) in [("old-video", 100), ("new", 900), ("middle", 500)] {
+        let mut a = asset();
+        a.source_id = name.into();
+        a.metadata.insert("created_at_ms".into(), date.to_string());
+        let sources = BTreeMap::from([(a.resources[0].sha256.clone(), "resource".into())]);
+        ids.push(s.enqueue("receiver-1", a, sources).unwrap().id);
+    }
+    drop(s);
+    // Operators fill the table directly; it survives restarts like any row.
+    rusqlite::Connection::open(t.0.join("sender.sqlite3"))
+        .unwrap()
+        .execute("INSERT INTO priority_sources VALUES('old-video')", [])
+        .unwrap();
+    let mut s = Sender::open(&t.0).unwrap();
+    assert_eq!(s.claim("receiver-1", 10).unwrap().unwrap().id, ids[0]);
+    assert_eq!(s.claim("receiver-1", 10).unwrap().unwrap().id, ids[1]);
+    assert_eq!(s.claim("receiver-1", 10).unwrap().unwrap().id, ids[2]);
+}

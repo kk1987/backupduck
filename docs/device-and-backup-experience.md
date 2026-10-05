@@ -223,6 +223,10 @@ and assert that finished scans retain pending preparation counts. iOS compiles
 against the device SDK. Physical PhotoKit changes, full historical transfers and
 prolonged iOS background execution remain acceptance work.
 
+### Sending selected items first
+
+Preparation and sending both follow capture order, newest first. To move specific Photos items ahead of that order (for example every video over 100 MB during a library migration), insert their PhotoKit local identifiers into the `priority_sources(source TEXT PRIMARY KEY)` table of both `maintenance.sqlite3` and `sender.sqlite3` in the Mac queue directory (`~/Library/Application Support/BackupDuck/queue`). Prioritized items are exported before other pending sources and claimed before other queued jobs; within each group capture order still applies. Delete the rows to return to plain capture order. There is no UI for this yet.
+
 ## Sender/receiver boundary
 
 The sender knows device identity, negotiated generic media capabilities, transfer

@@ -170,6 +170,7 @@ impl Sender {
             CREATE TABLE IF NOT EXISTS locked_folder_runs(receiver_id TEXT PRIMARY KEY,ran_at INTEGER NOT NULL,result TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS receiver_features(receiver_id TEXT PRIMARY KEY,bundle_upload INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS priority_sources(source TEXT PRIMARY KEY);
             INSERT OR IGNORE INTO settings VALUES('paused',0);
             INSERT OR IGNORE INTO settings VALUES('concurrent_uploads',4);
             INSERT OR IGNORE INTO settings VALUES('revision',0);
@@ -575,7 +576,7 @@ impl Sender {
             return Ok(None);
         }
         let tx = self.conn.transaction().map_err(db)?;
-        let id: Option<i64> = tx.query_row("SELECT id FROM jobs WHERE receiver_id=?1 AND (state='queued' OR (state='waiting' AND next_attempt_at<=?2)) ORDER BY CAST(json_extract(manifest,'$.metadata.created_at_ms') AS INTEGER) DESC,json_extract(manifest,'$.source_id'),id LIMIT 1",params![receiver,now],|r|r.get(0)).optional().map_err(db)?;
+        let id: Option<i64> = tx.query_row("SELECT id FROM jobs WHERE receiver_id=?1 AND (state='queued' OR (state='waiting' AND next_attempt_at<=?2)) ORDER BY EXISTS(SELECT 1 FROM priority_sources p WHERE p.source=json_extract(jobs.manifest,'$.source_id')) DESC,CAST(json_extract(manifest,'$.metadata.created_at_ms') AS INTEGER) DESC,json_extract(manifest,'$.source_id'),id LIMIT 1",params![receiver,now],|r|r.get(0)).optional().map_err(db)?;
         if let Some(id) = id {
             tx.execute("UPDATE jobs SET state='running',generation=generation+1,attempts=attempts+1,error_code=NULL,native_task_id=NULL WHERE id=?1",[id]).map_err(db)?;
         }
