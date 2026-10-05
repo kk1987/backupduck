@@ -89,7 +89,7 @@
 "pairing_connect" = "Connect";
 "cancel" = "Cancel";
 "state_not_queued" = "Not queued";
-"transfer_summary" = "%2$d transfer tasks · %1$d received";
+"transfer_summary" = "%2$d transfer tasks · %1$d sent to phone";
 "publication_summary" = "%1$d added to phone gallery / %2$d sent to phone";
 "task_filter" = "Status";
 "tasks_empty_filtered" = "No matching transfers";
@@ -210,7 +210,7 @@
 "settings_version" = "Version";
 "settings_about_description" = "Back up original photos, videos and Live Photos to your own receiver.";
 "tasks_load_failed" = "Could not load transfers. Try again.";
-"transfer_summary_progress" = "Items received";
+"transfer_summary_progress" = "Items sent to phone";
 
 // Structured background diagnostics
 "event_dispatch_waiting" = "Waiting to dispatch the next request";

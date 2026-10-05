@@ -89,7 +89,7 @@
 "pairing_connect" = "连接";
 "cancel" = "取消";
 "state_not_queued" = "尚未加入备份";
-"transfer_summary" = "传输任务共 %2$d 项 · 已接收 %1$d 项";
+"transfer_summary" = "传输任务共 %2$d 项 · 已传到手机 %1$d 项";
 "publication_summary" = "已加入手机相册 %1$d / 已传到手机 %2$d";
 "task_filter" = "状态";
 "tasks_empty_filtered" = "没有符合条件的任务";
@@ -210,7 +210,7 @@
 "settings_version" = "版本";
 "settings_about_description" = "将原始照片、视频和实况备份到自己的接收端。";
 "tasks_load_failed" = "无法加载任务，请重试。";
-"transfer_summary_progress" = "已接收项目";
+"transfer_summary_progress" = "已传到手机的项目";
 
 // Structured background diagnostics
 "event_dispatch_waiting" = "等待派发下一请求";
