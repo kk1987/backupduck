@@ -85,10 +85,16 @@ final class BackgroundTransfer: NSObject, @preconcurrency URLSessionDataDelegate
       let configuration = URLSessionConfiguration.background(withIdentifier: Self.identifier)
       configuration.sessionSendsLaunchEvents = true
       configuration.isDiscretionary = false
+      configuration.waitsForConnectivity = true
     #else
       let configuration = URLSessionConfiguration.default
+      // A failed connect must fail the task so Rust's network backoff retries
+      // it. Waiting instead only resumes on a system path change, which a
+      // receiver restart on the same LAN (app update, phone Wi-Fi roam) never
+      // produces: such tasks held all four upload slots for up to the
+      // one-hour resource timeout.
+      configuration.waitsForConnectivity = false
     #endif
-    configuration.waitsForConnectivity = true
     configuration.allowsCellularAccess = false
     configuration.httpMaximumConnectionsPerHost = 4
     configuration.timeoutIntervalForRequest = 60
