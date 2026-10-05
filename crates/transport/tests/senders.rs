@@ -161,6 +161,8 @@ fn unchanged_sender_observations_are_not_rewritten_but_changes_are() {
         .observe_sender(&id, Some(moved), Some("Mac"))
         .unwrap();
     assert_eq!(ip(&directory).as_deref(), Some("192.168.1.7"));
+    // Windows cannot delete files that an open connection still holds.
+    drop(directory);
     drop(receiver);
     std::fs::remove_dir_all(root).unwrap();
 }
