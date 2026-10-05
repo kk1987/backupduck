@@ -68,8 +68,12 @@ impl PendingSync {
                 return Err(Error::Integrity);
             }
             fs::rename(&self.partial, &self.complete)?;
+            // Directory fsync makes the rename durable; Windows cannot open
+            // a directory as a file and keeps it in its own metadata journal.
             #[cfg(unix)]
             File::open(&self.blobs)?.sync_all()?;
+            #[cfg(not(unix))]
+            let _ = &self.blobs;
         }
         Ok(self)
     }
