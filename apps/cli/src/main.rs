@@ -58,6 +58,7 @@ enum Command {
         #[arg(long)]
         files: PathBuf,
     },
+    /// Show a receiver's transfer status for an asset ID.
     Status {
         #[arg(long)]
         server: String,
@@ -86,8 +87,10 @@ enum CloudCommand {
     },
     /// Report whether the exported session is still signed in.
     Status {
+        /// Netscape cookies.txt from a signed-in photos.google.com session.
         #[arg(long)]
         cookies: PathBuf,
+        /// Signed-in account index (the N in photos.google.com/u/N/).
         #[arg(long, default_value_t = 0)]
         account: u32,
     },
@@ -96,7 +99,7 @@ fn resource(path: &Path, role: ResourceRole) -> Result<Resource> {
     let filename = path
         .file_name()
         .and_then(|v| v.to_str())
-        .ok_or_else(|| Error::Invalid("UTF-8 filename".into()))?
+        .ok_or_else(|| Error::Invalid("filename must be valid UTF-8".into()))?
         .to_owned();
     let media_type = match path
         .extension()
@@ -182,7 +185,9 @@ async fn main() -> Result<()> {
                 "mov" | "mp4"
             );
             if video && paired_video.is_some() {
-                return Err(Error::Invalid("motion primary must be a photo".into()));
+                return Err(Error::Invalid(
+                    "--file must be a photo when --paired-video is given".into(),
+                ));
             }
             let kind = if paired_video.is_some() {
                 AssetKind::Motion
@@ -202,7 +207,9 @@ async fn main() -> Result<()> {
             if let Some(path) = paired_video {
                 let r = resource(&path, ResourceRole::PairedVideo)?;
                 if !r.media_type.starts_with("video/") {
-                    return Err(Error::Invalid("paired video".into()));
+                    return Err(Error::Invalid(
+                        "--paired-video must be a .mov or .mp4 file".into(),
+                    ));
                 }
                 resources.push(r);
             }
@@ -240,7 +247,10 @@ async fn main() -> Result<()> {
             let result = client
                 .send(&asset, &paths, &AtomicBool::new(false), |s| {
                     let bytes: u64 = s.resources.iter().map(|r| r.offset).sum();
-                    eprintln!("{}: {} bytes received; {:?}", s.asset_id, bytes, s.receipt);
+                    eprintln!(
+                        "{}: {} bytes confirmed by the receiver; {:?}",
+                        s.asset_id, bytes, s.receipt
+                    );
                 })
                 .await?;
             println!("{}", serde_json::to_string_pretty(&result)?);

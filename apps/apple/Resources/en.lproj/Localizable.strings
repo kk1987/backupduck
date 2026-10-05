@@ -11,7 +11,7 @@
 "transfer_tasks" = "Transfers";
 "tasks_empty" = "Choose photos to start your first backup.";
 "retry_task" = "Retry";
-"receipt_explanation" = "Received means the receiving device saved and verified every original file.";
+"receipt_explanation" = "Sent to phone means the phone saved and verified every original file.";
 "pair_success" = "Receiver verified and pairing saved.";
 "photos_permission_needed" = "Allow photo access in Settings to export original resources.";
 "camera_permission_needed" = "Allow camera access in Settings to scan the pairing code.";
@@ -23,9 +23,9 @@
 "state_received" = "Sent to phone";
 "state_published" = "Added to phone gallery";
 "state_publication_pending" = "Waiting for phone gallery";
-"state_publication_failed" = "Phone gallery failed; retry on receiver";
+"state_publication_failed" = "Couldn’t add to phone gallery; retry on the phone";
 "state_received_detail" = "Files reached the phone; check the receiver for gallery status";
-"state_received_previous" = "Previous version received; current version not transferred";
+"state_received_previous" = "Previous version sent to phone; current version not sent yet";
 "error_network" = "Network unavailable; automatic retry is scheduled.";
 "error_capacity" = "Receiver original-storage budget reached. Increase it on the receiver to continue automatically.";
 "error_busy" = "Receiver busy; automatic retry is scheduled.";
@@ -67,9 +67,9 @@
 "backup_selected" = "Back up selected (%d)";
 "backup_selected_confirm_title" = "Back up selected items?";
 "backup_selected_confirm_action" = "Start backup";
-"backup_selected_confirm_note" = "Identical photos already received by this device are skipped. A new receiver has its own backup history.";
-"backup_selected_rebackup_received" = "Back up already received items again";
-"backup_selected_rebackup_note" = "Creates a new copy in the phone gallery. If the Pixel still has the same verified originals, it reuses them instead of sending those bytes again.";
+"backup_selected_confirm_note" = "Identical photos this receiver already has are skipped. A new receiver has its own backup history.";
+"backup_selected_rebackup_received" = "Back up items already sent to the phone again";
+"backup_selected_rebackup_note" = "Creates a new copy in the phone gallery. If the phone still has the same verified originals, it reuses them instead of sending those bytes again.";
 "photos_access_title" = "Your photo library";
 "photos_access_description" = "Allow access to browse thumbnails and choose originals to back up.";
 "photos_allow" = "Allow photo access";
@@ -97,7 +97,7 @@
 
 "pair_receiver_desktop" = "Pair receiver";
 
-"desktop_pair_instructions" = "On the receiving device, open BackupDuck and tap “Scan desktop code”. Keep both devices on the same local network.";
+"desktop_pair_instructions" = "On the receiving device, open BackupDuck and tap “Scan Mac code”. Keep both devices on the same local network.";
 "desktop_pair_qr" = "Desktop pairing QR code";
 "desktop_pair_expiry" = "Valid for 5 minutes · Single-use encrypted pairing";
 "desktop_pair_regenerate" = "Generate new code";
@@ -136,12 +136,12 @@
 "event_transfer_deduplicated" = "Already backed up with identical content";
 "event_backup_paused" = "Backup paused";
 "event_backup_resumed" = "Backup resumed";
-"event_publication_complete" = "Published to device gallery";
+"event_publication_complete" = "Added to phone gallery";
 "event_publication_failed" = "Gallery processing failed; originals retained";
 "event_processing_low_space" = "Gallery processing is waiting for free space";
 "event_processing_resumed" = "Gallery processing resumed";
 "event_network" = "Network unavailable; automatic retry is scheduled.";
-"event_capacity" = "Receiver storage is full; automatic retry is scheduled.";
+"event_capacity" = "Receiver original-storage budget reached; automatic retry is scheduled.";
 "event_busy" = "Receiver busy; automatic retry is scheduled.";
 "event_authentication" = "Pair this receiver again to restore access.";
 "event_integrity" = "File verification failed. Originals remain unchanged.";
@@ -275,7 +275,7 @@
 "history_backup_paused" = "Resume backup to continue the library scan and transfers.";
 "history_explanation" = "This run backs up photos, videos, Live Photos and burst members already in your accessible library when you start it. Photos added later need automatic backup of new photos or another scan. Pausing stops discovery; queued transfers continue. Scan finished does not mean backup complete.";
 "rebackup_edited_toggle" = "Back up edited photos again";
-"rebackup_edited_help" = "Off by default: once a photo is backed up, later edits to it are not uploaded again, even when you check existing photos again. BackupDuck backs up original files, so with this on an edited photo is checked again and uploaded as a new copy only if its original file changed. To force another copy, select the photo and use \"Back up already received items again\".";
+"rebackup_edited_help" = "Off by default: once a photo is backed up, later edits to it are not uploaded again, even when you check existing photos again. BackupDuck backs up original files, so with this on an edited photo is checked again and uploaded as a new copy only if its original file changed. To force another copy, select the photo and use \"Back up items already sent to the phone again\".";
 "include_hidden_photos" = "Include Hidden Photos";
 "include_hidden_photos_explanation" = "On by default, so the Hidden album is backed up with the rest of the library. Turned off, hidden photos and videos are not backed up. A scan already running keeps the photos it found when it started; after changing this, use \"Check existing photos again\".";
 "hidden_photos_visible_count" = "Hidden photos visible to BackupDuck: %d";
@@ -292,13 +292,13 @@
 "help_start_title" = "Connect your devices";
 "help_start_body" = "Start receiving on your other device and keep both devices on a network where they can reach each other. Pair from Receiver and check the device names on both screens. A familiar name helps you recognize a device; pairing establishes trust.";
 "help_scope_title" = "Choose what to back up";
-"help_scope_body" = "Select items in Library for a manual backup. In backup settings, new-photo backup and historical import are separate controls: enable new-photo backup for future additions, and start historical import to include existing accessible photos and videos. Supported motion photos include their photo and video components; accessible burst frames are included together.";
-"help_receipt_title" = "What received means";
-"help_receipt_body" = "A received task has a verification receipt from the paired receiver. It does not confirm that another service has backed it up or that a receiver-side conversion has finished. Keep your source originals until you have checked the receiver’s storage and retention rules. BackupDuck does not delete items from your Apple photo library.";
+"help_scope_body" = "Select items in Library for a manual backup. In backup settings, “Back up new photos automatically” and “Back up existing photos” are separate: the first covers photos added later, the second includes photos and videos already in your accessible library. Supported motion photos include their photo and video components; accessible burst frames are included together.";
+"help_receipt_title" = "What “Sent to phone” means";
+"help_receipt_body" = "A task marked Sent to phone has a verification receipt from the paired phone. It does not mean the item is in the phone gallery or backed up to Google Photos; the Google Photos check reports that separately. Keep your source originals until you have checked the receiver’s storage and retention rules. BackupDuck does not delete items from your Apple photo library.";
 "help_recover_title" = "When backup stops";
 "help_recover_body" = "Check that backup is not paused, the receiver is running, and both devices can reach each other. Reopen BackupDuck to continue scheduling work. In Backup, open tasks needing attention and read the error before retrying. Keep the existing pairing and task history when recovering a connection; deleting app data is not a recovery step.";
 "help_permission_title" = "Missing photos";
-"help_permission_body" = "BackupDuck can only read photos you allow. Check Photos access in system settings, including the selected items if access is limited. Originals stored only in iCloud need a network connection and local staging space before upload. Granting access does not itself start a historical import.";
+"help_permission_body" = "BackupDuck can only read photos you allow. Check Photos access in system settings, including the selected items if access is limited. Originals stored only in iCloud need a network connection and local staging space before upload. Granting access does not itself start backing up existing photos.";
 "help_space_title" = "When storage is low";
 "help_space_body" = "Local cache holds prepared files while they are being transferred. Increase its budget only if the sending device has room. If the receiver is full, manage space on that device and then retry. Removing a staged file or a receiver copy is not proof of backup; use the app’s storage controls rather than deleting its internal files.";
 "help_support_title" = "Collect useful diagnostics";
@@ -313,7 +313,7 @@
 "photos_waiting_permission" = "Waiting for your choice in the system permission dialog…";
 "library_burst_count" = "Burst: %d photos";
 "library_burst_selection" = "Selecting a burst backs up all accessible frames.";
-"state_partial" = "Partially received";
+"state_partial" = "Partially sent to phone";
 
 "event_receiver_address_updated" = "Receiver address updated; pairing and transfer history preserved";
 
@@ -326,7 +326,7 @@
 
 "state_scanned" = "Scanned";
 "history_state_not_started" = "Library scan has not started";
-"history_list_explanation" = "Photos discovered in this run appear here with their backup status. Scanned does not mean received.";
+"history_list_explanation" = "Photos discovered in this run appear here with their backup status. Scanned does not mean sent to phone.";
 "source_list_count" = "%2$d photos · %1$d loaded";
 "source_photo_unavailable" = "Photo unavailable";
 
@@ -430,9 +430,9 @@
 "task_order_by_scan" = "Scan order";
 "task_order_scan_asc" = "Scan order · earlier first";
 "task_order_scan_desc" = "Scan order · later first";
-"task_order_by_received" = "Receipt time";
-"task_order_received_asc" = "Receipt time · oldest first";
-"task_order_received_desc" = "Receipt time · newest first";
+"task_order_by_received" = "Time sent to phone";
+"task_order_received_asc" = "Time sent to phone · oldest first";
+"task_order_received_desc" = "Time sent to phone · newest first";
 "task_order_by_failed" = "Failure time";
 "task_order_failed_asc" = "Failure time · oldest first";
 "task_order_failed_desc" = "Failure time · newest first";
@@ -448,7 +448,7 @@
 "task_order_hint_waiting" = "Soonest retry first by default, to see what will retry next.";
 "task_order_hint_running" = "Earliest start first by default, to spot long-running transfers.";
 "task_order_hint_failed" = "Latest failure first by default; unrecorded times come last.";
-"task_order_hint_received" = "New captures first by default; switch to receipt time to review completions. Unknown times come last.";
+"task_order_hint_received" = "New captures first by default; switch to time sent to phone to review completions. Unknown times come last.";
 "task_order_hint_paused" = "New captures first by default, to review paused tasks.";
 "task_order_hint_scanned" = "New captures first by default; scan order reflects when items were discovered.";
 "task_order_button" = "Sort";
@@ -471,8 +471,8 @@
 "folder_remove_note" = "Stop checking this folder. Prepared tasks and received files remain. Source files are never deleted.";
 "folder_automatic" = "Automatic Backup";
 "folder_include_existing" = "Back Up Existing Files";
-"folder_readonly_note" = "Original Files Stay Unchanged. Backup Continues When the Window Closes and Stops When the App Quits.";
-"folder_scan_note" = "Includes Photos and Videos in Subfolders.";
+"folder_readonly_note" = "Original files stay unchanged. Backup continues when the window closes and stops when the app quits.";
+"folder_scan_note" = "Includes photos and videos in subfolders.";
 "folder_overlap_error" = "This folder overlaps an existing source or app storage, or read access could not be granted. Choose another folder.";
 "folder_count" = "%llu files · %@";
 "folder_last_check" = "Last checked";
@@ -492,7 +492,7 @@
 "folder_empty" = "No supported photos or videos found yet.";
 "state_excluded" = "Excluded from initial backup";
 "folder_issues" = "%ld files not backed up";
-"folder_unsupported" = "Skipped %llu Other Files";
+"folder_unsupported" = "Skipped %llu other files";
 "folder_issue_details" = "Files not backed up";
 "folder_settling" = "Waiting for copied files to settle…";
 "task_source_filter" = "Source";
@@ -539,7 +539,7 @@
 "folder_list_flat" = "Flat";
 "folder_list_tree" = "Folders";
 
-"folder_sources_empty" = "Add a Folder to Back Up Its Photos and Videos.";
+"folder_sources_empty" = "Add a folder to back up its photos and videos.";
 "folder_backup_help" = "Back up existing files that are not yet backed up. Unchanged backed-up files are skipped.";
 "folder_pause_help" = "Stop adding tasks. Queued files continue transferring.";
 "folder_sort" = "Sort";
@@ -583,9 +583,9 @@
 "mac_storage_cache_description" = "System Library and folders share a staging cache for temporary copies during preparation and transfer. This setting does not affect receiver storage.";
 "mac_storage_reclaim_note" = "Reclaims temporary copies after verified delivery. Originals in System Library, folders and the receiver are kept.";
 "mac_help_library" = "Select photos manually or enable automatic backup for new photos. Scan existing photos separately. System Library identifies Live Photos and accessible burst frames.";
-"mac_help_folders" = "Add local or external-drive folders, including subfolders. Automatic backup handles additions and changes; Back Up Existing Files starts a manual backup. Originals are kept unchanged. Exported Live Photos need matching pairing metadata; folder burst photos are backed up as separate files.";
+"mac_help_folders" = "Add local or external-drive folders, including subfolders. Automatic backup handles additions and changes; Back Up Existing Files starts a manual backup. Originals are kept unchanged. Exported Live Photos are recognized only when the photo and video carry matching Live Photo metadata; folder burst photos are backed up as separate files.";
 "mac_help_permissions" = "System Library needs Photos access and only processes allowed items; iCloud originals may need downloading. Selecting a folder grants read access. External drives must remain connected.";
-"mac_help_receipt" = "Received means the receiver verified the files; it does not confirm cloud backup. BackupDuck keeps originals in System Library and folders.";
+"mac_help_receipt" = "Sent to phone means the phone verified the files. Google Photos backup is reported separately by the Google Photos check. BackupDuck keeps originals in System Library and folders.";
 
 "folder_auto_enabled" = "Automatic backup is on";
 "folder_manual_queued" = "This backup is scheduled";
@@ -629,11 +629,10 @@
 
 "brand_name" = "BackupDuck";
 
-"brand_name" = "BackupDuck";
 
 "settings_cloud" = "Google Photos";
 "cloud_audit_title" = "Google Photos check";
-"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory. The Mac deletes nothing; if you turn on cloud release on the Pixel, it removes its own gallery copies of photos reported as backed up without using Google storage, or already in Google Photos from another device. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
+"cloud_audit_explanation" = "Looks up the photos your Pixel added to its gallery in your Google Photos library, using cookies exported from a signed-in browser, and reports whether each one is backed up and whether it counts against your Google storage. It uses an undocumented Google interface, so treat results as advisory. The Mac deletes nothing; if you turn on “Delete phone copies backed up to Google Photos” on the phone, it removes its own gallery copies of photos reported as backed up without using Google storage, or already in Google Photos from another device. The cookies file grants full access to your Google account: keep it private and delete it when you stop using this.";
 "cloud_audit_readme" = "How to export cookies and what is checked";
 "cloud_audit_cookies" = "Cookies file";
 "cloud_audit_cookies_set" = "Selected";
@@ -644,7 +643,7 @@
 "cloud_audit_auto_pause" = "Pause backup when new uploads count against Google storage";
 "cloud_audit_check_now" = "Check now";
 "cloud_audit_dry_run" = "Dry run";
-"cloud_audit_last_run" = "Last check %1$@: %2$d checked, %3$d free, %4$d already in Google Photos from another device, %5$d counting against storage, %6$d not found, %7$d unknown";
+"cloud_audit_last_run" = "Last check %1$@: %2$d checked, %3$d stored free, %4$d already in Google Photos from another device, %5$d counting against storage, %6$d not found, %7$d unknown";
 "cloud_audit_session_expired" = "Google Photos session expired. Export cookies again.";
 "cloud_quota_warning" = "%d photos in Google Photos count against your Google storage.";
 "cloud_quota_pause" = "Backup paused: %d newly uploaded photos count against your Google storage.";
