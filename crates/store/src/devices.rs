@@ -145,11 +145,12 @@ impl DeviceDirectory {
         {
             return Err(Error::Invalid("sender metadata".into()));
         }
-        self.conn.execute("INSERT INTO peer_details(id,ip,device_type) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET ip=COALESCE(excluded.ip,ip),device_type=COALESCE(excluded.device_type,device_type)",params![id,ip.map(|v|v.to_string()),device_type]).map_err(super::db)?;
-        self.conn
-            .execute("UPDATE peers SET last_seen=unixepoch() WHERE id=?1", [id])
+        // One transaction, one fsync.
+        let tx = self.conn.unchecked_transaction().map_err(super::db)?;
+        tx.execute("INSERT INTO peer_details(id,ip,device_type) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET ip=COALESCE(excluded.ip,ip),device_type=COALESCE(excluded.device_type,device_type)",params![id,ip.map(|v|v.to_string()),device_type]).map_err(super::db)?;
+        tx.execute("UPDATE peers SET last_seen=unixepoch() WHERE id=?1", [id])
             .map_err(super::db)?;
-        Ok(())
+        tx.commit().map_err(super::db)
     }
     pub fn peers(&self) -> Result<Vec<Peer>> {
         let mut query = self.conn.prepare("SELECT p.peer_key,p.id,p.name,p.last_seen,d.ip,d.device_type,COALESCE(d.enabled,1) FROM peers p LEFT JOIN peer_details d ON p.id=d.id ORDER BY p.last_seen DESC,p.rowid DESC LIMIT 256").map_err(super::db)?;

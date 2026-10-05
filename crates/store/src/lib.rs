@@ -15,8 +15,65 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+/// A sender's last recorded address and type are rewritten at most this often
+/// while unchanged. Every request used to write them, which cost an fsync per
+/// 4 MiB chunk on the receiver.
+const SENDER_OBSERVATION_REFRESH: Duration = Duration::from_secs(60);
+/// `last_activity_ms` only feeds the seven-day abandoned-upload expiry, so a
+/// minute of staleness is irrelevant and saves an fsync per chunk.
+const ACTIVITY_REFRESH_MS: i64 = 60_000;
+/// A sender's last written address, device type and write time.
+type SenderObservation = (Option<std::net::IpAddr>, Option<String>, Instant);
+
+/// Durability work for a chunk accepted by [`Receiver::append_deferred`].
+#[derive(Debug)]
+pub struct PendingSync {
+    partial: PathBuf,
+    complete: PathBuf,
+    blobs: PathBuf,
+    sha256: String,
+    /// False for an exact replay: nothing was written.
+    write: bool,
+    /// The chunk ended its resource: verify it and move it into `blobs`.
+    completes: bool,
+}
+impl PendingSync {
+    fn nothing() -> Self {
+        Self {
+            partial: PathBuf::new(),
+            complete: PathBuf::new(),
+            blobs: PathBuf::new(),
+            sha256: String::new(),
+            write: false,
+            completes: false,
+        }
+    }
+    /// Makes the chunk durable and, for a final chunk, verifies the whole
+    /// resource and renames it into place (directory synced) the same way
+    /// recovery in `resource_status` would. Needs no receiver lock.
+    pub fn run(self) -> Result<Self> {
+        if !self.write {
+            return Ok(self);
+        }
+        OpenOptions::new()
+            .write(true)
+            .open(&self.partial)?
+            .sync_all()?;
+        if self.completes {
+            if digest_reader(File::open(&self.partial)?)? != self.sha256 {
+                fs::remove_file(&self.partial)?;
+                return Err(Error::Integrity);
+            }
+            fs::rename(&self.partial, &self.complete)?;
+            #[cfg(unix)]
+            File::open(&self.blobs)?.sync_all()?;
+        }
+        Ok(self)
+    }
+}
 
 fn now_ms() -> Result<i64> {
     let millis = SystemTime::now()
@@ -58,19 +115,50 @@ pub struct Receiver {
     min_free: u64,
     admission_held: bool,
     expired_at_open: ExpiredSummary,
+    /// Opened on first use and kept: opening it per request cost two schema
+    /// checks and pragma round trips under the receiver lock.
+    devices: std::cell::OnceCell<devices::DeviceDirectory>,
+    /// Sender id -> (address, device type, when written).
+    observed_senders: std::cell::RefCell<std::collections::HashMap<String, SenderObservation>>,
     _lock: File,
 }
 impl Receiver {
+    fn devices(&self) -> Result<&devices::DeviceDirectory> {
+        if let Some(devices) = self.devices.get() {
+            return Ok(devices);
+        }
+        let opened = devices::DeviceDirectory::open(&self.root, "en")?;
+        Ok(self.devices.get_or_init(|| opened))
+    }
     pub fn observe_sender(
         &self,
         id: &str,
         ip: Option<std::net::IpAddr>,
         kind: Option<&str>,
     ) -> Result<()> {
-        devices::DeviceDirectory::open(&self.root, "en")?.observe(id, ip, kind)
+        let now = Instant::now();
+        let unchanged =
+            self.observed_senders
+                .borrow()
+                .get(id)
+                .is_some_and(|(seen_ip, seen_kind, at)| {
+                    *seen_ip == ip
+                        && seen_kind.as_deref() == kind
+                        && now.duration_since(*at) < SENDER_OBSERVATION_REFRESH
+                });
+        if unchanged {
+            return Ok(());
+        }
+        self.devices()?.observe(id, ip, kind)?;
+        self.observed_senders
+            .borrow_mut()
+            .insert(id.to_owned(), (ip, kind.map(str::to_owned), now));
+        Ok(())
     }
     pub fn check_sender(&self, id: &str) -> Result<()> {
-        if !devices::DeviceDirectory::open(&self.root, "en")?.enabled(id)? {
+        // Read through the kept connection on every request: a sender paused
+        // from the receiver UI must stop at its next request.
+        if !self.devices()?.enabled(id)? {
             return Err(Error::Conflict("sender reception paused".into()));
         }
         Ok(())
@@ -181,6 +269,8 @@ impl Receiver {
             min_free: 0,
             admission_held: false,
             expired_at_open: ExpiredSummary::default(),
+            devices: std::cell::OnceCell::new(),
+            observed_senders: Default::default(),
             _lock: lock,
         };
         // Also reclaims blobs left unreferenced by an interrupted release.
@@ -220,10 +310,11 @@ impl Receiver {
         Ok(ExpiredSummary { assets, bytes })
     }
     fn touch(&self, id: &str) -> Result<()> {
+        // A no-op UPDATE dirties no page, so recent activity costs no fsync.
         self.conn
             .execute(
-                "UPDATE assets SET last_activity_ms=?2 WHERE id=?1",
-                params![id, now_ms()?],
+                "UPDATE assets SET last_activity_ms=?2 WHERE id=?1 AND (last_activity_ms IS NULL OR last_activity_ms<=?2-?3)",
+                params![id, now_ms()?, ACTIVITY_REFRESH_MS],
             )
             .map_err(db)?;
         Ok(())
@@ -635,11 +726,45 @@ impl Receiver {
         body: &[u8],
         chunk_hash: &str,
     ) -> Result<AssetStatus> {
+        let body_digest = digest(body);
+        self.append_with_digest(id, hash, offset, body, chunk_hash, &body_digest)
+    }
+    /// `append` with `body_digest = digest(body)` computed by the caller, so a
+    /// host can hash a chunk before taking the lock that guards the receiver.
+    pub fn append_with_digest(
+        &mut self,
+        id: &str,
+        hash: &str,
+        offset: u64,
+        body: &[u8],
+        chunk_hash: &str,
+        body_digest: &str,
+    ) -> Result<AssetStatus> {
+        let pending = self.append_deferred(id, hash, offset, body, chunk_hash, body_digest)?;
+        let pending = pending.run()?;
+        self.finish_append(id, &pending)
+    }
+    /// The locked half of an append: validates the chunk and writes it to the
+    /// page cache. The returned [`PendingSync`] must be `run` (no lock needed)
+    /// and then passed to [`Receiver::finish_append`] before the chunk is
+    /// acknowledged. On ext4 an fsync waits for the journal commit, which also
+    /// flushes other apps' dirty data; measured on a Pixel 1 during a gallery
+    /// import, single 4 MiB fsyncs took 1-17 s, and holding the receiver lock
+    /// across them stalled every other request.
+    pub fn append_deferred(
+        &mut self,
+        id: &str,
+        hash: &str,
+        offset: u64,
+        body: &[u8],
+        chunk_hash: &str,
+        body_digest: &str,
+    ) -> Result<PendingSync> {
         self.check_admission()?;
         if body.is_empty() || body.len() > MAX_CHUNK_BYTES {
             return Err(Error::Invalid("chunk size".into()));
         }
-        if digest(body) != chunk_hash {
+        if body_digest != chunk_hash {
             return Err(Error::Integrity);
         }
         let asset = self.asset(id)?;
@@ -669,7 +794,7 @@ impl Receiver {
                 return Err(Error::Conflict("replayed chunk differs".into()));
             }
             self.touch(id)?;
-            return self.status(id);
+            return Ok(PendingSync::nothing());
         }
         if offset != current.offset || current.complete {
             return Err(Error::Conflict("offset mismatch".into()));
@@ -679,12 +804,38 @@ impl Receiver {
             .create(true)
             .truncate(false)
             .write(true)
-            .open(partial)?;
+            .open(&partial)?;
         file.seek(SeekFrom::Start(offset))?;
         file.write_all(body)?;
-        file.sync_all()?;
         drop(file);
         self.touch(id)?;
+        Ok(PendingSync {
+            partial,
+            complete,
+            blobs: self.root.join("blobs"),
+            sha256: r.sha256.clone(),
+            write: true,
+            completes: end == r.size,
+        })
+    }
+    /// Records a resource completed by `pending` as verified, without hashing
+    /// it again under the lock, then reports the asset.
+    pub fn finish_append(&mut self, id: &str, pending: &PendingSync) -> Result<AssetStatus> {
+        if pending.write && pending.completes {
+            let size = self
+                .asset(id)?
+                .resources
+                .iter()
+                .find(|r| r.sha256 == pending.sha256)
+                .map(|r| r.size)
+                .ok_or(Error::NotFound)?;
+            if pending.complete.metadata()?.len() != size {
+                return Err(Error::Integrity);
+            }
+            self.conn
+                .execute("UPDATE blobs SET ready=1 WHERE hash=?1", [&pending.sha256])
+                .map_err(db)?;
+        }
         self.status(id)
     }
     pub fn commit(&mut self, id: &str) -> Result<AssetStatus> {

@@ -122,3 +122,45 @@ async fn sender_pause_preserves_receipts_and_filters_before_pagination() {
     drop(catalog);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn unchanged_sender_observations_are_not_rewritten_but_changes_are() {
+    let root = std::env::temp_dir().join(format!("backupduck-observe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let receiver = Receiver::open(&root, 1 << 20).unwrap();
+    let id = digest(b"mac");
+    let directory = DeviceDirectory::open(&root, "en").unwrap();
+    directory
+        .remember(
+            &id,
+            &DeviceProfile {
+                id: id.clone(),
+                name: "Mac".into(),
+            },
+        )
+        .unwrap();
+    let first: std::net::IpAddr = "192.168.1.6".parse().unwrap();
+    let ip = |d: &DeviceDirectory| d.peers().unwrap()[0].ip.clone();
+    receiver
+        .observe_sender(&id, Some(first), Some("Mac"))
+        .unwrap();
+    assert_eq!(ip(&directory).as_deref(), Some("192.168.1.6"));
+    // Overwrite behind the receiver's back: a repeat observation within the
+    // refresh window must not write again, so the marker survives.
+    directory
+        .observe(&id, "10.0.0.9".parse().ok(), None)
+        .unwrap();
+    receiver
+        .observe_sender(&id, Some(first), Some("Mac"))
+        .unwrap();
+    assert_eq!(ip(&directory).as_deref(), Some("10.0.0.9"));
+    // A different address is written at once.
+    let moved: std::net::IpAddr = "192.168.1.7".parse().unwrap();
+    receiver
+        .observe_sender(&id, Some(moved), Some("Mac"))
+        .unwrap();
+    assert_eq!(ip(&directory).as_deref(), Some("192.168.1.7"));
+    drop(receiver);
+    std::fs::remove_dir_all(root).unwrap();
+}

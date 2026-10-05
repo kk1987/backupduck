@@ -987,3 +987,77 @@ fn relay_scope_snapshots_received_ids_survives_restart_and_estimates_shared_blob
         bytes[0].len() as u64
     );
 }
+
+fn single_photo(content: &[u8], declared: &[u8]) -> Asset {
+    Asset {
+        version: PROTOCOL_VERSION,
+        source_id: "deferred".into(),
+        revision: "1".into(),
+        kind: AssetKind::Photo,
+        metadata: BTreeMap::new(),
+        resources: vec![Resource {
+            role: ResourceRole::Photo,
+            filename: "photo.jpg".into(),
+            media_type: "image/jpeg".into(),
+            size: content.len() as u64,
+            sha256: digest(declared),
+        }],
+    }
+}
+
+#[test]
+fn deferred_append_syncs_and_finalizes_outside_the_lock() {
+    let t = Scratch::new();
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    let bytes = b"0123456789abcdef".to_vec();
+    let a = single_photo(&bytes, &bytes);
+    let id = receiver.register(a.clone()).unwrap().asset_id;
+    let hash = a.resources[0].sha256.clone();
+    let (head, tail) = bytes.split_at(6);
+    // While a chunk's sync is pending the receiver keeps serving other calls.
+    let pending = receiver
+        .append_deferred(&id, &hash, 0, head, &digest(head), &digest(head))
+        .unwrap();
+    assert_eq!(receiver.status(&id).unwrap().resources[0].offset, 6);
+    let pending = pending.run().unwrap();
+    let status = receiver.finish_append(&id, &pending).unwrap();
+    assert!(!status.resources[0].complete);
+    let pending = receiver
+        .append_deferred(&id, &hash, 6, tail, &digest(tail), &digest(tail))
+        .unwrap();
+    let pending = pending.run().unwrap();
+    let status = receiver.finish_append(&id, &pending).unwrap();
+    assert!(status.resources[0].complete);
+    assert_eq!(fs::read(t.0.join("blobs").join(&hash)).unwrap(), bytes);
+    assert!(!t.0.join("partial").join(&hash).exists());
+    assert_eq!(
+        receiver.commit(&id).unwrap().receipt,
+        ReceiptState::Received
+    );
+    // An exact replay writes nothing and still reports the asset.
+    let replay = receiver
+        .append_deferred(&id, &hash, 0, head, &digest(head), &digest(head))
+        .unwrap()
+        .run()
+        .unwrap();
+    assert!(receiver.finish_append(&id, &replay).unwrap().resources[0].complete);
+}
+
+#[test]
+fn deferred_final_chunk_with_wrong_content_is_discarded() {
+    let t = Scratch::new();
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    let bytes = b"0123456789abcdef".to_vec();
+    // Same length, but the manifest declares other content.
+    let a = single_photo(&bytes, b"fedcba9876543210");
+    let id = receiver.register(a.clone()).unwrap().asset_id;
+    let hash = a.resources[0].sha256.clone();
+    let pending = receiver
+        .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
+        .unwrap();
+    assert!(matches!(pending.run(), Err(Error::Integrity)));
+    assert!(!t.0.join("partial").join(&hash).exists());
+    assert!(!t.0.join("blobs").join(&hash).exists());
+    let status = receiver.status(&id).unwrap();
+    assert_eq!(status.resources[0].offset, 0);
+}

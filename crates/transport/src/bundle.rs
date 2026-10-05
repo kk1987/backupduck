@@ -125,7 +125,8 @@ pub(super) async fn receive(
             let count = bytes.len() as u64;
             let resource_hash = resource.sha256.clone();
             let asset_id = id.clone();
-            let _ = with_receiver(state.clone(), move |receiver| {
+            let finish_id = id.clone();
+            let Json(pending) = with_receiver(state.clone(), move |receiver| {
                 let snapshot = receiver.status(&asset_id)?;
                 let existing = snapshot
                     .resources
@@ -148,17 +149,29 @@ pub(super) async fn receive(
                     )?;
                 }
                 if prefix < bytes.len() {
-                    receiver.append(
-                        &asset_id,
-                        &resource_hash,
-                        offset + prefix as u64,
-                        &bytes[prefix..],
-                        &digest(&bytes[prefix..]),
-                    )?;
+                    let rest = &bytes[prefix..];
+                    let rest_digest = digest(rest);
+                    return receiver
+                        .append_deferred(
+                            &asset_id,
+                            &resource_hash,
+                            offset + prefix as u64,
+                            rest,
+                            &rest_digest,
+                            &rest_digest,
+                        )
+                        .map(Some);
                 }
-                Ok(())
+                Ok(None)
             })
             .await?;
+            if let Some(pending) = pending {
+                let pending = super::sync_unlocked(pending).await?;
+                let _ = with_receiver(state.clone(), move |receiver| {
+                    receiver.finish_append(&finish_id, &pending)
+                })
+                .await?;
+            }
             offset += count;
         }
     }

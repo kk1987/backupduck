@@ -155,19 +155,25 @@ async fn authorize(
             .extensions()
             .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
             .map(|c| c.0.ip());
-        let result = state
-            .receiver
-            .lock()
-            .map_err(|_| Error::Storage("receiver lock".into()))
-            .and_then(|r| {
-                r.observe_sender(&id, ip, kind.as_deref())?;
-                if request.uri().path() != "/v2/device-profile"
-                    && request.uri().path() != "/v2/capabilities"
-                {
-                    r.check_sender(&id)?;
-                }
-                Ok(())
-            });
+        let check = request.uri().path() != "/v2/device-profile"
+            && request.uri().path() != "/v2/capabilities";
+        let receiver = state.receiver.clone();
+        let sender = id.clone();
+        // The receiver lock can be held for a chunk's fsync. Waiting for it on
+        // an async worker stalled every connection on that worker, including
+        // HTTP/2 flow-control updates and the accept loop.
+        let result = tokio::task::spawn_blocking(move || {
+            let r = receiver
+                .lock()
+                .map_err(|_| Error::Storage("receiver lock".into()))?;
+            r.observe_sender(&sender, ip, kind.as_deref())?;
+            if check {
+                r.check_sender(&sender)?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap_or_else(|_| Err(Error::Storage("worker unavailable".into())));
         if let Err(error) = result {
             return ApiError(error).into_response();
         }
@@ -263,7 +269,28 @@ async fn upload(
     Query(q): Query<ChunkQuery>,
     body: Bytes,
 ) -> std::result::Result<Json<AssetStatus>, ApiError> {
-    with_receiver(s, move |r| r.append(&id, &hash, q.offset, &body, &q.sha256)).await
+    // Hash before taking the receiver lock; other requests need it meanwhile.
+    let hashed = body.clone();
+    let body_digest = tokio::task::spawn_blocking(move || digest(&hashed))
+        .await
+        .map_err(|_| ApiError(Error::Storage("worker unavailable".into())))?;
+    let Json(pending) = with_receiver(s.clone(), {
+        let id = id.clone();
+        move |r| r.append_deferred(&id, &hash, q.offset, &body, &q.sha256, &body_digest)
+    })
+    .await?;
+    let pending = sync_unlocked(pending).await?;
+    with_receiver(s, move |r| r.finish_append(&id, &pending)).await
+}
+/// Runs a chunk's fsync (and, for a final chunk, verification and rename)
+/// without the receiver lock; see `Receiver::append_deferred`.
+pub(crate) async fn sync_unlocked(
+    pending: backupduck_store::PendingSync,
+) -> std::result::Result<backupduck_store::PendingSync, ApiError> {
+    tokio::task::spawn_blocking(move || pending.run())
+        .await
+        .map_err(|_| ApiError(Error::Storage("worker unavailable".into())))?
+        .map_err(ApiError)
 }
 fn unix_ms() -> Result<i64> {
     let elapsed = std::time::SystemTime::now()
