@@ -257,6 +257,28 @@ impl Receiver {
         self.conn.execute("UPDATE assets SET originals_released=1,release_reason='gallery' WHERE id=?1 AND originals_released=0",[id]).map_err(db)?;
         self.reclaim_unreferenced()
     }
+    /// Releases the originals of up to `limit` published assets whose
+    /// verified gallery copy is still in place, for hosts that keep only the
+    /// gallery copy until cloud verification. The copy was hash-checked when
+    /// it was recorded. Returns (assets, bytes freed).
+    pub fn release_published_originals(&mut self, limit: u32) -> Result<(u64, u64)> {
+        let marked = self
+            .conn
+            .execute(
+                "UPDATE assets SET originals_released=1,release_reason='gallery' WHERE id IN (\
+                 SELECT a.id FROM assets a JOIN gallery_copies g ON g.asset_id=a.id \
+                 WHERE a.received=1 AND a.processing='complete' AND a.originals_released=0 \
+                 AND a.gallery_released=0 ORDER BY a.rowid LIMIT ?1)",
+                [limit],
+            )
+            .map_err(db)? as u64;
+        let freed = if marked > 0 {
+            self.reclaim_unreferenced()?
+        } else {
+            0
+        };
+        Ok((marked, freed))
+    }
     pub fn gallery_candidates(&self, after: &str) -> Result<Vec<GalleryCandidate>> {
         self.gallery_candidates_scoped(after, false)
     }

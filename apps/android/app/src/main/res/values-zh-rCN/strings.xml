@@ -357,6 +357,8 @@
 <string name="cloud_release_enable">备份后删除</string>
 <string name="cloud_release_enabled">接收运行时会删除已确认的副本。</string>
 <string name="cloud_release_disabled">已关闭删除，剩余副本会保留。</string>
+<string name="early_release_toggle">相册副本保存后立即释放原件</string>
+<string name="early_release_note">需要先开启上面的删除。相册副本校验保存后立即删除收到的原件；相册副本仍要等 Google 相册检查通过后才删除。占用空间约减半。如果相册副本在备份前丢失，需要在 Mac 上重新备份该项。</string>
 <string name="cloud_release_counts">Google 相册已确认 %1$d 项 · 已从手机释放 %2$d 项（%3$s）</string>
 <string name="relay_superseded">已开启云端释放：原件会保留到 Google 相册确认已有这张照片。</string>
 </resources>

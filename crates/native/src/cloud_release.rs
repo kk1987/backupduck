@@ -7,6 +7,8 @@ use backupduck_store::retention::GalleryCopy;
 
 /// Bounded per sweep, like the relay sweep.
 const BATCH: u32 = 4;
+/// Published assets whose originals one sweep may release early.
+const BACKLOG_BATCH: u32 = 64;
 
 fn now_ms() -> i64 {
     SystemTime::now()
@@ -36,6 +38,13 @@ pub(super) fn candidates(root: Option<&Path>, after: &str) -> Result<Value> {
         let policy = policy(&maintenance.settings);
         if !policy.enabled {
             return Ok(json!([]));
+        }
+        if maintenance.settings.release_originals_on_publication {
+            // Catch up assets published before the setting was turned on.
+            let (count, bytes) = store.release_published_originals(BACKLOG_BATCH)?;
+            if count > 0 {
+                maintenance.log("publication_originals_reclaimed", None, Some(bytes))?;
+            }
         }
         Ok(serde_json::to_value(store.cloud_release_candidates(
             after,

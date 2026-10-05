@@ -73,6 +73,13 @@ pub struct Settings {
     /// Minimum age of a `verified` verdict before acting on it.
     #[serde(default = "default_cloud_release_grace_ms")]
     pub cloud_release_grace_ms: u64,
+    /// With `cloud_release`: delete the received originals as soon as their
+    /// verified gallery copy exists, instead of when the cloud verifies it.
+    /// The gallery copy still waits for cloud verification. Halves storage
+    /// on the receiver; a copy lost before upload must be re-sent from the
+    /// sender by hand.
+    #[serde(default)]
+    pub release_originals_on_publication: bool,
 }
 pub const MAX_CLOUD_RELEASE_GRACE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 fn default_cloud_release_grace_ms() -> u64 {
@@ -90,6 +97,7 @@ impl Default for Settings {
             log_limit: 5000,
             cloud_release: false,
             cloud_release_grace_ms: default_cloud_release_grace_ms(),
+            release_originals_on_publication: false,
         }
     }
 }

@@ -1907,14 +1907,18 @@ fn dispatch(command: Command) -> Result<Value> {
             store.record_gallery_copy(&id, &copy)?;
             maintenance.log("publication_complete", None, None)?;
             let settings = &maintenance.settings;
-            let release = !settings.cloud_release
-                && (manual || settings.receiver_relay && store.relay_eligible(&id)?);
+            let early = settings.cloud_release && settings.release_originals_on_publication;
+            let release = early
+                || !settings.cloud_release
+                    && (manual || settings.receiver_relay && store.relay_eligible(&id)?);
             let bytes = if release {
                 store.release_gallery_copy(&id, &copy, true)?
             } else {
                 0
             };
-            if release {
+            if early {
+                maintenance.log("publication_originals_reclaimed", None, Some(bytes))?;
+            } else if release {
                 maintenance.log("relay_originals_reclaimed", None, Some(bytes))?;
             }
             Ok(json!({"bytes":bytes}))

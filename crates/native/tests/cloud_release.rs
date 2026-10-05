@@ -202,3 +202,66 @@ fn cloud_release_supersedes_relay_and_releases_only_verified_copies() {
     let relayed = ok(json!({"op":"gallery_publication","root":root,"id":second,"copy":copy(2)}));
     assert_eq!(relayed["bytes"], "second".len());
 }
+
+#[test]
+fn early_release_frees_originals_at_publication_and_keeps_the_copy_for_the_cloud() {
+    let t = Temp::new();
+    let root = t.0.join("receiver");
+    let base = json!({"cache_budget_bytes":1u64<<30,"receiver_budget_bytes":1u64<<30,"min_free_bytes":0,
+        "auto_reclaim":true,"receiver_relay":false,"log_days":14,"log_limit":5000});
+    let settings =
+        ok(json!({"op":"receiver_settings","root":root,"settings":base}))["settings"].clone();
+    assert_eq!(settings["release_originals_on_publication"], false);
+    let save = |cloud: bool, early: bool| {
+        let mut s = settings.clone();
+        s["cloud_release"] = json!(cloud);
+        s["cloud_release_grace_ms"] = json!(0);
+        s["release_originals_on_publication"] = json!(early);
+        ok(json!({"op":"receiver_settings","root":root,"settings":s}));
+    };
+    let blob = |name: &str| root.join("store/blobs").join(digest(name.as_bytes()));
+    let older = received(&root, "older");
+    let newer = received(&root, "newer");
+    let gated = received(&root, "gated");
+
+    // Early release alone does nothing without cloud release.
+    save(false, true);
+    let published = ok(json!({"op":"gallery_publication","root":root,"id":gated,"copy":copy(3)}));
+    assert_eq!(published["bytes"], 0);
+    assert!(blob("gated").exists());
+
+    save(true, false);
+    ok(json!({"op":"gallery_publication","root":root,"id":older,"copy":copy(1)}));
+    assert!(blob("older").exists());
+
+    save(true, true);
+    let published = ok(json!({"op":"gallery_publication","root":root,"id":newer,"copy":copy(2)}));
+    assert_eq!(published["bytes"], "newer".len());
+    assert!(!blob("newer").exists());
+    // The next sweep catches up assets published before the switch.
+    assert_eq!(
+        ok(json!({"op":"cloud_release_candidates","root":root})),
+        json!([])
+    );
+    assert!(!blob("older").exists());
+    assert!(!blob("gated").exists());
+
+    // The gallery copy still waits for the cloud and is released as before.
+    let mut store = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    store
+        .observe_cloud(
+            &[CloudObservation {
+                asset_id: newer.clone(),
+                sha1: "2".repeat(40),
+                result: CloudResult::Free,
+                media_key: None,
+                device_model: None,
+            }],
+            now_ms() - 1,
+        )
+        .unwrap();
+    drop(store);
+    let candidates = ok(json!({"op":"cloud_release_candidates","root":root}));
+    assert_eq!(candidates.as_array().unwrap().len(), 1, "{candidates}");
+    assert_eq!(candidates[0]["id"], newer);
+}
