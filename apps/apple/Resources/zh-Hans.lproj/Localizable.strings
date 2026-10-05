@@ -11,7 +11,7 @@
 "transfer_tasks" = "传输任务";
 "tasks_empty" = "选择照片，开始第一次备份。";
 "retry_task" = "重试";
-"receipt_explanation" = "已接收表示接收设备已保存并校验全部原始文件。";
+"receipt_explanation" = "“已传到手机”表示手机已保存并校验全部原始文件。";
 "pair_success" = "已验证接收设备并保存配对。";
 "photos_permission_needed" = "请在系统设置中允许访问照片，以导出原始文件。";
 "camera_permission_needed" = "请在系统设置中允许相机权限，以扫描配对码。";
@@ -68,28 +68,28 @@
 "backup_selected_confirm_title" = "备份所选项目？";
 "backup_selected_confirm_action" = "开始备份";
 "backup_selected_confirm_note" = "当前接收设备已接收的相同照片会跳过；更换接收设备后会按新设备的记录备份。";
-"backup_selected_rebackup_received" = "已备份项目也重新备份";
-"backup_selected_rebackup_note" = "会在手机相册中生成新副本。如果 Pixel 仍保留相同且已校验的原件，会直接复用，不重复传输这些字节。";
+"backup_selected_rebackup_received" = "已传到手机的项目也重新备份";
+"backup_selected_rebackup_note" = "会在手机相册中生成新副本。如果手机仍保留相同且已校验的原件，会直接复用，不重复传输这些字节。";
 "photos_access_title" = "你的照片图库";
 "photos_access_description" = "允许访问图库后，即可浏览缩略图并选择需要备份的原件。";
 "photos_allow" = "允许访问照片";
 "photos_open_settings" = "打开设置";
-"photos_access_denied" = "照片访问权限已关闭。请打开系统设置，允许 备份鸭 访问需要备份的照片。";
+"photos_access_denied" = "照片访问权限已关闭。请打开系统设置，允许备份鸭访问需要备份的照片。";
 "photos_access_restricted" = "此设备限制了照片访问。请检查屏幕使用时间或设备管理限制。";
 "library_empty" = "没有符合条件的照片";
 "thumbnail_size" = "缩略图大小";
 "backup_paused" = "备份已暂停";
-"backup_enabled" = "备份运行中";
+"backup_enabled" = "备份已就绪";
 "receiver_heading" = "你的备份目的地";
 "receiver_direct_description" = "原件通过局域网直接传输到已配对的接收设备。";
-"mac_running_note" = "持续备份时，请保持 备份鸭 运行，并让 Mac 保持唤醒。";
+"mac_running_note" = "持续备份时，请保持备份鸭运行，并让 Mac 保持唤醒。";
 "mac_pair_description" = "导入接收设备的二维码图片或配对文件，也可以粘贴配对码。配对信息会私密保存。";
 "pairing_code_placeholder" = "粘贴配对码";
 "pairing_import" = "导入二维码或文件…";
 "pairing_connect" = "连接";
 "cancel" = "取消";
 "state_not_queued" = "尚未加入备份";
-"transfer_summary" = "传输任务共 %2$d 项 · 已接收 %1$d 项";
+"transfer_summary" = "传输任务共 %2$d 项 · 已传到手机 %1$d 项";
 "publication_summary" = "已加入手机相册 %1$d / 已传到手机 %2$d";
 "task_filter" = "状态";
 "tasks_empty_filtered" = "没有符合条件的任务";
@@ -97,7 +97,7 @@
 
 "pair_receiver_desktop" = "配对接收设备";
 
-"desktop_pair_instructions" = "在接收设备上打开 备份鸭，点击“扫描电脑配对码”。请让两台设备连接同一局域网。";
+"desktop_pair_instructions" = "在接收设备上打开备份鸭，点击“扫描 Mac 配对码”。请让两台设备连接同一局域网。";
 "desktop_pair_qr" = "电脑配对二维码";
 "desktop_pair_expiry" = "5 分钟有效 · 一次性加密配对";
 "desktop_pair_regenerate" = "重新生成二维码";
@@ -136,12 +136,12 @@
 "event_transfer_deduplicated" = "内容相同，已备份过";
 "event_backup_paused" = "备份已暂停";
 "event_backup_resumed" = "备份已恢复";
-"event_publication_complete" = "已发布到设备图库";
-"event_publication_failed" = "图库处理失败，原件已保留";
-"event_processing_low_space" = "图库处理正在等待可用空间";
-"event_processing_resumed" = "图库处理已恢复";
+"event_publication_complete" = "已加入手机相册";
+"event_publication_failed" = "手机相册处理失败，原件已保留";
+"event_processing_low_space" = "手机相册处理正在等待可用空间";
+"event_processing_resumed" = "手机相册处理已恢复";
 "event_network" = "网络不可用，稍后自动重试。";
-"event_capacity" = "接收端空间不足，稍后自动重试。";
+"event_capacity" = "接收端原件存储预算不足，稍后自动重试。";
 "event_busy" = "接收端忙碌，稍后自动重试。";
 "event_authentication" = "请重新配对接收设备以恢复访问。";
 "event_integrity" = "文件校验失败，原件仍然保留。";
@@ -198,9 +198,9 @@
 
 "nav_backup" = "备份";
 "nav_settings" = "设置";
-"backup_pair_first" = "先在“接收端”中配对设备，再从图库选择照片。";
+"backup_pair_first" = "先在“接收设备”中配对，再从图库选择照片。";
 "backup_all_tasks" = "全部传输任务";
-"receiver_pair_instructions" = "在接收设备上打开 备份鸭，扫描它的配对码。";
+"receiver_pair_instructions" = "在接收设备上打开备份鸭，扫描它的配对码。";
 "receiver_local_network" = "请将两台设备连接到同一局域网，并保持接收端运行。";
 "receiver_address" = "网络地址";
 "receiver_connection_details" = "连接详情";
@@ -210,7 +210,7 @@
 "settings_version" = "版本";
 "settings_about_description" = "将原始照片、视频和实况备份到自己的接收端。";
 "tasks_load_failed" = "无法加载任务，请重试。";
-"transfer_summary_progress" = "已接收项目";
+"transfer_summary_progress" = "已传到手机的项目";
 
 // Structured background diagnostics
 "event_dispatch_waiting" = "等待派发下一请求";
@@ -275,12 +275,12 @@
 "history_backup_paused" = "请恢复备份，以继续图库扫描和传输。";
 "history_explanation" = "本轮只备份开始时图库中已有、且允许访问的照片、视频、实况和连拍。之后加入的项目需开启“自动备份新增照片”，或再启动一轮扫描。暂停只停止发现，已排队任务仍会传输；扫描结束不代表备份完成。";
 "rebackup_edited_toggle" = "重新备份编辑过的照片";
-"rebackup_edited_help" = "默认关闭：照片备份后，之后对它的编辑不会再次上传，重新检查已有照片时也不会。BackupDuck 备份的是原始文件，开启后会重新检查编辑过的照片，只有原始文件本身变了才会作为新副本上传。如需强制再备份一份，请选中照片并使用“已备份项目也重新备份”。";
+"rebackup_edited_help" = "默认关闭：照片备份后，之后对它的编辑不会再次上传，重新检查已有照片时也不会。备份鸭备份的是原始文件，开启后会重新检查编辑过的照片，只有原始文件本身变了才会作为新副本上传。如需强制再备份一份，请选中照片并使用“已传到手机的项目也重新备份”。";
 "include_hidden_photos" = "包含隐藏的照片";
 "include_hidden_photos_explanation" = "默认开启，“已隐藏”相簿会随图库一起备份。关闭后，隐藏的照片和视频不会备份。正在进行的扫描仍按开始时找到的照片执行；更改此项后，请使用“重新检查已有照片”。";
-"hidden_photos_visible_count" = "备份鸭 可读取的隐藏照片：%d";
-"hidden_photos_locked_warning_mac" = "如果“照片”使用触控 ID 或密码保护“已隐藏”相簿，macOS 会对所有 App 隐藏这些照片。迁移期间请在“照片 > 设置 > 通用”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开 备份鸭 可立即显示。";
-"hidden_photos_locked_warning_ios" = "如果“照片”使用面容 ID、触控 ID 或密码保护“已隐藏”相簿，iOS 会对所有 App 隐藏这些照片。迁移期间请在“设置 > 照片”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开 备份鸭 可立即显示。";
+"hidden_photos_visible_count" = "备份鸭可读取的隐藏照片：%d";
+"hidden_photos_locked_warning_mac" = "如果“照片”使用触控 ID 或密码保护“已隐藏”相簿，macOS 会对所有 App 隐藏这些照片。迁移期间请在“照片 > 设置 > 通用”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开备份鸭可立即显示。";
+"hidden_photos_locked_warning_ios" = "如果“照片”使用面容 ID、触控 ID 或密码保护“已隐藏”相簿，iOS 会对所有 App 隐藏这些照片。迁移期间请在“设置 > 照片”中关闭此保护。更改后数量可能需要一段时间才会更新；重新打开备份鸭可立即显示。";
 "error_history_snapshot_unavailable" = "本轮保存的照片清单不可用。可重新开始扫描当前图库；已排队的传输不受影响。";
 "history_operation_failed" = "图库扫描暂时无法继续，进度已保留，请重试。";
 "event_history_scan_started" = "已开始扫描已有图库";
@@ -288,32 +288,32 @@
 "event_history_scan_resumed" = "已恢复扫描已有图库";
 "event_history_scan_finished" = "已有图库扫描结束，传输任务可能仍未完成";
 "library_filter_burst" = "连拍";
-"help_title" = "使用与恢复";
+"help_title" = "使用备份鸭";
 "help_start_title" = "连接设备";
-"help_start_body" = "在另一台设备上开启接收，并让两台设备处于能互相访问的网络中。在“接收端”页面配对，核对双方显示的设备名称。名称方便辨认设备，配对才会建立信任关系。";
+"help_start_body" = "在另一台设备上开启接收，并让两台设备处于能互相访问的网络中。在“接收设备”页面配对，核对双方显示的设备名称。名称方便辨认设备，配对才会建立信任关系。";
 "help_scope_title" = "选择备份范围";
-"help_scope_body" = "可在图库中选择项目手动备份。备份设置中的“新增照片备份”和“历史导入”相互独立：前者处理启用后新增的照片，后者导入已有且允许访问的照片和视频。支持的实况会包含照片与视频两部分；可访问的连拍帧会一起加入备份。";
-"help_receipt_title" = "“已接收”代表什么";
-"help_receipt_body" = "任务已获得配对接收端的校验回执，不代表其他服务已经完成云端备份，也不代表接收端的格式转换已经完成。请先核对接收端的存储与保留规则，再决定如何保管来源原件。备份鸭 不会删除 Apple 照片图库中的项目。";
+"help_scope_body" = "可在图库中选择项目手动备份。备份设置中的“自动备份新增照片”和“备份已有照片”相互独立：前者处理之后新增的照片，后者包含已有且允许访问的照片和视频。支持的实况会包含照片与视频两部分；可访问的连拍帧会一起加入备份。";
+"help_receipt_title" = "“已传到手机”代表什么";
+"help_receipt_body" = "标记为“已传到手机”的任务已获得配对手机的校验回执，但不代表已加入手机相册或已备份到 Google 相册；后者由“Google 相册核对”单独显示。请先核对接收端的存储与保留规则，再决定如何保管来源原件。备份鸭不会删除 Apple 照片图库中的项目。";
 "help_recover_title" = "备份停止时";
-"help_recover_body" = "先确认备份未暂停、接收端正在运行、双方网络可以互通。重新打开 备份鸭 可继续调度任务。在“备份”中查看需要处理的任务，阅读错误原因后重试。恢复连接时保留现有配对与任务记录，不要通过清除应用数据来排查问题。";
+"help_recover_body" = "先确认备份未暂停、接收端正在运行、双方网络可以互通。重新打开备份鸭可继续调度任务。在“备份”中查看需要处理的任务，阅读错误原因后重试。恢复连接时保留现有配对与任务记录，不要通过清除应用数据来排查问题。";
 "help_permission_title" = "找不到照片时";
-"help_permission_body" = "备份鸭 只能读取你允许访问的照片。请在系统设置中检查照片权限；若为部分访问，也要检查允许的项目。仅存于 iCloud 的原件需要联网下载，并占用本地中转空间。授予权限本身不会启动历史导入。";
+"help_permission_body" = "备份鸭只能读取你允许访问的照片。请在系统设置中检查照片权限；若为部分访问，也要检查允许的项目。仅存于 iCloud 的原件需要联网下载，并占用本地中转空间。授予权限本身不会开始备份已有照片。";
 "help_space_title" = "空间不足时";
 "help_space_body" = "本地缓存保存准备好、正在等待传输的文件。只有发送设备空间足够时才提高缓存预算。接收端空间不足时，先在接收设备上管理空间，再重试任务。删除中转文件或接收副本不代表完成备份；请使用应用内的空间管理功能，不要手动删除内部文件。";
 "help_support_title" = "提供排查信息";
 "help_support_body" = "在“设置 → 诊断 → 运行记录”中查看并导出事件。反馈时附上问题发生时间、任务显示的状态，以及应用当时处于前台还是后台。分享前请检查导出的报告。";
-"photos_access_denied_mac" = "照片访问权限已关闭。请在“系统设置 → 隐私与安全性 → 照片”中，允许 备份鸭 访问图库。";
+"photos_access_denied_mac" = "照片访问权限已关闭。请在“系统设置 → 隐私与安全性 → 照片”中，允许备份鸭访问图库。";
 "photos_settings_unavailable" = "未能打开设置。请手动打开系统设置，检查照片访问权限。";
 "library_loading" = "正在载入照片图库…";
 "library_empty_all" = "暂无可访问的照片";
-"library_empty_description" = "系统照片图库中可访问的照片和视频会显示在这里。如果仅授予了部分访问权限，请检查已向 备份鸭 开放的照片。";
+"library_empty_description" = "系统照片图库中可访问的照片和视频会显示在这里。如果仅授予了部分访问权限，请检查已向备份鸭开放的照片。";
 "library_empty_filter_description" = "可以切换照片类型，或显示所有可访问的照片和视频。";
 "library_show_all" = "显示所有照片";
 "photos_waiting_permission" = "等待你在系统授权弹窗中完成选择…";
 "library_burst_count" = "连拍 · %d 张";
 "library_burst_selection" = "选择连拍组会备份可访问的全部帧。";
-"state_partial" = "部分已接收";
+"state_partial" = "部分已传到手机";
 
 "event_receiver_address_updated" = "接收端地址已更新，配对与传输记录已保留";
 
@@ -326,7 +326,7 @@
 
 "state_scanned" = "已扫描";
 "history_state_not_started" = "尚未开始图库扫描";
-"history_list_explanation" = "这里展示本轮已发现的已有照片及其备份状态。已扫描不代表已接收。";
+"history_list_explanation" = "这里展示本轮已发现的已有照片及其备份状态。已扫描不代表已传到手机。";
 "source_list_count" = "照片共 %2$d 项 · 当前已加载 %1$d 项";
 "source_photo_unavailable" = "照片暂不可用";
 
@@ -353,8 +353,8 @@
 "task_explanation_failed" = "这些任务需要处理错误后重试，请查看各项的失败原因。";
 "task_explanation_received" = "接收端已经收到文件并完成校验；后续的云端备份是独立步骤。";
 "task_explanation_scanned" = "已检查照片信息，判断是否需要导入历史照片。扫描完成不代表文件已经传输。";
-"menu_open" = "打开 备份鸭";
-"menu_quit" = "退出 备份鸭";
+"menu_open" = "打开备份鸭";
+"menu_quit" = "退出备份鸭";
 "menu_backup_ready" = "备份已就绪";
 "menu_preventing_sleep" = "备份期间阻止睡眠";
 
@@ -390,7 +390,7 @@
 
 "storage_cache_description" = "照片发送前，会先在这台 iPhone、iPad 或 Mac 上准备原件和上传文件。这些临时副本占用本地缓存；此处设置不影响接收设备的空间。";
 
-"storage_cache_budget_help" = "限制 备份鸭 临时文件的总占用。达到上限时暂停准备更多照片，空间释放后继续；不会预先占满这些空间。";
+"storage_cache_budget_help" = "限制备份鸭临时文件的总占用。达到上限时暂停准备更多照片，空间释放后继续；不会预先占满这些空间。";
 
 "storage_min_free_help" = "给这台设备的其他应用保留可用空间。低于此值时暂停准备照片，不会删除你的其他文件。";
 
@@ -418,7 +418,7 @@
 "task_sort_preparation_descending" = "按准备队列加入顺序 · 较晚在前";
 "task_sort_scan_ascending" = "按扫描记录顺序 · 较早在前";
 "task_sort_scan_descending" = "按扫描记录顺序 · 较晚在前";
-"task_sort_display_only" = "仅调整列表显示，不按拍摄时间排序，也不改变备份顺序。";
+"task_sort_display_only" = "仅调整列表显示顺序，不改变拍摄日期和备份顺序。";
 
 // Per-list ordering strategies
 "task_order_by_capture" = "拍摄时间";
@@ -430,9 +430,9 @@
 "task_order_by_scan" = "扫描顺序";
 "task_order_scan_asc" = "扫描顺序 · 较早在前";
 "task_order_scan_desc" = "扫描顺序 · 较晚在前";
-"task_order_by_received" = "接收完成时间";
-"task_order_received_asc" = "接收完成时间 · 从旧到新";
-"task_order_received_desc" = "接收完成时间 · 从新到旧";
+"task_order_by_received" = "传到手机时间";
+"task_order_received_asc" = "传到手机时间 · 从旧到新";
+"task_order_received_desc" = "传到手机时间 · 从新到旧";
 "task_order_by_failed" = "失败时间";
 "task_order_failed_asc" = "失败时间 · 从旧到新";
 "task_order_failed_desc" = "失败时间 · 从新到旧";
@@ -448,7 +448,7 @@
 "task_order_hint_waiting" = "默认最早重试在前，便于查看哪些任务即将重试。";
 "task_order_hint_running" = "默认最早开始在前，便于留意耗时较长的传输。";
 "task_order_hint_failed" = "默认最近失败在前；旧任务未记录的时间排在最后。";
-"task_order_hint_received" = "默认新拍摄在前；也可按接收完成时间查看，未知时间排在最后。";
+"task_order_hint_received" = "默认新拍摄在前；也可按传到手机的时间查看，未知时间排在最后。";
 "task_order_hint_paused" = "默认新拍摄在前，便于查看暂停保留的任务。";
 "task_order_hint_scanned" = "默认新拍摄在前；扫描顺序表示被图库扫描发现的先后。";
 "task_order_button" = "排序";
@@ -583,9 +583,9 @@
 "mac_storage_cache_description" = "系统图库和文件夹共用中转缓存。准备和传输的临时副本占用此空间，设置不影响接收设备。";
 "mac_storage_reclaim_note" = "收到接收设备的校验回执后回收临时副本。不会删除系统图库、文件夹或接收设备的原文件。";
 "mac_help_library" = "可手动选择照片，或开启新增照片的自动备份。已有图库需要单独扫描；实况和可访问的连拍帧由系统图库识别。";
-"mac_help_folders" = "在“文件夹”中添加本地或外置硬盘目录，包含子文件夹。自动备份负责新增和修改；“备份现有文件”执行手动备份。不会修改或删除原文件。导出的实况需有匹配的配对信息；文件夹中的连拍按独立文件备份。";
+"mac_help_folders" = "在“文件夹”中添加本地或外置硬盘目录，包含子文件夹。自动备份负责新增和修改；“备份现有文件”执行手动备份。不会修改或删除原文件。导出的实况需要照片和视频带有匹配的实况标识才能识别；文件夹中的连拍按独立文件备份。";
 "mac_help_permissions" = "系统图库需要照片访问权限，仅处理允许访问的项目；iCloud 原件可能需要下载。文件夹通过选择目录授予读取权限，外置硬盘必须保持连接。";
-"mac_help_receipt" = "“已接收”表示接收设备已校验文件，不代表云端备份已完成。备份鸭 不会删除系统图库或文件夹中的原件。";
+"mac_help_receipt" = "“已传到手机”表示手机已校验文件；是否已备份到 Google 相册由“Google 相册核对”单独显示。备份鸭不会删除系统图库或文件夹中的原件。";
 
 "folder_auto_enabled" = "自动备份已开启";
 "folder_manual_queued" = "本次备份已安排";
@@ -629,11 +629,10 @@
 
 "brand_name" = "备份鸭";
 
-"brand_name" = "备份鸭";
 
 "settings_cloud" = "Google 相册";
 "cloud_audit_title" = "Google 相册核对";
-"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考。Mac 不会删除任何内容；如果在 Pixel 上开启云端释放，Pixel 会删除自己相册中已确认备份且不占用 Google 存储空间、或已由其他设备备份到 Google 相册的照片副本。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
+"cloud_audit_explanation" = "使用从已登录浏览器导出的 Cookie，在你的 Google 相册中查找 Pixel 已加入相册的照片，并报告每张是否已备份、是否占用 Google 存储空间。它依赖 Google 未公开的接口，结果仅供参考。Mac 不会删除任何内容；如果在手机上开启“删除已备份到 Google 相册的手机副本”，手机会删除自己相册中已确认备份且不占用 Google 存储空间、或已由其他设备备份到 Google 相册的照片副本。Cookie 文件可完全访问你的 Google 账号：请妥善保管，停用后请删除。";
 "cloud_audit_readme" = "如何导出 Cookie 以及核对内容";
 "cloud_audit_cookies" = "Cookie 文件";
 "cloud_audit_cookies_set" = "已选择";
@@ -644,7 +643,7 @@
 "cloud_audit_auto_pause" = "新上传的照片占用 Google 存储空间时暂停备份";
 "cloud_audit_check_now" = "立即核对";
 "cloud_audit_dry_run" = "试运行";
-"cloud_audit_last_run" = "上次核对 %1$@：已检查 %2$d，免费 %3$d，已由其他设备备份 %4$d，占用空间 %5$d，未找到 %6$d，未知 %7$d";
+"cloud_audit_last_run" = "上次核对 %1$@：已检查 %2$d，不占空间 %3$d，已由其他设备备份 %4$d，占用空间 %5$d，未找到 %6$d，未知 %7$d";
 "cloud_audit_session_expired" = "Google 相册登录已过期，请重新导出 Cookie。";
 "cloud_quota_warning" = "Google 相册中有 %d 张照片占用你的 Google 存储空间。";
 "cloud_quota_pause" = "备份已暂停：%d 张新上传的照片占用你的 Google 存储空间。";
@@ -661,7 +660,7 @@
 "cloud_lock_hidden_reconfirm" = "Google 账号序号已更改。请重新开启此项，为该账号确认带锁文件夹备份。";
 "cloud_lock_hidden_now" = "立即移动隐藏的照片";
 "cloud_lock_hidden_dry_run" = "试运行（隐藏的照片）";
-"cloud_lock_hidden_status" = "带锁文件夹中的隐藏照片：%1$d / 已核对 %2$d";
+"cloud_lock_hidden_status" = "带锁文件夹中的隐藏照片：已核对 %2$d 张，已移入 %1$d 张";
 "cloud_lock_hidden_last_run" = "上次运行 %1$@：已移动 %2$d，失败 %3$d，Google 相册图库中没有 %4$d，占用空间 %5$d，尚未核对 %6$d";
 "cloud_lock_hidden_last_dry_run" = "试运行 %1$@：将移动 %2$d，Google 相册图库中没有 %3$d，占用空间 %4$d，尚未核对 %5$d";
 "cloud_lock_hidden_deferred" = "%d 张留待下次运行";
