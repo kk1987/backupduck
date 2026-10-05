@@ -166,7 +166,7 @@ pub(super) async fn receive(
             })
             .await?;
             if let Some(pending) = pending {
-                let pending = super::sync_unlocked(pending).await?;
+                let pending = super::sync_unlocked(state.clone(), pending).await?;
                 let _ = with_receiver(state.clone(), move |receiver| {
                     receiver.finish_append(&finish_id, &pending)
                 })
