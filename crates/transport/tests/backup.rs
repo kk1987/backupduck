@@ -1061,3 +1061,46 @@ fn deferred_final_chunk_with_wrong_content_is_discarded() {
     let status = receiver.status(&id).unwrap();
     assert_eq!(status.resources[0].offset, 0);
 }
+
+#[test]
+fn status_reads_leave_a_resource_alone_while_its_final_chunk_syncs() {
+    let t = Scratch::new();
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    let bytes = b"0123456789abcdef".to_vec();
+    let a = single_photo(&bytes, &bytes);
+    let id = receiver.register(a.clone()).unwrap().asset_id;
+    let hash = a.resources[0].sha256.clone();
+    let pending = receiver
+        .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
+        .unwrap();
+    // Before the unlocked sync: status must not hash or rename the file.
+    let before = receiver.status(&id).unwrap();
+    assert_eq!(before.resources[0].offset, bytes.len() as u64);
+    assert!(!before.resources[0].complete);
+    assert!(t.0.join("partial").join(&hash).exists());
+    receiver.overview().unwrap();
+    // After the rename, but before finish: still reported, no NotFound.
+    let pending = pending.run().unwrap();
+    assert!(!t.0.join("partial").join(&hash).exists());
+    let during = receiver.status(&id).unwrap();
+    assert!(!during.resources[0].complete);
+    receiver.overview().unwrap();
+    assert!(receiver.finish_append(&id, &pending).unwrap().resources[0].complete);
+}
+
+#[test]
+fn an_abandoned_sync_lets_status_recover_the_resource() {
+    let t = Scratch::new();
+    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
+    let bytes = b"0123456789abcdef".to_vec();
+    let a = single_photo(&bytes, &bytes);
+    let id = receiver.register(a.clone()).unwrap().asset_id;
+    let hash = a.resources[0].sha256.clone();
+    let pending = receiver
+        .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
+        .unwrap();
+    // The sync never ran (say its worker died); status takes over recovery.
+    receiver.abandon_append(&pending);
+    assert!(receiver.status(&id).unwrap().resources[0].complete);
+    assert!(t.0.join("blobs").join(&hash).exists());
+}
