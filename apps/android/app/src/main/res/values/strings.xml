@@ -357,6 +357,8 @@
 <string name="cloud_release_enable">Delete after backup</string>
 <string name="cloud_release_enabled">Verified copies will be deleted while receiving runs.</string>
 <string name="cloud_release_disabled">Deletion is off. Remaining copies are kept.</string>
+<string name="early_release_toggle">Free originals once the gallery copy is saved</string>
+<string name="early_release_note">Needs the deletion above. Received originals are deleted as soon as their checked gallery copy exists; the gallery copy still waits for the Google Photos check. Uses about half the space. If a gallery copy is lost before it is backed up, back the item up again from the Mac.</string>
 <string name="cloud_release_counts">%1$d verified in Google Photos · %2$d freed from phone (%3$s)</string>
 <string name="relay_superseded">Cloud release is on: originals are kept until Google Photos has the photo.</string>
 </resources>
