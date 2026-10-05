@@ -15,6 +15,11 @@ import XCTest
     for state in ["queued", "running", "waiting", "paused"] {
       XCTAssertTrue(BackupModel.shouldSkipSource(state, rebackupReceived: true))
     }
+    XCTAssertFalse(BackupModel.shouldSkipSource("superseded", rebackupReceived: false))
+  }
+  func testAvifConversionKeepsTheOriginalStem() {
+    XCTAssertEqual(AvifConversion.filename(for: "P1000919.avif"), "P1000919.heic")
+    XCTAssertEqual(AvifConversion.filename(for: "a.b.AVIF"), "a.b.heic")
   }
   func testNativeBackgroundSessionAndNewPhotoDiscovery() async throws {
     // Install the exact test host, then grant Photos before running this test.

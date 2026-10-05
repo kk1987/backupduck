@@ -931,6 +931,52 @@ fn locked_folder_moves_migrate_and_count_in_summary() {
 }
 
 #[test]
+fn received_avif_is_superseded_until_a_newer_format_is_received() {
+    let t = Temp::new();
+    let mut s = Sender::open(&t.0).unwrap();
+    let mut avif = asset();
+    avif.resources[0].filename = "P1.avif".into();
+    avif.resources[0].media_type = "image/avif".into();
+    let sources = BTreeMap::from([(avif.resources[0].sha256.clone(), "r".into())]);
+    let job = s.enqueue("receiver-1", avif.clone(), sources).unwrap();
+    let running = s.claim("receiver-1", 0).unwrap().unwrap();
+    s.acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    let window = [(avif.source_id.clone(), avif.revision.clone())];
+    let superseded = ["image/avif".to_string()];
+    let plain = s.source_states("receiver-1", &window).unwrap();
+    assert_eq!(plain[&avif.source_id], "received");
+    let states = s
+        .source_states_superseding("receiver-1", &window, false, &superseded)
+        .unwrap();
+    assert_eq!(states[&avif.source_id], "superseded");
+    // The converted copy is a new job for the same source and revision.
+    let mut heic = avif.clone();
+    heic.resources[0] = Resource {
+        role: ResourceRole::Photo,
+        filename: "P1.heic".into(),
+        media_type: "image/heic".into(),
+        size: 10,
+        sha256: digest(b"heic-bytes"),
+    };
+    let sources = BTreeMap::from([(heic.resources[0].sha256.clone(), "r".into())]);
+    let converted = s.enqueue("receiver-1", heic, sources).unwrap();
+    assert_ne!(converted.id, job.id);
+    let states = s
+        .source_states_superseding("receiver-1", &window, false, &superseded)
+        .unwrap();
+    assert_eq!(states[&avif.source_id], "queued");
+    let running = s.claim("receiver-1", 0).unwrap().unwrap();
+    assert_eq!(running.id, converted.id);
+    s.acknowledge(&running.attempt(), &status(&running, true))
+        .unwrap();
+    let states = s
+        .source_states_superseding("receiver-1", &window, false, &superseded)
+        .unwrap();
+    assert_eq!(states[&avif.source_id], "received");
+}
+
+#[test]
 fn busy_retries_steadily_while_network_backs_off() {
     let t = Temp::new();
     let mut s = Sender::open(&t.0).unwrap();

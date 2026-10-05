@@ -447,19 +447,36 @@ impl Sender {
         sources: &[(String, String)],
         include_cloud: bool,
     ) -> Result<BTreeMap<String, String>> {
+        self.source_states_superseding(receiver, sources, include_cloud, &[])
+    }
+    /// Like `source_states_with_cloud`, but a source whose latest received job
+    /// carries a primary resource of a `superseded` media type reports
+    /// `superseded`, so the host prepares it again in a format the destination
+    /// can use (for example AVIF, which Google Photos on Android 10 skips).
+    pub fn source_states_superseding(
+        &self,
+        receiver: &str,
+        sources: &[(String, String)],
+        include_cloud: bool,
+        superseded: &[String],
+    ) -> Result<BTreeMap<String, String>> {
         if sources.len() > 400 {
             return Err(Error::Invalid("source window".into()));
         }
-        let mut stmt = self.conn.prepare("SELECT j.state,c.state FROM jobs j LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND json_extract(j.manifest,'$.source_id')=?2 AND json_extract(j.manifest,'$.revision')=?3 ORDER BY j.id DESC LIMIT 1").map_err(db)?;
+        let mut stmt = self.conn.prepare("SELECT j.state,c.state,json_extract(j.manifest,'$.resources[0].media_type') FROM jobs j LEFT JOIN cloud_observations c ON c.job_id=j.id WHERE j.receiver_id=?1 AND json_extract(j.manifest,'$.source_id')=?2 AND json_extract(j.manifest,'$.revision')=?3 ORDER BY j.id DESC LIMIT 1").map_err(db)?;
         let mut states = BTreeMap::new();
         for (id, revision) in sources {
-            let value: Option<(String, Option<String>)> = stmt
+            let value: Option<(String, Option<String>, Option<String>)> = stmt
                 .query_row(params![receiver, id, revision], |r| {
-                    Ok((r.get(0)?, r.get(1)?))
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
                 })
                 .optional()
                 .map_err(db)?;
-            if let Some((state, cloud)) = value {
+            if let Some((state, cloud, media_type)) = value {
+                if state == "received" && media_type.is_some_and(|t| superseded.contains(&t)) {
+                    states.insert(id.clone(), "superseded".into());
+                    continue;
+                }
                 let backed_up = include_cloud
                     && state == "received"
                     && cloud
