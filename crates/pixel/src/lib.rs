@@ -139,7 +139,7 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
         (Some(range), Some(mpf)) => {
             let parsed_gain = gain_map::directory(&still[range.start + 4 + XMP.len()..range.end]);
             let layout = || Error::Unsupported("Ultra HDR JPEG layout".into());
-            if mpf.count != 2 {
+            if mpf.count < 2 {
                 return Err(layout());
             }
             let map = mpf.entry(&still, 1);
@@ -147,18 +147,32 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
             // entry: androidx ExifInterface inserts EXIF after Bitmap.compress without
             // updating MPF, so that size can be stale while the offset (relative to
             // the MP header, which moved too) stays exact. Container items are laid
-            // out in order: the gain map must follow the primary and end the file.
+            // out in order: the secondary images must follow the primary back to
+            // back and end the file.
             let primary = mpf.header + map.offset as usize;
-            if primary + map.size as usize != still.len()
-                || !still[primary..].starts_with(&[0xff, 0xd8])
-                || !still[..primary].ends_with(&[0xff, 0xd9])
-            {
+            let mut end = primary;
+            for index in 1..mpf.count {
+                let entry = mpf.entry(&still, index);
+                if mpf.header + entry.offset as usize != end
+                    || !still[end..].starts_with(&[0xff, 0xd8])
+                {
+                    return Err(layout());
+                }
+                end += entry.size as usize;
+            }
+            if end != still.len() || !still[..primary].ends_with(&[0xff, 0xd9]) {
                 return Err(layout());
             }
             auxiliary_start = Some(primary);
             match parsed_gain {
-                Ok(gain) if u64::from(map.size) == gain.length => Some((gain, primary)),
+                Ok(gain) if mpf.count == 2 && u64::from(map.size) == gain.length => {
+                    Some((gain, primary))
+                }
                 Ok(_) => return Err(layout()),
+                // iPhone JPEGs carry Apple's gain map and, on newer models,
+                // segmentation mattes as further MPF images. They are kept
+                // byte for byte and declared as one auxiliary item so the
+                // directory still locates the appended video.
                 Err(_) => None,
             }
         }
@@ -249,7 +263,11 @@ pub fn write_jpeg_motion_with_burst_and_video_mime(
 /// Older iPhone paired QuickTime movies can have no `ftyp` box at all. Their
 /// complete top-level layout is `wide` + `mdat` + `moov`; rejecting them here
 /// needlessly sends the receiver into its lossy compatibility conversion.
-fn validate_motion_video(video: &mut std::fs::File, length: u64, mime: &str) -> Result<()> {
+pub(crate) fn validate_motion_video(
+    video: &mut std::fs::File,
+    length: u64,
+    mime: &str,
+) -> Result<()> {
     use std::io::{Read, Seek, SeekFrom};
 
     let unsupported = || Error::Unsupported("motion video container".into());
