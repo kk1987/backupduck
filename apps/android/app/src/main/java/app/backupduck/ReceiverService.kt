@@ -172,6 +172,11 @@ class ReceiverService : Service() {
                                 "receiver_unavailable" -> "receiver_unhealthy_restart"
                                 else -> "receiver_start_failed"
                             })) }
+                        // The catch also covers the running loop; keep the cause.
+                        if (code.all { it in 'a'..'z' || it == '_' }) runCatching {
+                            NativeBridge.request(JSONObject().put("op", "record_event").put("receiver", true)
+                                .put("root", "$filesDir/receiver").put("code", "loop_" + code.take(43)))
+                        }
                         ReceiverState.mutable.update { it.copy(phase = "waiting", error = code) }
                     } finally {
                         withContext(NonCancellable + Dispatchers.IO) {
