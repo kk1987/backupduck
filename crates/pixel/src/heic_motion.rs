@@ -7,7 +7,7 @@ use backupduck_core::{BurstMetadata, Error, Result};
 use quick_xml::{events::Event, name::ResolveResult, reader::NsReader};
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     path::Path,
 };
 
@@ -508,11 +508,9 @@ pub fn write_heic_motion_with_burst_and_video_mime(
     if video_size < 16 || video_size > u32::MAX as u64 - 256 {
         return Err(unsupported());
     }
-    let mut video_head = [0; 8];
-    video.read_exact(&mut video_head)?;
-    if &video_head[4..] != b"ftyp" {
-        return Err(unsupported());
-    }
+    // Same container rule as the JPEG writer: ftyp-led files, or the
+    // ftyp-less wide + mdat + moov QuickTime layout some iPhones write.
+    crate::validate_motion_video(&mut video, video_size, video_mime)?;
     let footer_size = samsung_footer(0, 0).len() as u64;
     // mpvd header and SEF footer are included in the MotionPhoto item length,
     // while the primary item declares the eight-byte mpvd header as padding.

@@ -243,6 +243,15 @@ originals. "Added to phone gallery" is still distinct from a Google Photos
 cloud backup or playable animation; there is no Google cloud success signal in
 the BackupDuck protocol.
 
+## iPhone layouts found during a library migration (2026-10-04)
+
+Two Live Photo layouts fell through both lossless writers into `conversion_required` on a 31,000-item Apple Photos migration (301 of the first 12,400 items):
+
+- JPEG stills from an iPhone 16 Pro carry eight MPF images: the primary, Apple's gain map and further auxiliary JPEGs (segmentation mattes). The JPEG writer accepted exactly two. It now accepts any count as long as the secondary images follow the primary back to back and end the file. They are kept byte for byte, MPF offsets are rebased as before, and the directory declares them as one auxiliary item so it still locates the appended video. A single Ultra HDR gain map (Android XMP directory) still requires exactly two images.
+- HEIC stills from an iPhone 14 Plus on iOS 26.1 pair with a QuickTime movie that has no `ftyp` box (`wide` + `mdat` + `moov`). The JPEG writer already accepted that layout; the HEIC writer insisted on `ftyp`. Both now share the same validator.
+
+Cloud playback of both layouts after publication from the Pixel is recorded below once checked.
+
 ## Future investigation checklist
 
 1. Verify the original still and paired video against sender/receiver checksums.

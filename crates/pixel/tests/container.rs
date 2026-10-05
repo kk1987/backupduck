@@ -485,6 +485,118 @@ fn ordinary_xmp_with_mpf_keeps_auxiliary_jpeg_and_rebases_offsets() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Big-endian MPF APP2 with a primary entry followed by `secondary` entries.
+fn mpf_entries(primary_size: u32, secondary: &[(u32, u32)]) -> Vec<u8> {
+    let count = 1 + secondary.len() as u32;
+    let mut p = b"MPF\0MM\0*".to_vec();
+    p.extend(8u32.to_be_bytes()); // IFD
+    p.extend(1u16.to_be_bytes());
+    p.extend(0xb002u16.to_be_bytes());
+    p.extend(7u16.to_be_bytes());
+    p.extend((16 * count).to_be_bytes());
+    p.extend(26u32.to_be_bytes()); // entries after IFD (8 + 2 + 12 + 4)
+    p.extend(0u32.to_be_bytes()); // next IFD
+    for (attr, size, offset) in std::iter::once((0x0003_0000u32, primary_size, 0u32))
+        .chain(secondary.iter().map(|(size, offset)| (0, *size, *offset)))
+    {
+        p.extend(attr.to_be_bytes());
+        p.extend(size.to_be_bytes());
+        p.extend(offset.to_be_bytes());
+        p.extend([0u8; 4]);
+    }
+    segment(0xe2, &p)
+}
+
+/// An iPhone 16 style JPEG: ordinary Apple XMP, a gain map and further MPF
+/// images (segmentation mattes) appended back to back. `gap` inserts a stray
+/// byte between two secondary images.
+fn apple_multi_mpf_jpeg(gap: bool) -> (Vec<u8>, Vec<Vec<u8>>) {
+    let mut packet = XMP.to_vec();
+    packet.extend(br#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:test="urn:test" test:value="kept"/></rdf:RDF></x:xmpmeta>"#);
+    packet.push(0);
+    let xmp = segment(0xe1, &packet);
+    let images: Vec<Vec<u8>> = (0..3u8)
+        .map(|i| vec![0xff, 0xd8, 0xff, 0xda, 0, 2, i, i, 0xff, 0xd9])
+        .collect();
+    let placeholder = mpf_entries(0, &[(0, 0); 3]);
+    let scan = [0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9];
+    let primary_len = 2 + xmp.len() + placeholder.len() + scan.len();
+    let header = 2 + xmp.len() + 8;
+    let mut offset = primary_len - header;
+    let mut secondary = Vec::new();
+    for (index, image) in images.iter().enumerate() {
+        secondary.push((image.len() as u32, offset as u32));
+        offset += image.len() + usize::from(gap && index == 0);
+    }
+    let mut source = vec![0xff, 0xd8];
+    source.extend(xmp);
+    source.extend(mpf_entries(primary_len as u32, &secondary));
+    source.extend(scan);
+    for (index, image) in images.iter().enumerate() {
+        source.extend(image);
+        if gap && index == 0 {
+            source.push(0);
+        }
+    }
+    (source, images)
+}
+
+#[test]
+fn apple_jpeg_with_several_mpf_images_keeps_them_all() {
+    let root = workdir();
+    let image = root.join("still.jpg");
+    let movie = root.join("paired.mov");
+    let output = root.join("output.jpg");
+    let (source, images) = apple_multi_mpf_jpeg(false);
+    let video = b"\0\0\0\x14ftypqt  \0\0\0\0qt  ";
+    std::fs::write(&image, &source).unwrap();
+    std::fs::write(&movie, video).unwrap();
+    write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &output,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .unwrap();
+    let result = std::fs::read(&output).unwrap();
+    let (header, entries) = read_mpf(&result);
+    assert_eq!(entries.len(), 4);
+    let auxiliary = header + entries[1].1 as usize;
+    assert_eq!(entries[0].0 as usize, auxiliary);
+    for (entry, original) in entries[1..].iter().zip(&images) {
+        let start = header + entry.1 as usize;
+        assert_eq!(&result[start..start + entry.0 as usize], &original[..]);
+    }
+    let total: usize = images.iter().map(Vec::len).sum();
+    assert!(result.ends_with(video));
+    assert_eq!(result.len() - video.len(), auxiliary + total);
+    let text = String::from_utf8_lossy(&result);
+    assert!(text.contains("test:value=\"kept\""));
+    assert!(text.contains(&format!(
+        "Item:Semantic=\"GainMap\" Item:Length=\"{total}\""
+    )));
+
+    // Secondary images that are not back to back do not describe the file.
+    std::fs::remove_file(&output).unwrap();
+    std::fs::write(&image, apple_multi_mpf_jpeg(true).0).unwrap();
+    let error = write_jpeg_motion_with_burst_and_video_mime(
+        &image,
+        &movie,
+        &output,
+        None,
+        None,
+        "video/quicktime",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, backupduck_core::Error::Unsupported(reason) if reason == "Ultra HDR JPEG layout")
+    );
+    assert!(!output.exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn conflicting_or_inconsistent_xmp_is_still_refused() {
     let root = workdir();

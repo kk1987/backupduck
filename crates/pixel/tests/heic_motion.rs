@@ -81,3 +81,31 @@ fn existing_primary_and_auxiliary_xmp_remain_readable() {
     assert_eq!(fs::read(&mov).unwrap(), video);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn ftyp_less_quicktime_from_iphone_is_appended_unchanged() {
+    let root = std::env::temp_dir().join(format!("backupduck-motion-wide-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let still = root.join("still.heic");
+    let video = root.join("paired.mov");
+    fs::write(&still, single_item_heic(b"abcde")).unwrap();
+    // wide + mdat + moov with no ftyp, as some iPhone Live Photo movies are.
+    let movie = b"\0\0\0\x08wide\0\0\0\x0cmdatDATA\0\0\0\x0cmoovMETA".to_vec();
+    fs::write(&video, &movie).unwrap();
+    let output = root.join("result.heic");
+    write_heic_motion_with_burst(&still, &video, &output, None).unwrap();
+    let result = fs::read(&output).unwrap();
+    let at = result.windows(4).position(|w| w == b"mpvd").unwrap();
+    assert_eq!(&result[at + 4..at + 4 + movie.len()], &movie[..]);
+    // The ftyp-less layout is QuickTime only, and must account for every byte.
+    let mp4 = root.join("result-mp4.heic");
+    assert!(
+        write_heic_motion_with_burst_and_video_mime(&still, &video, &mp4, None, "video/mp4")
+            .is_err()
+    );
+    let mut trailing = movie.clone();
+    trailing.extend(b"junk");
+    fs::write(&video, trailing).unwrap();
+    assert!(write_heic_motion_with_burst(&still, &video, &root.join("junk.heic"), None).is_err());
+    fs::remove_dir_all(root).unwrap();
+}
