@@ -279,33 +279,26 @@ async fn upload(
         move |r| r.append_deferred(&id, &hash, q.offset, &body, &q.sha256, &body_digest)
     })
     .await?;
-    let pending = sync_unlocked(s.clone(), pending).await?;
-    with_receiver(s, move |r| r.finish_append(&id, &pending)).await
+    sync_and_finish(s, id, pending).await
 }
-/// Runs a chunk's fsync (and, for a final chunk, verification and rename)
-/// without the receiver lock; see `Receiver::append_deferred`. On failure the
-/// resource is released for normal status recovery.
-pub(crate) async fn sync_unlocked(
+/// Runs a chunk's fsync without the receiver lock (see
+/// `Receiver::append_deferred`), then reports the asset under the lock. It
+/// runs as its own task so a client that disconnects mid-request cannot skip
+/// the sync or the locked finish.
+pub(crate) async fn sync_and_finish(
     state: ServerState,
+    id: String,
     pending: backupduck_store::PendingSync,
-) -> std::result::Result<backupduck_store::PendingSync, ApiError> {
-    let (pending, result) = tokio::task::spawn_blocking(move || {
-        let marker = pending.clone();
-        (marker, pending.run())
+) -> std::result::Result<Json<AssetStatus>, ApiError> {
+    tokio::spawn(async move {
+        let pending = tokio::task::spawn_blocking(move || pending.run())
+            .await
+            .map_err(|_| ApiError(Error::Storage("worker unavailable".into())))?
+            .map_err(ApiError)?;
+        with_receiver(state, move |r| r.finish_append(&id, &pending)).await
     })
     .await
-    .map_err(|_| ApiError(Error::Storage("worker unavailable".into())))?;
-    match result {
-        Ok(synced) => Ok(synced),
-        Err(error) => {
-            let _ = with_receiver(state, move |r| {
-                r.abandon_append(&pending);
-                Ok(())
-            })
-            .await;
-            Err(ApiError(error))
-        }
-    }
+    .map_err(|_| ApiError(Error::Storage("worker unavailable".into())))?
 }
 fn unix_ms() -> Result<i64> {
     let elapsed = std::time::SystemTime::now()

@@ -1006,7 +1006,7 @@ fn single_photo(content: &[u8], declared: &[u8]) -> Asset {
 }
 
 #[test]
-fn deferred_append_syncs_and_finalizes_outside_the_lock() {
+fn deferred_append_syncs_outside_the_lock_and_finalizes_under_it() {
     let t = Scratch::new();
     let mut receiver = Receiver::open(&t.0, 100000).unwrap();
     let bytes = b"0123456789abcdef".to_vec();
@@ -1014,18 +1014,20 @@ fn deferred_append_syncs_and_finalizes_outside_the_lock() {
     let id = receiver.register(a.clone()).unwrap().asset_id;
     let hash = a.resources[0].sha256.clone();
     let (head, tail) = bytes.split_at(6);
-    // While a chunk's sync is pending the receiver keeps serving other calls.
     let pending = receiver
         .append_deferred(&id, &hash, 0, head, &digest(head), &digest(head))
         .unwrap();
+    // While a chunk's sync is pending the receiver keeps serving other calls.
     assert_eq!(receiver.status(&id).unwrap().resources[0].offset, 6);
     let pending = pending.run().unwrap();
-    let status = receiver.finish_append(&id, &pending).unwrap();
-    assert!(!status.resources[0].complete);
+    assert!(!receiver.finish_append(&id, &pending).unwrap().resources[0].complete);
     let pending = receiver
         .append_deferred(&id, &hash, 6, tail, &digest(tail), &digest(tail))
+        .unwrap()
+        .run()
         .unwrap();
-    let pending = pending.run().unwrap();
+    // The unlocked sync leaves the file in place; finishing verifies and moves it.
+    assert!(t.0.join("partial").join(&hash).exists());
     let status = receiver.finish_append(&id, &pending).unwrap();
     assert!(status.resources[0].complete);
     assert_eq!(fs::read(t.0.join("blobs").join(&hash)).unwrap(), bytes);
@@ -1054,16 +1056,20 @@ fn deferred_final_chunk_with_wrong_content_is_discarded() {
     let hash = a.resources[0].sha256.clone();
     let pending = receiver
         .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
+        .unwrap()
+        .run()
         .unwrap();
-    assert!(matches!(pending.run(), Err(Error::Integrity)));
+    assert!(matches!(
+        receiver.finish_append(&id, &pending),
+        Err(Error::Integrity)
+    ));
     assert!(!t.0.join("partial").join(&hash).exists());
     assert!(!t.0.join("blobs").join(&hash).exists());
-    let status = receiver.status(&id).unwrap();
-    assert_eq!(status.resources[0].offset, 0);
+    assert_eq!(receiver.status(&id).unwrap().resources[0].offset, 0);
 }
 
 #[test]
-fn status_reads_leave_a_resource_alone_while_its_final_chunk_syncs() {
+fn a_status_read_during_the_final_sync_never_reports_full_but_incomplete() {
     let t = Scratch::new();
     let mut receiver = Receiver::open(&t.0, 100000).unwrap();
     let bytes = b"0123456789abcdef".to_vec();
@@ -1073,34 +1079,17 @@ fn status_reads_leave_a_resource_alone_while_its_final_chunk_syncs() {
     let pending = receiver
         .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
         .unwrap();
-    // Before the unlocked sync: status must not hash or rename the file.
-    let before = receiver.status(&id).unwrap();
-    assert_eq!(before.resources[0].offset, bytes.len() as u64);
-    assert!(!before.resources[0].complete);
-    assert!(t.0.join("partial").join(&hash).exists());
+    // A register or overview between the locked write and the unlocked sync
+    // (or after a client disconnect) must not see offset == size while
+    // incomplete: senders fail such an asset permanently as an integrity error.
+    let seen = receiver.status(&id).unwrap();
+    assert!(seen.resources[0].complete);
+    assert!(matches!(
+        next_action(&a, &seen, MAX_CHUNK_BYTES),
+        Ok(TransferAction::Commit)
+    ));
     receiver.overview().unwrap();
-    // After the rename, but before finish: still reported, no NotFound.
+    // The sync then finds the data under its blob name.
     let pending = pending.run().unwrap();
-    assert!(!t.0.join("partial").join(&hash).exists());
-    let during = receiver.status(&id).unwrap();
-    assert!(!during.resources[0].complete);
-    receiver.overview().unwrap();
     assert!(receiver.finish_append(&id, &pending).unwrap().resources[0].complete);
-}
-
-#[test]
-fn an_abandoned_sync_lets_status_recover_the_resource() {
-    let t = Scratch::new();
-    let mut receiver = Receiver::open(&t.0, 100000).unwrap();
-    let bytes = b"0123456789abcdef".to_vec();
-    let a = single_photo(&bytes, &bytes);
-    let id = receiver.register(a.clone()).unwrap().asset_id;
-    let hash = a.resources[0].sha256.clone();
-    let pending = receiver
-        .append_deferred(&id, &hash, 0, &bytes, &digest(&bytes), &digest(&bytes))
-        .unwrap();
-    // The sync never ran (say its worker died); status takes over recovery.
-    receiver.abandon_append(&pending);
-    assert!(receiver.status(&id).unwrap().resources[0].complete);
-    assert!(t.0.join("blobs").join(&hash).exists());
 }

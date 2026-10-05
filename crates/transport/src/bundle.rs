@@ -166,11 +166,7 @@ pub(super) async fn receive(
             })
             .await?;
             if let Some(pending) = pending {
-                let pending = super::sync_unlocked(state.clone(), pending).await?;
-                let _ = with_receiver(state.clone(), move |receiver| {
-                    receiver.finish_append(&finish_id, &pending)
-                })
-                .await?;
+                let _ = super::sync_and_finish(state.clone(), finish_id, pending).await?;
             }
             offset += count;
         }

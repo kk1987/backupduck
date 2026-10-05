@@ -33,48 +33,35 @@ type SenderObservation = (Option<std::net::IpAddr>, Option<String>, Instant);
 pub struct PendingSync {
     partial: PathBuf,
     complete: PathBuf,
-    blobs: PathBuf,
-    sha256: String,
     /// False for an exact replay: nothing was written.
     write: bool,
-    /// The chunk ended its resource: verify it and move it into `blobs`.
-    completes: bool,
 }
 impl PendingSync {
     fn nothing() -> Self {
         Self {
             partial: PathBuf::new(),
             complete: PathBuf::new(),
-            blobs: PathBuf::new(),
-            sha256: String::new(),
             write: false,
-            completes: false,
         }
     }
-    /// Makes the chunk durable and, for a final chunk, verifies the whole
-    /// resource and renames it into place (directory synced) the same way
-    /// recovery in `resource_status` would. Needs no receiver lock.
+    /// Makes the chunk durable. Needs no receiver lock. Verification and the
+    /// rename into `blobs` stay under the lock in `finish_append`: doing them
+    /// here raced status reads, which then reported a fully written but
+    /// incomplete resource, a state senders treat as a permanent integrity
+    /// failure.
     pub fn run(self) -> Result<Self> {
         if !self.write {
             return Ok(self);
         }
-        OpenOptions::new()
-            .write(true)
-            .open(&self.partial)?
-            .sync_all()?;
-        if self.completes {
-            if digest_reader(File::open(&self.partial)?)? != self.sha256 {
-                fs::remove_file(&self.partial)?;
-                return Err(Error::Integrity);
+        // A status read under the lock may already have verified and renamed
+        // a fully written resource; the data then lives under the blob name.
+        let file = match OpenOptions::new().write(true).open(&self.partial) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                OpenOptions::new().write(true).open(&self.complete)?
             }
-            fs::rename(&self.partial, &self.complete)?;
-            // Directory fsync makes the rename durable; Windows cannot open
-            // a directory as a file and keeps it in its own metadata journal.
-            #[cfg(unix)]
-            File::open(&self.blobs)?.sync_all()?;
-            #[cfg(not(unix))]
-            let _ = &self.blobs;
-        }
+            other => other?,
+        };
+        file.sync_all()?;
         Ok(self)
     }
 }
@@ -124,10 +111,6 @@ pub struct Receiver {
     devices: std::cell::OnceCell<devices::DeviceDirectory>,
     /// Sender id -> (address, device type, when written).
     observed_senders: std::cell::RefCell<std::collections::HashMap<String, SenderObservation>>,
-    /// Resources with a chunk between `append_deferred` and `finish_append`.
-    /// Their partial file may be renamed into `blobs` outside the lock at any
-    /// moment, so status reads must not touch or finalize them.
-    syncing: std::cell::RefCell<std::collections::HashSet<String>>,
     _lock: File,
 }
 impl Receiver {
@@ -279,7 +262,6 @@ impl Receiver {
             expired_at_open: ExpiredSummary::default(),
             devices: std::cell::OnceCell::new(),
             observed_senders: Default::default(),
-            syncing: Default::default(),
             _lock: lock,
         };
         // Also reclaims blobs left unreferenced by an interrupted release.
@@ -620,11 +602,6 @@ impl Receiver {
             self.root.join("blobs").join(hash),
         )
     }
-    /// Forgets a deferred sync that failed, so status reads may again
-    /// recover or finalize the resource.
-    pub fn abandon_append(&self, pending: &PendingSync) {
-        self.syncing.borrow_mut().remove(&pending.sha256);
-    }
     fn resource_status(&self, r: &Resource) -> Result<ResourceStatus> {
         let ready: bool = self
             .conn
@@ -635,21 +612,6 @@ impl Receiver {
             )
             .map_err(db)?;
         let (partial, complete) = self.paths(&r.sha256);
-        if !ready && self.syncing.borrow().contains(&r.sha256) {
-            // Report progress only. Reading or renaming the partial file here
-            // raced the unlocked rename, failed with NotFound and restarted
-            // the Android receiver through its overview poll.
-            let offset = complete
-                .metadata()
-                .or_else(|_| partial.metadata())
-                .map(|m| m.len())
-                .unwrap_or(0);
-            return Ok(ResourceStatus {
-                sha256: r.sha256.clone(),
-                offset: offset.min(r.size),
-                complete: false,
-            });
-        }
         if complete.exists() {
             if complete.metadata()?.len() != r.size {
                 return Err(Error::Integrity);
@@ -789,9 +751,6 @@ impl Receiver {
         chunk_hash: &str,
         body_digest: &str,
     ) -> Result<PendingSync> {
-        // The client sends one request per resource at a time: a new chunk
-        // means any earlier deferred sync for it finished or was abandoned.
-        self.syncing.borrow_mut().remove(hash);
         self.check_admission()?;
         if body.is_empty() || body.len() > MAX_CHUNK_BYTES {
             return Err(Error::Invalid("chunk size".into()));
@@ -841,35 +800,16 @@ impl Receiver {
         file.write_all(body)?;
         drop(file);
         self.touch(id)?;
-        self.syncing.borrow_mut().insert(r.sha256.clone());
         Ok(PendingSync {
             partial,
             complete,
-            blobs: self.root.join("blobs"),
-            sha256: r.sha256.clone(),
             write: true,
-            completes: end == r.size,
         })
     }
-    /// Records a resource completed by `pending` as verified, without hashing
-    /// it again under the lock, then reports the asset.
-    pub fn finish_append(&mut self, id: &str, pending: &PendingSync) -> Result<AssetStatus> {
-        self.syncing.borrow_mut().remove(&pending.sha256);
-        if pending.write && pending.completes {
-            let size = self
-                .asset(id)?
-                .resources
-                .iter()
-                .find(|r| r.sha256 == pending.sha256)
-                .map(|r| r.size)
-                .ok_or(Error::NotFound)?;
-            if pending.complete.metadata()?.len() != size {
-                return Err(Error::Integrity);
-            }
-            self.conn
-                .execute("UPDATE blobs SET ready=1 WHERE hash=?1", [&pending.sha256])
-                .map_err(db)?;
-        }
+    /// Reports the asset after `pending` ran. A resource the chunk completed
+    /// is verified and moved into `blobs` here, under the lock, by
+    /// `resource_status`.
+    pub fn finish_append(&mut self, id: &str, _pending: &PendingSync) -> Result<AssetStatus> {
         self.status(id)
     }
     pub fn commit(&mut self, id: &str) -> Result<AssetStatus> {
