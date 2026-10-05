@@ -7,8 +7,10 @@ use backupduck_store::retention::GalleryCopy;
 
 /// Bounded per sweep, like the relay sweep.
 const BATCH: u32 = 4;
-/// Published assets whose originals one sweep may release early.
-const BACKLOG_BATCH: u32 = 64;
+/// Published assets whose originals one sweep may release early. A sweep
+/// runs once per host release cycle, which can take minutes while the host
+/// re-hashes large gallery videos, so catch up in sizeable steps.
+const BACKLOG_BATCH: u32 = 256;
 
 fn now_ms() -> i64 {
     SystemTime::now()

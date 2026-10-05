@@ -29,6 +29,7 @@ internal fun cloudReleaseAction(verifyError: String?, rowAbsent: Boolean): Cloud
  */
 internal class CloudRelease(private val receiverRoot: String? = null) {
     private var cursor = ""
+    private var lastFailure: String? = null
     private var warned = false
     // Kept or not-owned copies wait for the next service start, not every sweep.
     private val skipped = mutableSetOf<String>()
@@ -39,7 +40,17 @@ internal class CloudRelease(private val receiverRoot: String? = null) {
         // An optional policy must not stop reception; the next tick retries.
         val items = runCatching {
             NativeBridge.request(JSONObject().put("op", "cloud_release_candidates").put("root", root).put("after", cursor)) as JSONArray
-        }.getOrElse { return -1 }
+        }.getOrElse { error ->
+            // Record each distinct failure once; a silent -1 hid a stalled sweep.
+            val code = safeError(error as? Exception ?: Exception())
+            if (code != lastFailure) runCatching {
+                NativeBridge.request(JSONObject().put("op", "record_event").put("receiver", true).put("root", root)
+                    .put("code", "cloud_release_candidates_" + code.take(24)))
+            }
+            lastFailure = code
+            return -1
+        }
+        lastFailure = null
         if (items.length() == 0) { cursor = ""; return 0 }
         for (index in 0 until items.length()) {
             currentCoroutineContext().ensureActive()
