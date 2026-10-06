@@ -240,6 +240,9 @@ class ReceiverService : Service() {
             if (!success) NativeBridge.request(JSONObject().put("op", "processed").put("id", cursor)
                 .put("success", false).put("error", failureCode ?: "operation_failed"))
             ReceiverState.mutable.update { it.copy(processingName = null) }
+            // A page of publications can take minutes; keep deleting verified
+            // copies alongside it so they do not pile up faster than they go.
+            cloudRelease.step(this@ReceiverService, budgetMs = 5_000)
         }
     }
     private fun wifiAddress(preferred: String? = null): String =
