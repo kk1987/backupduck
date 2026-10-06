@@ -906,6 +906,22 @@ enum Command {
         id: String,
         reason: String,
     },
+    SupersededCandidates {
+        root: Option<PathBuf>,
+        #[serde(default)]
+        after: String,
+    },
+    ReleaseSuperseded {
+        root: Option<PathBuf>,
+        id: String,
+        copy: backupduck_store::retention::GalleryCopy,
+        #[serde(default)]
+        missing: bool,
+    },
+    MarkSuperseded {
+        root: Option<PathBuf>,
+        id: String,
+    },
     GalleryReleaseBytes {
         root: PathBuf,
         ids: Vec<String>,
@@ -1856,6 +1872,18 @@ fn dispatch(command: Command) -> Result<Value> {
         } => cloud_release::release(root.as_deref(), &id, &copy, missing),
         Command::MarkGalleryReleased { root, id, reason } => {
             cloud_release::mark(root.as_deref(), &id, &reason)
+        }
+        Command::SupersededCandidates { root, after } => {
+            cloud_release::superseded_candidates(root.as_deref(), &after)
+        }
+        Command::ReleaseSuperseded {
+            root,
+            id,
+            copy,
+            missing,
+        } => cloud_release::release_superseded(root.as_deref(), &id, &copy, missing),
+        Command::MarkSuperseded { root, id } => {
+            cloud_release::mark_superseded(root.as_deref(), &id)
         }
         Command::GalleryReleaseBytes { root, ids } => {
             if !root.join("store/receiver.sqlite3").is_file() {
