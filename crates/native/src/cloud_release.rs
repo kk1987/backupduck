@@ -89,3 +89,46 @@ pub(super) fn mark(root: Option<&Path>, id: &str, reason: &str) -> Result<Value>
         Ok(json!({"updated":updated}))
     })
 }
+
+/// Superseded copies (see `Receiver::superseded_candidates`), gated by the
+/// same setting as cloud release.
+pub(super) fn superseded_candidates(root: Option<&Path>, after: &str) -> Result<Value> {
+    if missing_store(root) {
+        return Ok(json!([]));
+    }
+    receiver_storage::with_store(root, |store, maintenance| {
+        if !maintenance.settings.cloud_release {
+            return Ok(json!([]));
+        }
+        Ok(serde_json::to_value(
+            store.superseded_candidates(after, BATCH)?,
+        )?)
+    })
+}
+
+pub(super) fn release_superseded(
+    root: Option<&Path>,
+    id: &str,
+    copy: &GalleryCopy,
+    missing: bool,
+) -> Result<Value> {
+    receiver_storage::with_store(root, |store, maintenance| {
+        if !maintenance.settings.cloud_release {
+            return Err(Error::Conflict("cloud release disabled".into()));
+        }
+        let bytes = store.release_superseded(id, copy, missing)?;
+        maintenance.log("superseded_originals_released", None, Some(bytes))?;
+        Ok(json!({"bytes":bytes}))
+    })
+}
+
+pub(super) fn mark_superseded(root: Option<&Path>, id: &str) -> Result<Value> {
+    receiver_storage::with_store(root, |store, maintenance| {
+        let updated = store.mark_superseded_released(id, now_ms())?;
+        if updated {
+            let size = store.gallery_copy(id)?.map(|c| c.size);
+            maintenance.log("superseded_gallery_released", None, size)?;
+        }
+        Ok(json!({"updated":updated}))
+    })
+}

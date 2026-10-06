@@ -265,3 +265,87 @@ fn early_release_frees_originals_at_publication_and_keeps_the_copy_for_the_cloud
     assert_eq!(candidates.as_array().unwrap().len(), 1, "{candidates}");
     assert_eq!(candidates[0]["id"], newer);
 }
+
+fn received_as(root: &Path, source: &str, bytes: &[u8], name: &str, media_type: &str) -> String {
+    let mut receiver = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    let asset = Asset {
+        version: PROTOCOL_VERSION,
+        source_id: source.into(),
+        revision: "1".into(),
+        kind: AssetKind::Photo,
+        metadata: BTreeMap::new(),
+        resources: vec![Resource {
+            role: ResourceRole::Photo,
+            filename: name.into(),
+            media_type: media_type.into(),
+            size: bytes.len() as u64,
+            sha256: digest(bytes),
+        }],
+    };
+    let id = receiver.register(asset).unwrap().asset_id;
+    receiver
+        .append(&id, &digest(bytes), 0, bytes, &digest(bytes))
+        .unwrap();
+    receiver.commit(&id).unwrap();
+    id
+}
+
+#[test]
+fn avif_copy_is_released_once_its_heic_replacement_is_verified() {
+    let t = Temp::new();
+    let root = t.0.join("receiver");
+    let base = json!({"cache_budget_bytes":1u64<<30,"receiver_budget_bytes":1u64<<30,"min_free_bytes":0,
+        "auto_reclaim":true,"receiver_relay":false,"log_days":14,"log_limit":5000});
+    let mut settings =
+        ok(json!({"op":"receiver_settings","root":root,"settings":base}))["settings"].clone();
+    settings["cloud_release"] = json!(true);
+    settings["cloud_release_grace_ms"] = json!(0);
+    ok(json!({"op":"receiver_settings","root":root,"settings":settings}));
+    let avif = received_as(&root, "photo-7", b"avif bytes", "P7.avif", "image/avif");
+    let heic = received_as(&root, "photo-7", b"heic bytes", "P7.heic", "image/heic");
+    let other = received_as(&root, "photo-8", b"other avif", "P8.avif", "image/avif");
+    for (id, n) in [(&avif, 1u8), (&heic, 2), (&other, 3)] {
+        ok(json!({"op":"gallery_publication","root":root,"id":id,"copy":copy(n)}));
+    }
+    let candidates = || ok(json!({"op":"superseded_candidates","root":root}));
+    // Not superseded until the HEIC copy is verified in the cloud.
+    assert_eq!(candidates(), json!([]));
+    let mut store = backupduck_store::Receiver::open(root.join("store"), 1 << 20).unwrap();
+    store
+        .observe_cloud(
+            &[CloudObservation {
+                asset_id: heic.clone(),
+                sha1: "2".repeat(40),
+                result: CloudResult::Free,
+                media_key: None,
+                device_model: None,
+            }],
+            now_ms() - 1,
+        )
+        .unwrap();
+    drop(store);
+    let found = candidates();
+    assert_eq!(found.as_array().unwrap().len(), 1, "{found}");
+    assert_eq!(found[0]["id"], avif);
+    // A copy that does not match the stored evidence is refused.
+    assert_eq!(
+        call(json!({"op":"release_superseded","root":root,"id":avif,"copy":copy(9)}))["error"],
+        "integrity"
+    );
+    let released = ok(json!({"op":"release_superseded","root":root,"id":avif,"copy":copy(1)}));
+    assert_eq!(released["bytes"], b"avif bytes".len());
+    assert_eq!(
+        ok(json!({"op":"mark_superseded","root":root,"id":avif}))["updated"],
+        true
+    );
+    assert_eq!(candidates(), json!([]));
+    // The other source has no verified replacement and stays.
+    assert_eq!(
+        call(json!({"op":"release_superseded","root":root,"id":other,"copy":copy(3)}))["error"],
+        "conflict"
+    );
+    // Off: nothing is offered.
+    settings["cloud_release"] = json!(false);
+    ok(json!({"op":"receiver_settings","root":root,"settings":settings}));
+    assert_eq!(candidates(), json!([]));
+}

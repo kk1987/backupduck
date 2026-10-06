@@ -8,6 +8,15 @@ use serde::Serialize;
 
 /// Release reasons recorded for a deleted gallery copy.
 pub const GALLERY_RELEASE_REASONS: [&str; 2] = ["cloud", "missing"];
+/// A gallery copy in a format the cloud never backs up (Google Photos on
+/// Android 10 skips AVIF) whose source was sent again in another format and
+/// verified in that form. The copy is useless and can go.
+const SUPERSEDED_ELIGIBLE: &str = "a.received=1 AND a.processing='complete' AND a.gallery_released=0 \
+     AND a.cloud_state NOT IN ('verified','verified_elsewhere') \
+     AND json_extract(a.manifest,'$.resources[0].media_type') IN ('image/avif') \
+     AND json_extract(a.manifest,'$.source_id') IN (SELECT json_extract(b.manifest,'$.source_id') FROM assets b \
+         WHERE b.cloud_state IN ('verified','verified_elsewhere') \
+         AND json_extract(b.manifest,'$.resources[0].media_type') NOT IN ('image/avif'))";
 
 /// A cloud-held copy whose grace has passed and whose gallery copy is still
 /// recorded as present. Originals may already be gone through relay/archive.
@@ -286,6 +295,116 @@ impl Receiver {
             )
             .map_err(db)?;
         Ok(true)
+    }
+
+    /// Gallery copies superseded by a cloud-verified copy of the same source in
+    /// another format; see `SUPERSEDED_ELIGIBLE`.
+    pub fn superseded_candidates(
+        &self,
+        after: &str,
+        limit: u32,
+    ) -> Result<Vec<CloudReleaseCandidate>> {
+        if !after.is_empty() && !valid_digest(after) {
+            return Err(Error::Invalid("cloud cursor".into()));
+        }
+        if limit == 0 || limit as usize > MAX_CLOUD_ITEMS {
+            return Err(Error::Invalid("cloud limit".into()));
+        }
+        let mut query = self
+            .conn
+            .prepare(&format!(
+                "SELECT a.id,g.copy,a.originals_released FROM assets a JOIN gallery_copies g ON g.asset_id=a.id \
+                 WHERE a.id>?1 AND {SUPERSEDED_ELIGIBLE} ORDER BY a.id LIMIT ?2"
+            ))
+            .map_err(db)?;
+        let rows = query
+            .query_map(params![after, limit], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            })
+            .map_err(db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db)?;
+        rows.into_iter()
+            .map(|(id, copy, originals_released)| {
+                Ok(CloudReleaseCandidate {
+                    id,
+                    copy: serde_json::from_str(&copy)?,
+                    originals_released,
+                })
+            })
+            .collect()
+    }
+
+    /// `release_cloud_verified` for a superseded copy: releases its originals
+    /// before the host deletes the gallery copy. Returns bytes freed.
+    pub fn release_superseded(
+        &mut self,
+        id: &str,
+        fresh: &GalleryCopy,
+        missing: bool,
+    ) -> Result<u64> {
+        fresh.validate()?;
+        let stored = self.gallery_copy(id)?.ok_or(Error::Integrity)?;
+        let proven = if missing {
+            stored == *fresh
+        } else {
+            stored.matches(fresh)
+        };
+        if !proven {
+            return Err(Error::Integrity);
+        }
+        if !self.superseded_eligible(id)? {
+            return Err(Error::Conflict("not superseded".into()));
+        }
+        self.conn
+            .execute(
+                "UPDATE assets SET originals_released=1,release_reason='superseded' WHERE id=?1 AND originals_released=0",
+                [id],
+            )
+            .map_err(db)?;
+        self.reclaim_unreferenced()
+    }
+
+    /// Record that the host deleted (or found gone) a superseded gallery copy
+    /// after `release_superseded`. Returns whether the row changed.
+    pub fn mark_superseded_released(&mut self, id: &str, now_ms: i64) -> Result<bool> {
+        if !self.superseded_eligible(id)? {
+            return Ok(false);
+        }
+        let originals_released: bool = self
+            .conn
+            .query_row(
+                "SELECT originals_released FROM assets WHERE id=?1",
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(db)?;
+        if !originals_released {
+            return Err(Error::Conflict("gallery release not prepared".into()));
+        }
+        self.conn
+            .execute(
+                "UPDATE assets SET gallery_released=1,gallery_released_at_ms=?2,gallery_release_reason='superseded' WHERE id=?1 AND gallery_released=0",
+                params![id, now_ms],
+            )
+            .map_err(db)?;
+        Ok(true)
+    }
+
+    fn superseded_eligible(&self, id: &str) -> Result<bool> {
+        self.conn
+            .query_row(
+                &format!(
+                    "SELECT EXISTS(SELECT 1 FROM assets a WHERE a.id=?1 AND {SUPERSEDED_ELIGIBLE})"
+                ),
+                [id],
+                |r| r.get(0),
+            )
+            .map_err(db)
     }
 
     fn cloud_release_eligible(&self, id: &str, policy: CloudReleasePolicy) -> Result<bool> {
