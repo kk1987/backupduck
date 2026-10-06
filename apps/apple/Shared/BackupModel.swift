@@ -684,6 +684,9 @@ enum Bridge {
           let mime: [String: String] = [
             "heic": "image/heic", "heif": "image/heif", "jpg": "image/jpeg", "jpeg": "image/jpeg",
             "png": "image/png", "mov": "video/quicktime", "mp4": "video/mp4",
+            // Multi-picture (3D camera) JPEGs: the first image is a baseline
+            // JPEG and macOS reports no MIME type for public.mpo-image.
+            "mpo": "image/jpeg",
           ]
           guard let type = UTType(resource.uniformTypeIdentifier)?.preferredMIMEType ?? mime[ext] else {
             throw Bridge.Failure(code: "unsupported")
