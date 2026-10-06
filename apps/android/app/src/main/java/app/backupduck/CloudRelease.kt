@@ -34,7 +34,24 @@ internal class CloudRelease(private val receiverRoot: String? = null) {
     // Kept or not-owned copies wait for the next service start, not every sweep.
     private val skipped = mutableSetOf<String>()
 
-    suspend fun step(context: Context): Int {
+    /**
+     * Releases candidates for up to [budgetMs]. The receiver loop calls this
+     * once per pass, and a pass can spend minutes publishing a page of new
+     * items; four releases per pass let verified copies pile up faster than
+     * they were deleted (27 per hour against 300 publications per hour).
+     */
+    suspend fun step(context: Context, budgetMs: Long = 45_000): Int {
+        val deadline = android.os.SystemClock.elapsedRealtime() + budgetMs
+        var total = 0
+        while (true) {
+            val released = sweep(context)
+            if (released <= 0) return if (total > 0) total else released
+            total += released
+            if (android.os.SystemClock.elapsedRealtime() >= deadline) return total
+        }
+    }
+
+    private suspend fun sweep(context: Context): Int {
         if (RelayMaintenance.manualActive.get()) return -1
         val root = receiverRoot ?: "${context.filesDir}/receiver"
         // An optional policy must not stop reception; the next tick retries.
